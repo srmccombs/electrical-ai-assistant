@@ -1,108 +1,227 @@
 'use client'
 
 import { useChat } from 'ai/react'
+import { useState } from 'react'
 
 export default function ChatPage() {
   const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat()
+  const [showProductPanel, setShowProductPanel] = useState(false)
+  const [currentProducts, setCurrentProducts] = useState<any[]>([])
+
+  // Extract products from AI response
+  const extractProducts = (content: string) => {
+    const products: any[] = []
+    const lines = content.split('\n')
+    
+    lines.forEach(line => {
+      // Look for product pattern: "• PART-NUMBER - BRAND - DESCRIPTION"
+      const match = line.match(/•\s*([A-Z0-9-]+)\s*-\s*([^-]+)\s*-\s*(.+)/)
+      if (match) {
+        products.push({
+          partNumber: match[1].trim(),
+          brand: match[2].trim(),
+          description: match[3].trim(),
+          price: '$' + (Math.random() * 200 + 50).toFixed(2), // Mock pricing
+          availability: Math.random() > 0.3 ? 'In Stock' : 'Limited Stock'
+        })
+      }
+    })
+    
+    if (products.length > 0) {
+      setCurrentProducts(products)
+      setShowProductPanel(true)
+    }
+  }
+
+  // Process messages to show products panel
+  const latestMessage = messages[messages.length - 1]
+  if (latestMessage && latestMessage.role === 'assistant' && currentProducts.length === 0) {
+    extractProducts(latestMessage.content)
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Electrical Products AI Assistant
-          </h1>
-          <p className="text-gray-600">
-            Search inventory, find products, and get technical assistance
-          </p>
-          <p className="text-sm text-blue-600 mt-2">
-            Built by an electrical distribution expert with 35 years of experience
-          </p>
+    <div className="h-screen bg-gray-50 flex">
+      {/* Left Side - Chat Interface */}
+      <div className={`flex flex-col ${showProductPanel ? 'w-1/2' : 'w-full'} transition-all duration-300`}>
+        {/* Header */}
+        <div className="bg-white border-b border-gray-200 p-4">
+          <h1 className="text-xl font-semibold text-gray-800">Electrical Products AI Assistant</h1>
+          <p className="text-sm text-gray-600">Search inventory and get technical assistance</p>
         </div>
 
-        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-          <div className="h-96 overflow-y-auto p-6 space-y-4">
-            {messages.length === 0 ? (
-              <div className="text-center text-gray-500">
-                <p className="mb-4 font-semibold">Welcome! I can help you find electrical products:</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                  <div className="bg-blue-50 p-3 rounded">
-                    <strong>Product Search:</strong>
-                    <br />• Find by part number
-                    <br />• Search by brand
-                    <br />• Browse categories
+        {/* Chat Messages */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {messages.length === 0 ? (
+            <div className="text-center text-gray-500 mt-8">
+              <div className="bg-blue-50 rounded-lg p-6 max-w-md mx-auto">
+                <h3 className="font-semibold text-gray-800 mb-3">Welcome! I can help you find:</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                    <span>Fiber connectors, adapters, and panels</span>
                   </div>
-                  <div className="bg-green-50 p-3 rounded">
-                    <strong>Technical Help:</strong>
-                    <br />• Specifications
-                    <br />• Compatibility
-                    <br />• Installation tips
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                    <span>Part numbers and specifications</span>
                   </div>
-                </div>
-                <p className="mt-4 text-xs text-gray-400">
-                  Try: "Show me fiber connectors" or "Find Corning products"
-                </p>
-              </div>
-            ) : (
-              messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${
-                    message.role === 'user' ? 'justify-end' : 'justify-start'
-                  }`}
-                >
-                  <div
-                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                      message.role === 'user'
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-200 text-gray-900'
-                    }`}
-                  >
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                    <span>Technical recommendations</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                    <span>Inventory availability</span>
                   </div>
                 </div>
-              ))
-            )}
-            
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="bg-yellow-100 text-gray-900 max-w-xs lg:max-w-md px-4 py-2 rounded-lg">
-                  <p className="text-sm">🔍 Searching products and analyzing...</p>
+                <div className="mt-4 text-xs text-gray-500">
+                  Try: "Show me LC connectors" or "Find Corning panels"
                 </div>
               </div>
-            )}
-          </div>
-
-          <form onSubmit={handleSubmit} className="border-t p-4">
-            <div className="flex space-x-2">
-              <input
-                value={input}
-                onChange={handleInputChange}
-                placeholder="Ask about electrical products, part numbers, or technical specs..."
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={isLoading}
-              />
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              >
-                {isLoading ? 'Searching...' : 'Send'}
-              </button>
             </div>
+          ) : (
+            messages.map((message, index) => (
+              <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[80%] ${
+                  message.role === 'user' 
+                    ? 'bg-blue-600 text-white rounded-lg px-4 py-2' 
+                    : 'bg-white border border-gray-200 rounded-lg p-4 shadow-sm'
+                }`}>
+                  {message.role === 'assistant' && (
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                        AI
+                      </div>
+                      <span className="text-xs text-gray-500">Assistant</span>
+                    </div>
+                  )}
+                  <div className={`${message.role === 'user' ? 'text-sm' : 'text-sm text-gray-800'}`}>
+                    {message.content.split('\n').map((line, lineIndex) => {
+                      // Don't show product lines in chat if we have a product panel
+                      if (showProductPanel && line.startsWith('•') && line.includes(' - ')) {
+                        return null
+                      }
+                      return (
+                        <div key={lineIndex} className={lineIndex > 0 ? 'mt-1' : ''}>
+                          {line}
+                        </div>
+                      )
+                    }).filter(Boolean)}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+          
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                    AI
+                  </div>
+                  <span className="text-xs text-gray-500">Assistant</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                  <span className="text-sm text-gray-600">Searching products...</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Input Area */}
+        <div className="bg-white border-t border-gray-200 p-4">
+          <form onSubmit={handleSubmit} className="flex gap-2">
+            <input
+              value={input}
+              onChange={handleInputChange}
+              placeholder="Ask about electrical products, part numbers, or technical specs..."
+              className="flex-1 border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              disabled={isLoading}
+            />
+            <button
+              type="submit"
+              disabled={isLoading || !input.trim()}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Sending...' : 'Send'}
+            </button>
           </form>
         </div>
+      </div>
 
-        <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600 mb-2">Quick examples to try:</p>
-          <div className="flex flex-wrap justify-center gap-2 text-xs">
-            <span className="bg-gray-200 px-2 py-1 rounded cursor-pointer hover:bg-gray-300">"Show me fiber connectors"</span>
-            <span className="bg-gray-200 px-2 py-1 rounded cursor-pointer hover:bg-gray-300">"Find adapter panels"</span>
-            <span className="bg-gray-200 px-2 py-1 rounded cursor-pointer hover:bg-gray-300">"Search Corning products"</span>
-            <span className="bg-gray-200 px-2 py-1 rounded cursor-pointer hover:bg-gray-300">"What do you have in stock?"</span>
+      {/* Right Side - Product Panel */}
+      {showProductPanel && (
+        <div className="w-1/2 bg-white border-l border-gray-200 flex flex-col">
+          {/* Product Panel Header */}
+          <div className="bg-gray-50 border-b border-gray-200 p-4 flex justify-between items-center">
+            <div>
+              <h2 className="font-semibold text-gray-800">Product Results</h2>
+              <p className="text-xs text-gray-600">{currentProducts.length} products found</p>
+            </div>
+            <button 
+              onClick={() => setShowProductPanel(false)}
+              className="text-gray-400 hover:text-gray-600 text-xl"
+            >
+              ×
+            </button>
+          </div>
+
+          {/* Product List */}
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="space-y-3">
+              {currentProducts.map((product, index) => (
+                <div key={index} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="font-semibold text-blue-600">{product.partNumber}</div>
+                    <div className="text-lg font-bold text-green-600">{product.price}</div>
+                  </div>
+                  
+                  <div className="text-sm text-gray-600 mb-1">
+                    <span className="font-medium">Brand:</span> {product.brand}
+                  </div>
+                  
+                  <div className="text-sm text-gray-800 mb-3">
+                    {product.description}
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      product.availability === 'In Stock' 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {product.availability}
+                    </span>
+                    
+                    <div className="flex gap-2">
+                      <button className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 transition-colors">
+                        View Details
+                      </button>
+                      <button className="text-xs bg-green-50 text-green-600 px-3 py-1 rounded hover:bg-green-100 transition-colors">
+                        Add to Quote
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Product Panel Footer */}
+          <div className="border-t border-gray-200 p-4 bg-gray-50">
+            <div className="flex gap-2">
+              <button className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">
+                Request Quote for All
+              </button>
+              <button className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors">
+                Export List
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
