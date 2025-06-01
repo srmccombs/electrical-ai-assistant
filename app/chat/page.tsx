@@ -34,8 +34,8 @@ export default function ChatPage() {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const handleInputChange = (e) => setInput(e.target.value)
-  const handleSubmit = (e) => {
+  const handleInputChange = (e: any) => setInput(e.target.value)
+  const handleSubmit = (e: any) => {
     e.preventDefault()
     console.log('Chat submitted:', input)
     setInput('')
