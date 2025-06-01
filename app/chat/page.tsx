@@ -1,13 +1,13 @@
 /* 
  * PLECTIC AI ASSISTANT - CHAT INTERFACE
- * Version: 2.0.0 - Excel Style with Add Buttons
+ * Version: 2.0.1 - Fixed Add Buttons & Perfect Alignment
  * Date: January 1, 2025
- * Changes: Large input, clean formatting, working Add buttons, blue theme
+ * Changes: Working Add buttons, perfect Excel-style alignment, functional list building
  */
 'use client'
 
 import { useChat } from 'ai/react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface Product {
   partNumber: string
@@ -27,8 +27,9 @@ export default function ChatPage() {
   const [currentList, setCurrentList] = useState<ListItem[]>([])
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
-  // Add item to list
+  // Add item to list - FIXED
   const addToList = (product: Product) => {
+    console.log('Adding product:', product) // Debug log
     const existingItem = currentList.find(item => item.partNumber === product.partNumber)
     
     if (existingItem) {
@@ -41,9 +42,9 @@ export default function ChatPage() {
       const newItem: ListItem = {
         ...product,
         quantity: 1,
-        id: Date.now().toString()
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9)
       }
-      setCurrentList([...currentList, newItem])
+      setCurrentList(prev => [...prev, newItem])
     }
   }
 
@@ -74,32 +75,61 @@ export default function ChatPage() {
     setShowDeleteConfirm(false)
   }
 
-  // Extract products from AI response
+  // Extract products from AI response - IMPROVED
   const extractProductsFromMessage = (content: string) => {
     const products: Product[] = []
     const lines = content.split('\n')
     
     lines.forEach((line, index) => {
-      const numberedMatch = line.match(/^\d+\.\s*\*\*([A-Z0-9-]+)\*\*/)
+      // Look for numbered items with part numbers
+      const numberedMatch = line.match(/^\d+\.\s*\*\*([A-Z0-9-]+)\*\*/) || 
+                           line.match(/^\d+\.\s*([A-Z0-9-]+)/)
+      
       if (numberedMatch) {
         const partNumber = numberedMatch[1]
-        const nextLines = lines.slice(index, index + 5)
+        const nextLines = lines.slice(index, index + 8)
         let brand = ''
         let description = ''
         
+        // Look for brand and description patterns
         nextLines.forEach(nextLine => {
-          const brandMatch = nextLine.match(/\*\*Brand:\*\*\s*(.+)/)
-          const descMatch = nextLine.match(/\*\*Description:\*\*\s*(.+)/)
+          // Multiple brand patterns
+          const brandMatch = nextLine.match(/\*\*Brand:\*\*\s*(.+)/) ||
+                           nextLine.match(/Brand:\s*(.+)/) ||
+                           nextLine.match(/- \*\*Brand\*\*:\s*(.+)/)
+                           
+          // Multiple description patterns  
+          const descMatch = nextLine.match(/\*\*Description:\*\*\s*(.+)/) ||
+                          nextLine.match(/Description:\s*(.+)/) ||
+                          nextLine.match(/- \*\*Description\*\*:\s*(.+)/)
           
           if (brandMatch) brand = brandMatch[1].trim()
           if (descMatch) description = descMatch[1].trim()
         })
         
-        if (partNumber && description && brand) {
+        // If no explicit brand/description found, try to extract from part number pattern
+        if (!brand || !description) {
+          // For DMSI products, brand is DMSI
+          if (partNumber.includes('DMSI')) {
+            brand = 'DMSI'
+          }
+          // Try to find description in nearby lines
+          if (!description) {
+            const descLine = nextLines.find(line => 
+              line.includes(partNumber) && 
+              line.length > partNumber.length + 10
+            )
+            if (descLine) {
+              description = descLine.replace(/\*\*/g, '').replace(/^\d+\.\s*/, '').replace(partNumber, '').trim()
+            }
+          }
+        }
+        
+        if (partNumber && (description || brand)) {
           products.push({
             partNumber,
-            brand,
-            description,
+            brand: brand || 'Unknown',
+            description: description || 'No description available',
             price: '$' + (Math.random() * 200 + 50).toFixed(2),
             availability: Math.random() > 0.3 ? 'In Stock' : 'Limited Stock'
           })
@@ -107,6 +137,7 @@ export default function ChatPage() {
       }
     })
     
+    console.log('Extracted products:', products) // Debug log
     return products
   }
 
@@ -187,12 +218,13 @@ export default function ChatPage() {
                           if (hasProducts) {
                             return (
                               <div>
-                                {/* Show intro text without product details */}
+                                {/* Show intro text */}
                                 {message.content.split('\n').map((line, lineIndex) => {
                                   if (!line.match(/^\d+\./) && !line.includes('**') && line.trim() && 
                                       !line.toLowerCase().includes('application') && 
                                       !line.toLowerCase().includes('ideal for') &&
-                                      !line.toLowerCase().includes('designed for')) {
+                                      !line.toLowerCase().includes('designed for') &&
+                                      !line.toLowerCase().includes('compatible with')) {
                                     return (
                                       <div key={lineIndex} className="mb-4">
                                         {line}
@@ -202,54 +234,69 @@ export default function ChatPage() {
                                   return null
                                 }).filter(Boolean)}
                                 
-                                {/* Excel-style product table */}
-                                <div className="mt-4">
-                                  {/* Header Row */}
-                                  <div className="grid grid-cols-12 gap-2 bg-blue-600 text-white p-3 rounded-t-lg font-semibold text-sm">
-                                    <div className="col-span-2 text-center">Add to List</div>
-                                    <div className="col-span-1 text-center">Qty</div>
-                                    <div className="col-span-2">Brand</div>
-                                    <div className="col-span-3">Part Number</div>
-                                    <div className="col-span-4">Description</div>
+                                {/* PERFECT EXCEL-STYLE TABLE */}
+                                <div className="mt-4 border-2 border-blue-300 rounded-lg overflow-hidden">
+                                  {/* Header Row - Perfect Alignment */}
+                                  <div className="bg-blue-600 text-white">
+                                    <div className="grid grid-cols-10 gap-0">
+                                      <div className="col-span-2 p-3 text-center font-semibold text-sm border-r border-blue-500">
+                                        Add to List
+                                      </div>
+                                      <div className="col-span-1 p-3 text-center font-semibold text-sm border-r border-blue-500">
+                                        Qty
+                                      </div>
+                                      <div className="col-span-2 p-3 font-semibold text-sm border-r border-blue-500">
+                                        Brand
+                                      </div>
+                                      <div className="col-span-2 p-3 font-semibold text-sm border-r border-blue-500">
+                                        Part Number
+                                      </div>
+                                      <div className="col-span-3 p-3 font-semibold text-sm">
+                                        Description
+                                      </div>
+                                    </div>
                                   </div>
                                   
-                                  {/* Product Rows */}
+                                  {/* Product Rows - Perfect Alignment */}
                                   {products.map((product, index) => (
-                                    <div key={index} className="grid grid-cols-12 gap-2 bg-white border-l-2 border-r-2 border-b-2 border-blue-200 p-3 hover:bg-blue-50 transition-colors">
-                                      {/* Add Button */}
-                                      <div className="col-span-2 flex justify-center">
-                                        <button
-                                          onClick={() => addToList(product)}
-                                          className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs font-medium transition-colors border-2 border-blue-600"
-                                        >
-                                          Add
-                                        </button>
-                                      </div>
-                                      
-                                      {/* Quantity */}
-                                      <div className="col-span-1 text-center text-sm font-medium text-gray-700">
-                                        1
-                                      </div>
-                                      
-                                      {/* Brand */}
-                                      <div className="col-span-2 text-sm font-medium text-blue-700">
-                                        {product.brand}
-                                      </div>
-                                      
-                                      {/* Part Number */}
-                                      <div className="col-span-3 text-sm font-semibold text-gray-800">
-                                        {product.partNumber}
-                                      </div>
-                                      
-                                      {/* Description */}
-                                      <div className="col-span-4 text-xs text-gray-700">
-                                        {product.description}
+                                    <div key={index} className="bg-white border-b border-blue-200 hover:bg-blue-50 transition-colors">
+                                      <div className="grid grid-cols-10 gap-0">
+                                        {/* Add Button - Perfectly Centered */}
+                                        <div className="col-span-2 p-3 flex justify-center items-center border-r border-blue-200">
+                                          <button
+                                            onClick={(e) => {
+                                              e.preventDefault()
+                                              console.log('Button clicked for:', product.partNumber)
+                                              addToList(product)
+                                            }}
+                                            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1 rounded text-sm font-medium transition-colors border border-blue-600 shadow-sm"
+                                          >
+                                            Add
+                                          </button>
+                                        </div>
+                                        
+                                        {/* Quantity */}
+                                        <div className="col-span-1 p-3 text-center text-sm font-medium text-gray-700 border-r border-blue-200 flex items-center justify-center">
+                                          1
+                                        </div>
+                                        
+                                        {/* Brand */}
+                                        <div className="col-span-2 p-3 text-sm font-medium text-blue-700 border-r border-blue-200 flex items-center">
+                                          {product.brand}
+                                        </div>
+                                        
+                                        {/* Part Number */}
+                                        <div className="col-span-2 p-3 text-sm font-semibold text-gray-800 border-r border-blue-200 flex items-center">
+                                          {product.partNumber}
+                                        </div>
+                                        
+                                        {/* Description */}
+                                        <div className="col-span-3 p-3 text-xs text-gray-700 flex items-center">
+                                          {product.description}
+                                        </div>
                                       </div>
                                     </div>
                                   ))}
-                                  
-                                  {/* Bottom border */}
-                                  <div className="border-b-2 border-blue-200 rounded-b-lg"></div>
                                 </div>
                               </div>
                             )
@@ -357,47 +404,57 @@ export default function ChatPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
-            <div className="grid grid-cols-12 gap-2 bg-blue-100 border-2 border-blue-300 p-3 font-semibold text-sm text-blue-800">
-              <div className="col-span-1 text-center">+</div>
-              <div className="col-span-1 text-center">Qty</div>
-              <div className="col-span-2">Brand</div>
-              <div className="col-span-4">Part Number</div>
-              <div className="col-span-3">Description</div>
-              <div className="col-span-1 text-center">Del</div>
-            </div>
-            
-            <div className="space-y-1">
+            {/* PERFECT EXCEL-STYLE LIST HEADER */}
+            <div className="border-2 border-blue-300 rounded-lg overflow-hidden">
+              <div className="bg-blue-100 border-b border-blue-300">
+                <div className="grid grid-cols-12 gap-0">
+                  <div className="col-span-1 p-2 text-center font-semibold text-sm text-blue-800 border-r border-blue-300">+</div>
+                  <div className="col-span-1 p-2 text-center font-semibold text-sm text-blue-800 border-r border-blue-300">Qty</div>
+                  <div className="col-span-2 p-2 font-semibold text-sm text-blue-800 border-r border-blue-300">Brand</div>
+                  <div className="col-span-4 p-2 font-semibold text-sm text-blue-800 border-r border-blue-300">Part Number</div>
+                  <div className="col-span-3 p-2 font-semibold text-sm text-blue-800 border-r border-blue-300">Description</div>
+                  <div className="col-span-1 p-2 text-center font-semibold text-sm text-blue-800">Del</div>
+                </div>
+              </div>
+              
+              {/* PERFECT EXCEL-STYLE LIST ITEMS */}
               {currentList.map((item) => (
-                <div key={item.id} className="grid grid-cols-12 gap-2 border-2 border-blue-200 bg-white hover:bg-blue-50 p-3 transition-colors">
-                  <button
-                    onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                    className="col-span-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded text-sm font-bold transition-colors text-center py-1"
-                  >
-                    +
-                  </button>
-                  
-                  <div className="col-span-1 text-center font-semibold text-sm">
-                    {item.quantity}
+                <div key={item.id} className="bg-white border-b border-blue-200 hover:bg-blue-50 transition-colors">
+                  <div className="grid grid-cols-12 gap-0">
+                    <div className="col-span-1 p-2 flex justify-center items-center border-r border-blue-200">
+                      <button
+                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        className="bg-blue-100 hover:bg-blue-200 text-blue-700 rounded text-sm font-bold w-6 h-6 flex items-center justify-center"
+                      >
+                        +
+                      </button>
+                    </div>
+                    
+                    <div className="col-span-1 p-2 text-center font-semibold text-sm border-r border-blue-200 flex items-center justify-center">
+                      {item.quantity}
+                    </div>
+                    
+                    <div className="col-span-2 p-2 text-sm font-medium text-blue-700 border-r border-blue-200 flex items-center truncate">
+                      {item.brand}
+                    </div>
+                    
+                    <div className="col-span-4 p-2 text-sm font-semibold text-gray-800 border-r border-blue-200 flex items-center truncate">
+                      {item.partNumber}
+                    </div>
+                    
+                    <div className="col-span-3 p-2 text-xs text-gray-700 border-r border-blue-200 flex items-center">
+                      <div className="line-clamp-2">{item.description}</div>
+                    </div>
+                    
+                    <div className="col-span-1 p-2 flex justify-center items-center">
+                      <button
+                        onClick={() => removeFromList(item.id)}
+                        className="bg-red-100 hover:bg-red-200 text-red-700 rounded text-sm font-bold w-6 h-6 flex items-center justify-center"
+                      >
+                        ×
+                      </button>
+                    </div>
                   </div>
-                  
-                  <div className="col-span-2 text-sm font-medium text-blue-700 truncate">
-                    {item.brand}
-                  </div>
-                  
-                  <div className="col-span-4 text-sm font-semibold text-gray-800 truncate">
-                    {item.partNumber}
-                  </div>
-                  
-                  <div className="col-span-3 text-xs text-gray-700 line-clamp-2">
-                    {item.description}
-                  </div>
-                  
-                  <button
-                    onClick={() => removeFromList(item.id)}
-                    className="col-span-1 bg-red-100 hover:bg-red-200 text-red-700 rounded text-sm font-bold transition-colors text-center py-1"
-                  >
-                    ×
-                  </button>
                 </div>
               ))}
             </div>
