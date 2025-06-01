@@ -1,17 +1,9 @@
-
 /* 
  * PLECTIC AI ASSISTANT - CHAT INTERFACE
  * Version: 2.0.0 - Excel Style with Add Buttons
  * Date: January 1, 2025
  * Changes: Large input, clean formatting, working Add buttons, blue theme
  */
-
-
-
-
-
-
-
 'use client'
 
 import { useChat } from 'ai/react'
@@ -215,7 +207,7 @@ export default function ChatPage() {
                                   return null
                                 }).filter(Boolean)}
                                 
-                                {/* Excel-style product table */}
+                                {/* Excel-style product table - THIS IS LINE ~125 */}
                                 <div className="mt-4">
                                   {/* Header Row */}
                                   <div className="grid grid-cols-12 gap-2 bg-blue-600 text-white p-3 rounded-t-lg font-semibold text-sm">
