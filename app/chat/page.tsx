@@ -32,14 +32,12 @@ export default function ChatPage() {
     const existingItem = currentList.find(item => item.partNumber === product.partNumber)
     
     if (existingItem) {
-      // Increase quantity if item already exists
       setCurrentList(currentList.map(item => 
         item.partNumber === product.partNumber 
           ? { ...item, quantity: item.quantity + 1 }
           : item
       ))
     } else {
-      // Add new item to list
       const newItem: ListItem = {
         ...product,
         quantity: 1,
@@ -76,26 +74,22 @@ export default function ChatPage() {
     setShowDeleteConfirm(false)
   }
 
-  // Extract products from AI response - FIXED formatting
+  // Extract products from AI response
   const extractProductsFromMessage = (content: string) => {
     const products: Product[] = []
     const lines = content.split('\n')
     
     lines.forEach((line, index) => {
-      // Look for numbered items with part numbers (remove ** formatting)
       const numberedMatch = line.match(/^\d+\.\s*\*\*([A-Z0-9-]+)\*\*/)
       if (numberedMatch) {
         const partNumber = numberedMatch[1]
-        
-        // Look for brand and description in next lines
         const nextLines = lines.slice(index, index + 5)
         let brand = ''
         let description = ''
         
         nextLines.forEach(nextLine => {
-          // Remove ** formatting from brand and description
-          const brandMatch = nextLine.match(/- \*\*Brand:\*\*\s*(.+)/)
-          const descMatch = nextLine.match(/- \*\*Description:\*\*\s*(.+)/)
+          const brandMatch = nextLine.match(/\*\*Brand:\*\*\s*(.+)/)
+          const descMatch = nextLine.match(/\*\*Description:\*\*\s*(.+)/)
           
           if (brandMatch) brand = brandMatch[1].trim()
           if (descMatch) description = descMatch[1].trim()
@@ -186,7 +180,6 @@ export default function ChatPage() {
                   <div className={`${message.role === 'user' ? 'text-sm' : 'text-sm text-gray-800'}`}>
                     {message.role === 'assistant' ? (
                       <div>
-                        {/* Clean display without application info and product extraction */}
                         {(() => {
                           const products = extractProductsFromMessage(message.content)
                           const hasProducts = products.length > 0
@@ -194,10 +187,12 @@ export default function ChatPage() {
                           if (hasProducts) {
                             return (
                               <div>
-                                {/* Show intro text */}
+                                {/* Show intro text without product details */}
                                 {message.content.split('\n').map((line, lineIndex) => {
-                                  if (!line.match(/^\d+\./) && !line.includes('- **') && line.trim() && 
-                                      !line.toLowerCase().includes('application') && !line.toLowerCase().includes('ideal for')) {
+                                  if (!line.match(/^\d+\./) && !line.includes('**') && line.trim() && 
+                                      !line.toLowerCase().includes('application') && 
+                                      !line.toLowerCase().includes('ideal for') &&
+                                      !line.toLowerCase().includes('designed for')) {
                                     return (
                                       <div key={lineIndex} className="mb-4">
                                         {line}
@@ -207,7 +202,7 @@ export default function ChatPage() {
                                   return null
                                 }).filter(Boolean)}
                                 
-                                {/* Excel-style product table - THIS IS LINE ~125 */}
+                                {/* Excel-style product table */}
                                 <div className="mt-4">
                                   {/* Header Row */}
                                   <div className="grid grid-cols-12 gap-2 bg-blue-600 text-white p-3 rounded-t-lg font-semibold text-sm">
@@ -231,7 +226,7 @@ export default function ChatPage() {
                                         </button>
                                       </div>
                                       
-                                      {/* Quantity (always 1 for new items) */}
+                                      {/* Quantity */}
                                       <div className="col-span-1 text-center text-sm font-medium text-gray-700">
                                         1
                                       </div>
@@ -263,7 +258,7 @@ export default function ChatPage() {
                             return (
                               <div>
                                 {message.content.split('\n').map((line, lineIndex) => {
-                                  if (line.trim() && !line.toLowerCase().includes('application') && !line.toLowerCase().includes('ideal for')) {
+                                  if (line.trim()) {
                                     return (
                                       <div key={lineIndex} className={lineIndex > 0 ? 'mt-1' : ''}>
                                         {line}
@@ -278,7 +273,6 @@ export default function ChatPage() {
                         })()}
                       </div>
                     ) : (
-                      // User messages - simple display
                       message.content
                     )}
                   </div>
@@ -305,7 +299,7 @@ export default function ChatPage() {
           )}
         </div>
 
-        {/* Large Input Area - Claude/ChatGPT Style */}
+        {/* Large Input Area */}
         <div className="bg-white border-t-2 border-blue-500 p-6">
           <form onSubmit={handleSubmit} className="flex gap-4">
             <div className="flex-1">
@@ -339,7 +333,6 @@ export default function ChatPage() {
             </button>
           </form>
           
-          {/* Clear Conversation Button - Bottom Left */}
           <div className="mt-4">
             <button
               onClick={clearConversation}
@@ -351,10 +344,9 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* Right Side - Product List (Only shows when items exist) */}
+      {/* Right Side - Product List */}
       {hasListItems && (
         <div className="w-2/5 bg-white border-l-2 border-blue-500 flex flex-col">
-          {/* List Header */}
           <div className="bg-blue-600 text-white p-4">
             <div className="flex justify-between items-center">
               <div>
@@ -364,9 +356,7 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {/* List Items - Excel Style Grid */}
           <div className="flex-1 overflow-y-auto p-4">
-            {/* Header Row */}
             <div className="grid grid-cols-12 gap-2 bg-blue-100 border-2 border-blue-300 p-3 font-semibold text-sm text-blue-800">
               <div className="col-span-1 text-center">+</div>
               <div className="col-span-1 text-center">Qty</div>
@@ -376,11 +366,9 @@ export default function ChatPage() {
               <div className="col-span-1 text-center">Del</div>
             </div>
             
-            {/* Product Rows */}
             <div className="space-y-1">
               {currentList.map((item) => (
                 <div key={item.id} className="grid grid-cols-12 gap-2 border-2 border-blue-200 bg-white hover:bg-blue-50 p-3 transition-colors">
-                  {/* Increase Qty Button */}
                   <button
                     onClick={() => updateQuantity(item.id, item.quantity + 1)}
                     className="col-span-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded text-sm font-bold transition-colors text-center py-1"
@@ -388,27 +376,22 @@ export default function ChatPage() {
                     +
                   </button>
                   
-                  {/* Qty Display */}
                   <div className="col-span-1 text-center font-semibold text-sm">
                     {item.quantity}
                   </div>
                   
-                  {/* Brand */}
                   <div className="col-span-2 text-sm font-medium text-blue-700 truncate">
                     {item.brand}
                   </div>
                   
-                  {/* Part Number */}
                   <div className="col-span-4 text-sm font-semibold text-gray-800 truncate">
                     {item.partNumber}
                   </div>
                   
-                  {/* Description */}
                   <div className="col-span-3 text-xs text-gray-700 line-clamp-2">
                     {item.description}
                   </div>
                   
-                  {/* Delete Button */}
                   <button
                     onClick={() => removeFromList(item.id)}
                     className="col-span-1 bg-red-100 hover:bg-red-200 text-red-700 rounded text-sm font-bold transition-colors text-center py-1"
@@ -420,7 +403,6 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {/* List Footer */}
           <div className="border-t-2 border-blue-500 p-4 bg-blue-50">
             <div className="flex gap-3">
               <button className="flex-1 bg-green-600 hover:bg-green-700 border-2 border-green-700 text-white py-3 px-4 rounded-lg font-bold transition-colors">
