@@ -1,3 +1,17 @@
+
+/* 
+ * PLECTIC AI ASSISTANT - CHAT INTERFACE
+ * Version: 2.0.0 - Excel Style with Add Buttons
+ * Date: January 1, 2025
+ * Changes: Large input, clean formatting, working Add buttons, blue theme
+ */
+
+
+
+
+
+
+
 'use client'
 
 import { useChat } from 'ai/react'
