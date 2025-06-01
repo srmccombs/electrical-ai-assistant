@@ -9,7 +9,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { ArrowLeft, Plus, Minus, X, Send, Trash2 } from 'lucide-react'
 import Link from 'next/link'
-import { useChat } from 'ai/react'
+//import { useChat } from 'ai/react'
 
 // Types
 interface Product {
@@ -30,7 +30,17 @@ interface ListItem extends Product {
 }
 
 export default function ChatPage() {
-  const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages } = useChat()
+    // const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages } = useChat()
+  const [messages, setMessages] = useState([])
+  const [input, setInput] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const handleInputChange = (e) => setInput(e.target.value)
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    console.log('Chat submitted:', input)
+    setInput('')
+  }
+
   const [productList, setProductList] = useState<ListItem[]>([])
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
