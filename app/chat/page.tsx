@@ -282,7 +282,7 @@ export default function ChatPage() {
                     {['20 amp breakers', 'LC fiber connectors', 'CAT6 blue jacks'].map((suggestion) => (
                       <button
                         key={suggestion}
-                        onClick={() => setInput(suggestion)}
+                        onClick={() => handleInputChange({ target: { value: suggestion } } as any)}
                         className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm hover:border-blue-400 hover:text-blue-600 transition-colors"
                       >
                         {suggestion}
