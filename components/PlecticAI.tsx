@@ -238,18 +238,18 @@ export default function PlecticAI() {
 
   // Generate Smart Filters from Products
   const generateSmartFilters = (products: Product[], productType: string): SmartFilters => {
-    const brands = Array.from(new Set(products.map(p => p.brand).filter(Boolean)))
-    const packagingTypes = Array.from(new Set(products.map(p => p.packagingType).filter(Boolean)))
-    const jacketRatings = Array.from(new Set(products.map(p => p.jacketRating).filter(Boolean)))
-    const fiberTypes = Array.from(new Set(products.map(p => p.fiberType).filter(Boolean)))
-    const connectorTypes = Array.from(new Set(products.map(p => p.connectorType).filter(Boolean)))
-    const categoryRatings = Array.from(new Set(products.map(p => p.categoryRating).filter(Boolean)))
+    const brands = Array.from(new Set(products.map(p => p.brand).filter((item): item is string => Boolean(item))))
+    const packagingTypes = Array.from(new Set(products.map(p => p.packagingType).filter((item): item is string => Boolean(item))))
+    const jacketRatings = Array.from(new Set(products.map(p => p.jacketRating).filter((item): item is string => Boolean(item))))
+    const fiberTypes = Array.from(new Set(products.map(p => p.fiberType).filter((item): item is string => Boolean(item))))
+    const connectorTypes = Array.from(new Set(products.map(p => p.connectorType).filter((item): item is string => Boolean(item))))
+    const categoryRatings = Array.from(new Set(products.map(p => p.categoryRating).filter((item): item is string => Boolean(item))))
     const colors = Array.from(new Set(products.map(p => {
       // Extract color from description
       const desc = p.description?.toLowerCase() || ''
       const colorWords = ['blue', 'red', 'green', 'yellow', 'orange', 'white', 'black', 'gray', 'grey', 'purple', 'pink', 'violet', 'brown']
       return colorWords.find(color => desc.includes(color))
-    }).filter(Boolean)))
+    }).filter((item): item is string => Boolean(item))))
 
     return {
       brands: brands.slice(0, 8), // Show top 8
