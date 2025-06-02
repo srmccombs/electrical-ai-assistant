@@ -47,7 +47,7 @@ interface AISearchAnalysis {
   searchStrategy: string
   productType: string
   confidence: number
-  detectedSpecs: {
+  detectedTerms: {
     fiberType?: string
     categoryRating?: string
     connectorType?: string
@@ -56,6 +56,7 @@ interface AISearchAnalysis {
     requestedQuantity?: number
     shielding?: string
     manufacturer?: string
+    productType?: string
   }
   searchTerms: string[]
   reasoning: string
@@ -677,7 +678,7 @@ Let me help you find what you need:
 
   // ADD TO LIST
   const addToList = (product: Product, customQuantity?: number) => {
-    const quantityToAdd = customQuantity || aiAnalysis?.detectedSpecs?.requestedQuantity || 1
+    const quantityToAdd = customQuantity || aiAnalysis?.detectedTerms?.requestedQuantity || 1
 
     setProductList(prev => {
       const existing = prev.find(item => item.id === product.id)
@@ -746,7 +747,7 @@ Let me help you find what you need:
               🔍 Debug Database
             </button>
 
-            {aiAnalysis && Object.keys(aiAnalysis.detectedSpecs || {}).length > 0 && (
+            {aiAnalysis && Object.keys(aiAnalysis.detectedTerms || {}).length > 0 && (
               <div className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1">
                 <Brain size={14} />
                 AI Active
