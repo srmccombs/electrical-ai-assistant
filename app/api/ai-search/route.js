@@ -1,17 +1,13 @@
-// pages/api/ai-search.js
+// app/api/ai-search/route.js
 import OpenAI from 'openai'
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY, // ✅ Server-side only
+  apiKey: process.env.OPENAI_API_KEY,
 })
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
-
+export async function POST(request) {
   try {
-    const { query, userContext } = req.body
+    const { query, userContext } = await request.json()
 
     console.log('🤖 AI analyzing query:', query)
 
@@ -66,20 +62,18 @@ Be specific and accurate. This will directly control database searches for a rea
         },
         { role: "user", content: aiPrompt }
       ],
-      temperature: 0.3, // Lower temperature for more consistent results
+      temperature: 0.3,
       max_tokens: 1000
     })
 
     const aiResponse = completion.choices[0].message.content.trim()
     console.log('🤖 AI Response:', aiResponse)
 
-    // Parse AI response
     let searchAnalysis
     try {
       searchAnalysis = JSON.parse(aiResponse)
     } catch (parseError) {
       console.error('❌ Failed to parse AI response:', parseError)
-      // Fallback response
       searchAnalysis = {
         searchStrategy: "mixed",
         productType: "MIXED",
@@ -92,19 +86,18 @@ Be specific and accurate. This will directly control database searches for a rea
       }
     }
 
-    // Add some additional processing
     searchAnalysis.originalQuery = query
     searchAnalysis.timestamp = new Date().toISOString()
     searchAnalysis.aiModel = "gpt-4"
 
-    res.status(200).json({
+    return Response.json({
       success: true,
       analysis: searchAnalysis
     })
 
   } catch (error) {
     console.error('❌ AI Search API Error:', error)
-    res.status(500).json({
+    return Response.json({
       success: false,
       error: 'AI analysis failed',
       fallback: {
@@ -112,11 +105,11 @@ Be specific and accurate. This will directly control database searches for a rea
         productType: "MIXED",
         confidence: 0.3,
         detectedSpecs: {},
-        searchTerms: [req.body.query || ""],
+        searchTerms: [query || ""],
         reasoning: "Fallback due to AI service error",
         suggestedFilters: [],
         alternativeQueries: []
       }
-    })
+    }, { status: 500 })
   }
 }
