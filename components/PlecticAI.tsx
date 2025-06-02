@@ -501,34 +501,37 @@ export default function PlecticAI() {
       // Category cable search with color filtering
       if (enhancement.detectedTerms.categoryRating) {
         console.log('🌐 CATEGORY CABLE SEARCH detected')
+        console.log(`🔍 Searching for: ${enhancement.detectedTerms.categoryRating} cables`)
 
-        // First try a broad search to get all possible brands
+        // First try exact category match
         let categoryQuery = supabase
           .from('category_cables')
           .select('*')
           .eq('is_active', true)
-          .limit(50) // Increased limit to get more variety
+          .limit(50)
 
         const searchConditions = []
 
-        // Category rating filter (broader search)
+        // STRICT Category rating filter - exact match first
         if (enhancement.detectedTerms.categoryRating) {
           const catRating = enhancement.detectedTerms.categoryRating
-          searchConditions.push(`category_rating.ilike.%${catRating}%`)
-          console.log(`🏷️ AI filter: category rating = ${catRating}`)
+          // Try exact matches first
+          searchConditions.push(`category_rating.eq.${catRating}`)
+          searchConditions.push(`category_rating.ilike.${catRating}`)
+          console.log(`🏷️ AI filter: STRICT category rating = ${catRating}`)
         }
 
-        // Jacket rating filter (broader)
+        // Jacket rating filter
         if (enhancement.detectedTerms.jacketRating) {
           const jacketSearch = enhancement.detectedTerms.jacketRating === 'CMP' ? 'plenum' : enhancement.detectedTerms.jacketRating
           searchConditions.push(`jacket_material.ilike.%${jacketSearch}%`)
           console.log(`🧥 AI filter: jacket rating = ${jacketSearch}`)
         }
 
-        // Start with category + jacket only to get all brands
-        let baseConditions = searchConditions.slice() // Copy array
+        console.log(`🔍 Search conditions: ${searchConditions.join(' OR ')}`)
 
-        const categoryResult = await categoryQuery.or(baseConditions.join(','))
+        const categoryResult = await categoryQuery.or(searchConditions.join(','))
+        console.log(`📊 Found ${categoryResult.data?.length || 0} products matching category + jacket`)
 
         if (categoryResult.data && categoryResult.data.length > 0) {
           let categoryProducts = categoryResult.data.map(item => ({
@@ -550,10 +553,13 @@ export default function PlecticAI() {
             color: item.jacket_color
           }))
 
-          // NOW apply color filtering after getting all brands
+          // Log what categories we actually found
+          const foundCategories = Array.from(new Set(categoryProducts.map(p => p.categoryRating)))
+          console.log(`📋 Found categories: ${foundCategories.join(', ')}`)
+
+          // STRICT color filtering
           if (enhancement.detectedTerms.color) {
             console.log(`🎨 Filtering by color: ${enhancement.detectedTerms.color}`)
-            // Filter client-side to prioritize color matches but keep all results
             const colorMatches = categoryProducts.filter(product =>
               product.description.toLowerCase().includes(enhancement.detectedTerms.color!.toLowerCase()) ||
               product.color?.toLowerCase().includes(enhancement.detectedTerms.color!.toLowerCase())
@@ -563,9 +569,12 @@ export default function PlecticAI() {
               !product.color?.toLowerCase().includes(enhancement.detectedTerms.color!.toLowerCase())
             )
 
-            // Show color matches first, then others
-            categoryProducts = [...colorMatches, ...nonColorMatches.slice(0, 10)]
             console.log(`🎨 Found ${colorMatches.length} color matches, ${nonColorMatches.length} other products`)
+
+            // If we have color matches, prioritize them, otherwise show all
+            if (colorMatches.length > 0) {
+              categoryProducts = [...colorMatches, ...nonColorMatches.slice(0, 5)]
+            }
           }
 
           // Log brand diversity
@@ -575,6 +584,9 @@ export default function PlecticAI() {
           allProducts = [...allProducts, ...categoryProducts]
           console.log(`🌐 Added ${categoryProducts.length} category cable results`)
           searchStrategy = 'category_cables'
+        } else {
+          console.log(`❌ No ${enhancement.detectedTerms.categoryRating} products found with specified criteria`)
+          console.log(`💡 Suggestion: Check if ${enhancement.detectedTerms.categoryRating} plenum cables exist in database`)
         }
       }
 
