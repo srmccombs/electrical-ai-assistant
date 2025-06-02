@@ -238,18 +238,18 @@ export default function PlecticAI() {
 
   // Generate Smart Filters from Products
   const generateSmartFilters = (products: Product[], productType: string): SmartFilters => {
-    const brands = [...new Set(products.map(p => p.brand).filter(Boolean))]
-    const packagingTypes = [...new Set(products.map(p => p.packagingType).filter(Boolean))]
-    const jacketRatings = [...new Set(products.map(p => p.jacketRating).filter(Boolean))]
-    const fiberTypes = [...new Set(products.map(p => p.fiberType).filter(Boolean))]
-    const connectorTypes = [...new Set(products.map(p => p.connectorType).filter(Boolean))]
-    const categoryRatings = [...new Set(products.map(p => p.categoryRating).filter(Boolean))]
-    const colors = [...new Set(products.map(p => {
+    const brands = Array.from(new Set(products.map(p => p.brand).filter(Boolean)))
+    const packagingTypes = Array.from(new Set(products.map(p => p.packagingType).filter(Boolean)))
+    const jacketRatings = Array.from(new Set(products.map(p => p.jacketRating).filter(Boolean)))
+    const fiberTypes = Array.from(new Set(products.map(p => p.fiberType).filter(Boolean)))
+    const connectorTypes = Array.from(new Set(products.map(p => p.connectorType).filter(Boolean)))
+    const categoryRatings = Array.from(new Set(products.map(p => p.categoryRating).filter(Boolean)))
+    const colors = Array.from(new Set(products.map(p => {
       // Extract color from description
       const desc = p.description?.toLowerCase() || ''
       const colorWords = ['blue', 'red', 'green', 'yellow', 'orange', 'white', 'black', 'gray', 'grey', 'purple', 'pink', 'violet', 'brown']
       return colorWords.find(color => desc.includes(color))
-    }).filter(Boolean))]
+    }).filter(Boolean)))
 
     return {
       brands: brands.slice(0, 8), // Show top 8
