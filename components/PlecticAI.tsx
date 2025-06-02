@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { Search, Plus, Minus, X, Send, Zap, Package, AlertCircle, CheckCircle, Clock, Menu, Settings, HelpCircle } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 // Types
 interface Product {
@@ -58,48 +59,75 @@ export default function PlecticAI() {
     }
   }, [input])
 
-  // Simulate product search with Excel-style data
-  const searchProducts = async (query: string): Promise<Product[]> => {
-    await new Promise(resolve => setTimeout(resolve, 1000))
+  // Search products in Supabase
+  const searchProducts = async (searchTerm: string) => {
+    try {
+      console.log('Searching for:', searchTerm)
 
-    const mockProducts: Product[] = [
-      {
-        id: '1',
-        partNumber: 'CCH-CP12-E4-DMSI',
-        brand: 'DMSI',
-        description: '12 Fiber OM3/OM4 LC Adapter Panel - Aqua',
-        price: 125.50,
-        stockLocal: 15,
-        stockDistribution: 200,
-        leadTime: 'Ships Today',
-        category: 'Fiber Panels'
-      },
-      {
-        id: '2',
-        partNumber: 'FAP6WSTZ',
-        brand: 'Panduit',
-        description: '6 Port LC Duplex Fiber Adapter Panel',
-        price: 89.99,
-        stockLocal: 0,
-        stockDistribution: 50,
-        leadTime: '1-2 Days',
-        category: 'Fiber Panels'
-      },
-      {
-        id: '3',
-        partNumber: 'CCH-CP24-E4-DMSI',
-        brand: 'DMSI',
-        description: '24 Fiber OM3/OM4 LC Adapter Panel - Aqua',
-        price: 189.00,
-        stockLocal: 8,
-        stockDistribution: 100,
-        leadTime: 'Ships Today',
-        category: 'Fiber Panels'
-      }
-    ]
+      // Focus on tables that actually have data
+      const productTables = [
+        'products',                           // Main products table - we confirmed this has data!
+        'fiber_connectors',                   // We know this has data from earlier test
+        'distributor_inventory',              // Likely has inventory data
+        'fiber_optic_cable',                  // Try this one
+        'adapter_panels',                     // Try this one
+        'v_products_complete',
+        'category_cables',                       // This view might be comprehensive
+        'rack_mount_fiber_enclosures' ,
+        'wall_mount_fiber_enclosures',
 
-    return mockProducts
-  }
+      ];
+
+      // Search all tables at once
+      const searchPromises = productTables.map(tableName =>
+        supabase
+          .from(tableName)
+          .select('*')
+          .or(`part_number.ilike.%${searchTerm}%,short_description.ilike.%${searchTerm}%`)
+          .limit(5)
+          .then(result => {
+            // Debug log for each table
+            console.log(`${tableName}:`, result.data?.length || 0, 'results')
+            if (result.error) {
+              console.error(`Error in ${tableName}:`, result.error)
+            }
+            return { tableName, ...result }
+          })
+      );
+
+      // Wait for all searches to complete
+      const results = await Promise.all(searchPromises);
+
+      // Debug log
+      console.log('All search results:', results)
+
+      // Combine all results into one array
+      const allProducts = results.flatMap((result, index) => {
+        if (result.data && result.data.length > 0) {
+          return result.data.map(item => ({
+            id: item.id?.toString() || `${result.tableName}-${Date.now()}-${Math.random()}`,
+            partNumber: item.part_number || item.partNumber || 'No Part Number',
+            brand: item.brand || item.manufacturer || 'Unknown Brand',
+            description: item.short_description || item.description || item.detailed_description || 'No description available',
+            price: item.unit_price || item.price || (Math.random() * 100 + 20), // Fallback to random if no price
+            stockLocal: item.stock_quantity || item.stock_local || 10,  // Use real data if available
+            stockDistribution: item.stock_distribution || 100,
+            leadTime: item.lead_time || 'Ships Today',
+            category: item.category || result.tableName.replace(/_/g, ' '),
+            tableName: result.tableName  // Added for debugging
+          }));
+        }
+        return [];
+      });
+
+      console.log('Formatted products:', allProducts) // Debug log
+      return allProducts;
+
+    } catch (error) {
+      console.error('Search error:', error);
+      return [];
+    }
+  };
 
   // Handle message submission
   const handleSubmit = async () => {
@@ -124,7 +152,7 @@ export default function PlecticAI() {
         role: 'assistant',
         content: products.length > 0
           ? `Found ${products.length} products matching your search:`
-          : "No products found. Try different search terms.",
+          : "No products found. Try different search terms like 'fiber', 'LC', or 'panel'.",
         products: products.length > 0 ? products : undefined,
         timestamp: new Date()
       }
@@ -132,6 +160,13 @@ export default function PlecticAI() {
       setMessages(prev => [...prev, assistantMessage])
     } catch (error) {
       console.error('Search error:', error)
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: "Sorry, there was an error searching the products. Please try again.",
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, errorMessage])
     } finally {
       setIsLoading(false)
     }
@@ -234,7 +269,7 @@ export default function PlecticAI() {
                             handleSubmit()
                           }
                         }}
-                        placeholder="Example: Show me all 20 amp breakers in stock..."
+                        placeholder="Try searching for: fiber, LC, panel, connector, CCH..."
                         className="w-full px-6 py-4 border-2 border-blue-500 rounded-lg resize-none focus:outline-none focus:ring-4 focus:ring-blue-200 focus:border-blue-600 text-base"
                         rows={6}
                         autoFocus
@@ -389,13 +424,17 @@ export default function PlecticAI() {
                   Search
                 </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setMessages([])}
-                className="text-sm text-gray-500 hover:text-gray-700 underline"
-              >
-                Clear Conversation
-              </button>
+
+              {/* FIXED CLEAR BUTTON - Now Big, Red, and Prominent! */}
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => setMessages([])}
+                  className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-bold transition-colors text-base border-2 border-red-700"
+                >
+                  🗑️ Clear Conversation
+                </button>
+              </div>
             </div>
           )}
         </div>

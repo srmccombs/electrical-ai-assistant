@@ -31,11 +31,11 @@ interface ListItem extends Product {
 
 export default function ChatPage() {
     // const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages } = useChat()
-  const [messages, setMessages] = useState<any[]>([])
+  const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const handleInputChange = (e: any) => setInput(e.target.value)
-  const handleSubmit = (e: any) => {
+  const handleInputChange = (e) => setInput(e.target.value)
+  const handleSubmit = (e) => {
     e.preventDefault()
     console.log('Chat submitted:', input)
     setInput('')
