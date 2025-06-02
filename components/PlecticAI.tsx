@@ -502,43 +502,33 @@ export default function PlecticAI() {
       if (enhancement.detectedTerms.categoryRating) {
         console.log('🌐 CATEGORY CABLE SEARCH detected')
 
+        // First try a broad search to get all possible brands
         let categoryQuery = supabase
           .from('category_cables')
           .select('*')
           .eq('is_active', true)
-          .limit(25)
+          .limit(50) // Increased limit to get more variety
 
         const searchConditions = []
 
-        // Category rating filter
+        // Category rating filter (broader search)
         if (enhancement.detectedTerms.categoryRating) {
           const catRating = enhancement.detectedTerms.categoryRating
           searchConditions.push(`category_rating.ilike.%${catRating}%`)
-          searchConditions.push(`part_number.ilike.%${catRating}%`)
-          searchConditions.push(`short_description.ilike.%${catRating}%`)
           console.log(`🏷️ AI filter: category rating = ${catRating}`)
         }
 
-        // Jacket rating filter
+        // Jacket rating filter (broader)
         if (enhancement.detectedTerms.jacketRating) {
           const jacketSearch = enhancement.detectedTerms.jacketRating === 'CMP' ? 'plenum' : enhancement.detectedTerms.jacketRating
           searchConditions.push(`jacket_material.ilike.%${jacketSearch}%`)
-          searchConditions.push(`short_description.ilike.%${jacketSearch}%`)
           console.log(`🧥 AI filter: jacket rating = ${jacketSearch}`)
         }
 
-        // Color filter - NOW WORKS!
-        if (enhancement.detectedTerms.color) {
-          searchConditions.push(`jacket_color.ilike.%${enhancement.detectedTerms.color}%`)
-          searchConditions.push(`short_description.ilike.%${enhancement.detectedTerms.color}%`)
-          console.log(`🎨 AI filter: color = ${enhancement.detectedTerms.color}`)
-        }
+        // Start with category + jacket only to get all brands
+        let baseConditions = searchConditions.slice() // Copy array
 
-        // General search terms
-        searchConditions.push(`short_description.ilike.%${searchTerm}%`)
-        searchConditions.push(`part_number.ilike.%${searchTerm}%`)
-
-        const categoryResult = await categoryQuery.or(searchConditions.join(','))
+        const categoryResult = await categoryQuery.or(baseConditions.join(','))
 
         if (categoryResult.data && categoryResult.data.length > 0) {
           let categoryProducts = categoryResult.data.map(item => ({
@@ -560,16 +550,27 @@ export default function PlecticAI() {
             color: item.jacket_color
           }))
 
-          // If color was specified, prioritize products that match the color
+          // NOW apply color filtering after getting all brands
           if (enhancement.detectedTerms.color) {
-            categoryProducts = categoryProducts.sort((a, b) => {
-              const aHasColor = a.description.toUpperCase().includes(enhancement.detectedTerms.color!)
-              const bHasColor = b.description.toUpperCase().includes(enhancement.detectedTerms.color!)
-              if (aHasColor && !bHasColor) return -1
-              if (!aHasColor && bHasColor) return 1
-              return 0
-            })
+            console.log(`🎨 Filtering by color: ${enhancement.detectedTerms.color}`)
+            // Filter client-side to prioritize color matches but keep all results
+            const colorMatches = categoryProducts.filter(product =>
+              product.description.toLowerCase().includes(enhancement.detectedTerms.color!.toLowerCase()) ||
+              product.color?.toLowerCase().includes(enhancement.detectedTerms.color!.toLowerCase())
+            )
+            const nonColorMatches = categoryProducts.filter(product =>
+              !product.description.toLowerCase().includes(enhancement.detectedTerms.color!.toLowerCase()) &&
+              !product.color?.toLowerCase().includes(enhancement.detectedTerms.color!.toLowerCase())
+            )
+
+            // Show color matches first, then others
+            categoryProducts = [...colorMatches, ...nonColorMatches.slice(0, 10)]
+            console.log(`🎨 Found ${colorMatches.length} color matches, ${nonColorMatches.length} other products`)
           }
+
+          // Log brand diversity
+          const brands = [...new Set(categoryProducts.map(p => p.brand))]
+          console.log(`🏷️ Found brands: ${brands.join(', ')}`)
 
           allProducts = [...allProducts, ...categoryProducts]
           console.log(`🌐 Added ${categoryProducts.length} category cable results`)
