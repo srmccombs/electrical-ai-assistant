@@ -512,13 +512,25 @@ export default function PlecticAI() {
 
         const searchConditions = []
 
-        // STRICT Category rating filter - exact match first
+        // STRICT Category rating filter - handle multiple formats
         if (enhancement.detectedTerms.categoryRating) {
           const catRating = enhancement.detectedTerms.categoryRating
-          // Try exact matches first
-          searchConditions.push(`category_rating.eq.${catRating}`)
-          searchConditions.push(`category_rating.ilike.${catRating}`)
-          console.log(`🏷️ AI filter: STRICT category rating = ${catRating}`)
+
+          // Map AI detection to database format
+          let dbCategorySearch = catRating
+          if (catRating === 'CAT5') dbCategorySearch = 'Category 5'
+          if (catRating === 'CAT5E') dbCategorySearch = 'Category 5e'
+          if (catRating === 'CAT6') dbCategorySearch = 'Category 6'
+          if (catRating === 'CAT6A') dbCategorySearch = 'Category 6A'
+          if (catRating === 'CAT7') dbCategorySearch = 'Category 7'
+          if (catRating === 'CAT8') dbCategorySearch = 'Category 8'
+
+          // Try multiple variations
+          searchConditions.push(`category_rating.ilike.%${dbCategorySearch}%`)
+          searchConditions.push(`category_rating.ilike.%${catRating}%`)
+          searchConditions.push(`short_description.ilike.%${dbCategorySearch}%`)
+
+          console.log(`🏷️ AI detected: ${catRating} → Database search: ${dbCategorySearch}`)
         }
 
         // Jacket rating filter
