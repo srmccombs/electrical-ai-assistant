@@ -776,7 +776,7 @@ Let me help you find what you need:
         searchType,
         searchTime,
         aiAnalysis,
-        smartFilters: products.length > 0 ? smartFilters : undefined
+        smartFilters: products.length > 0 && smartFilters ? smartFilters : undefined
       }
 
       setMessages(prev => [...prev, assistantMessage])
@@ -834,7 +834,7 @@ Let me help you find what you need:
         searchType,
         searchTime,
         aiAnalysis,
-        smartFilters: products.length > 0 ? smartFilters : undefined
+        smartFilters: products.length > 0 && smartFilters ? smartFilters : undefined
       }
 
       setMessages(prev => [...prev, assistantMessage])
