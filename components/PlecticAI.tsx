@@ -25,6 +25,7 @@ interface Product {
   searchRelevance?: number
   tableName?: string
   packagingType?: string
+  color?: string
 }
 
 interface ListItem extends Product {
@@ -41,6 +42,18 @@ interface Message {
   searchType?: string
   searchTime?: number
   aiAnalysis?: any
+  smartFilters?: SmartFilters
+}
+
+interface SmartFilters {
+  brands: string[]
+  packagingTypes: string[]
+  jacketRatings: string[]
+  fiberTypes: string[]
+  connectorTypes: string[]
+  categoryRatings: string[]
+  colors: string[]
+  productType: string
 }
 
 interface AISearchAnalysis {
@@ -57,6 +70,7 @@ interface AISearchAnalysis {
     shielding?: string
     manufacturer?: string
     productType?: string
+    color?: string
   }
   searchTerms: string[]
   reasoning: string
@@ -73,14 +87,43 @@ export default function PlecticAI() {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [productList, setProductList] = useState<ListItem[]>([])
-  const [showMobileList, setShowMobileList] = useState(false)
-  const [searchFocus, setSearchFocus] = useState(false)
   const [lastSearchTime, setLastSearchTime] = useState<number>(0)
   const [aiAnalysis, setAiAnalysis] = useState<AISearchAnalysis | null>(null)
+  const [recentSearches, setRecentSearches] = useState<string[]>([])
+  const [popularSearches] = useState<string[]>([
+    'Cat 5e plenum blue',
+    '24 LC connectors OM4',
+    'Cat 6 riser cable',
+    '12 fiber OM3 cable',
+    'SC connectors multimode',
+    'Cat 6A shielded cable'
+  ])
+
+  // Smart Filter States
+  const [activeFilters, setActiveFilters] = useState<{[key: string]: string}>({})
+  const [currentProducts, setCurrentProducts] = useState<Product[]>([])
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
+  const [smartFilters, setSmartFilters] = useState<SmartFilters | null>(null)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  // ✅ DEBUG FUNCTION - This will help us see your database structure
+  // Load recent searches on component mount
+  useEffect(() => {
+    const stored = localStorage.getItem('plectic_recent_searches')
+    if (stored) {
+      setRecentSearches(JSON.parse(stored))
+    }
+  }, [])
+
+  // Save recent searches
+  const saveRecentSearch = (query: string) => {
+    const updated = [query, ...recentSearches.filter(s => s !== query)].slice(0, 8)
+    setRecentSearches(updated)
+    localStorage.setItem('plectic_recent_searches', JSON.stringify(updated))
+  }
+
+  // DEBUG FUNCTION - This will help us see your database structure
   const debugDatabase = async () => {
     console.log('🔍 DEBUGGING DATABASE STRUCTURE...')
 
@@ -193,6 +236,75 @@ export default function PlecticAI() {
     }
   }
 
+  // Generate Smart Filters from Products
+  const generateSmartFilters = (products: Product[], productType: string): SmartFilters => {
+    const brands = [...new Set(products.map(p => p.brand).filter(Boolean))]
+    const packagingTypes = [...new Set(products.map(p => p.packagingType).filter(Boolean))]
+    const jacketRatings = [...new Set(products.map(p => p.jacketRating).filter(Boolean))]
+    const fiberTypes = [...new Set(products.map(p => p.fiberType).filter(Boolean))]
+    const connectorTypes = [...new Set(products.map(p => p.connectorType).filter(Boolean))]
+    const categoryRatings = [...new Set(products.map(p => p.categoryRating).filter(Boolean))]
+    const colors = [...new Set(products.map(p => {
+      // Extract color from description
+      const desc = p.description?.toLowerCase() || ''
+      const colorWords = ['blue', 'red', 'green', 'yellow', 'orange', 'white', 'black', 'gray', 'grey', 'purple', 'pink', 'violet', 'brown']
+      return colorWords.find(color => desc.includes(color))
+    }).filter(Boolean))]
+
+    return {
+      brands: brands.slice(0, 8), // Show top 8
+      packagingTypes: packagingTypes.slice(0, 6),
+      jacketRatings: jacketRatings.slice(0, 4),
+      fiberTypes: fiberTypes.slice(0, 4),
+      connectorTypes: connectorTypes.slice(0, 4),
+      categoryRatings: categoryRatings.slice(0, 4),
+      colors: colors.slice(0, 6),
+      productType
+    }
+  }
+
+  // Apply Smart Filter
+  const applySmartFilter = (filterType: string, value: string) => {
+    const newFilters = { ...activeFilters }
+
+    if (newFilters[filterType] === value) {
+      // Remove filter if clicking the same one
+      delete newFilters[filterType]
+    } else {
+      // Apply new filter
+      newFilters[filterType] = value
+    }
+
+    setActiveFilters(newFilters)
+
+    // Filter products based on active filters
+    let filtered = currentProducts
+
+    Object.entries(newFilters).forEach(([type, filterValue]) => {
+      filtered = filtered.filter(product => {
+        switch (type) {
+          case 'brand': return product.brand === filterValue
+          case 'packagingType': return product.packagingType === filterValue
+          case 'jacketRating': return product.jacketRating === filterValue
+          case 'fiberType': return product.fiberType === filterValue
+          case 'connectorType': return product.connectorType === filterValue
+          case 'categoryRating': return product.categoryRating === filterValue
+          case 'color': return product.description?.toLowerCase().includes(filterValue.toLowerCase())
+          default: return true
+        }
+      })
+    })
+
+    setFilteredProducts(filtered)
+    console.log(`🔍 Applied filter ${filterType}=${value}, ${filtered.length} products remaining`)
+  }
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setActiveFilters({})
+    setFilteredProducts(currentProducts)
+  }
+
   // Smooth scroll to bottom
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -244,7 +356,7 @@ export default function PlecticAI() {
     }
   }
 
-  // AI-Enhanced Query Processing (Local - for now)
+  // Local Query Enhancement
   const enhanceQuery = async (query: string) => {
     try {
       const enhancement = {
@@ -291,6 +403,16 @@ export default function PlecticAI() {
       )
       if (foundJacketRating) {
         enhancement.detectedTerms.jacketRating = foundJacketRating === 'PLENUM' ? 'CMP' : foundJacketRating
+      }
+
+      // Detect colors
+      const colors = ['BLUE', 'RED', 'GREEN', 'YELLOW', 'ORANGE', 'WHITE', 'BLACK', 'GRAY', 'GREY', 'PURPLE', 'PINK', 'VIOLET', 'BROWN']
+      const foundColor = colors.find(color =>
+        query.toUpperCase().includes(color)
+      )
+      if (foundColor) {
+        enhancement.detectedTerms.color = foundColor === 'GREY' ? 'GRAY' : foundColor
+        console.log('🎨 Detected color:', enhancement.detectedTerms.color)
       }
 
       // Detect fiber count
@@ -355,12 +477,13 @@ export default function PlecticAI() {
     }
   }
 
-  // ENHANCED SEARCH with better debugging
+  // ENHANCED SEARCH with Smart Filters
   const searchProducts = async (searchTerm: string): Promise<{ products: Product[], searchTime: number, searchType: string, aiAnalysis?: AISearchAnalysis }> => {
     const startTime = performance.now()
 
     try {
       console.log('🎯 ENHANCED SEARCH for:', searchTerm)
+      saveRecentSearch(searchTerm) // Save to recent searches
 
       const enhancement = await enhanceQuery(searchTerm)
       setAiAnalysis(enhancement as any)
@@ -373,99 +496,52 @@ export default function PlecticAI() {
 
       if (aiAnalysis) {
         console.log('🤖 Using AI analysis:', aiAnalysis)
-        // Use AI analysis to guide search
       }
 
-      // Try product_search table first (this seems to have more data)
-      console.log('🚀 Searching product_search table...')
-      const productSearchResult = await supabase
-        .from('product_search')
-        .select('*')
-        .or(`part_number.ilike.%${searchTerm}%,short_description.ilike.%${searchTerm}%,search_text.ilike.%${searchTerm}%`)
-        .limit(15)
-
-      if (productSearchResult.data && productSearchResult.data.length > 0) {
-        allProducts = productSearchResult.data.map(item => ({
-          id: `search-${item.id}`,
-          partNumber: item.part_number?.toString() || 'No Part Number',
-          brand: item.brand || 'Unknown Brand',
-          description: item.short_description || 'No description available',
-          price: Math.random() * 75 + 25,
-          stockLocal: 10,
-          stockDistribution: 100,
-          leadTime: 'Ships Today',
-          category: item.category || 'Product',
-          searchRelevance: 0.9,
-          tableName: `product_search (${item.product_table || 'unknown'})`
-        }))
-        console.log(`🎯 Found ${allProducts.length} results in product_search`)
-        searchStrategy = 'product_search'
-      }
-
-      // If specific connector search, try targeted searches
-      if (enhancement.detectedTerms.productType === 'CONNECTOR' && allProducts.length < 5) {
-        console.log('🔌 CONNECTOR SEARCH detected')
-
-        // Try searching for connector-related terms
-        const connectorTerms = ['connector', 'LC', 'SC', 'ST', 'FC', 'MTP', 'MPO']
-        const searchTerm1 = connectorTerms.find(term => searchTerm.toUpperCase().includes(term.toUpperCase()))
-
-        if (searchTerm1) {
-          console.log(`🔍 Searching for connector term: ${searchTerm1}`)
-          const connectorResult = await supabase
-            .from('product_search')
-            .select('*')
-            .or(`short_description.ilike.%${searchTerm1}%,part_number.ilike.%${searchTerm1}%`)
-            .limit(10)
-
-          if (connectorResult.data && connectorResult.data.length > 0) {
-            const connectorProducts = connectorResult.data.map(item => ({
-              id: `conn-${item.id}`,
-              partNumber: item.part_number?.toString() || 'No Part Number',
-              brand: item.brand || 'Unknown Brand',
-              description: item.short_description || 'No description available',
-              price: Math.random() * 50 + 10,
-              stockLocal: 15,
-              stockDistribution: 100,
-              leadTime: 'Ships Today',
-              category: 'Connector',
-              searchRelevance: 1.0,
-              tableName: `product_search (connector search)`
-            }))
-
-            allProducts = [...allProducts, ...connectorProducts]
-            console.log(`🔌 Added ${connectorProducts.length} connector results`)
-            searchStrategy = 'connector_search'
-          }
-        }
-      }
-
-      // Category cable search (we know this works)
-      if (enhancement.detectedTerms.categoryRating && allProducts.length < 10) {
+      // Category cable search with color filtering
+      if (enhancement.detectedTerms.categoryRating) {
         console.log('🌐 CATEGORY CABLE SEARCH detected')
 
-        const categoryQuery = supabase
+        let categoryQuery = supabase
           .from('category_cables')
           .select('*')
           .eq('is_active', true)
-          .limit(10)
+          .limit(25)
 
         const searchConditions = []
-        const catRating = enhancement.detectedTerms.categoryRating
-        searchConditions.push(`category_rating.ilike.%${catRating}%`)
-        searchConditions.push(`part_number.ilike.%${catRating}%`)
-        searchConditions.push(`short_description.ilike.%${catRating}%`)
 
+        // Category rating filter
+        if (enhancement.detectedTerms.categoryRating) {
+          const catRating = enhancement.detectedTerms.categoryRating
+          searchConditions.push(`category_rating.ilike.%${catRating}%`)
+          searchConditions.push(`part_number.ilike.%${catRating}%`)
+          searchConditions.push(`short_description.ilike.%${catRating}%`)
+          console.log(`🏷️ AI filter: category rating = ${catRating}`)
+        }
+
+        // Jacket rating filter
         if (enhancement.detectedTerms.jacketRating) {
           const jacketSearch = enhancement.detectedTerms.jacketRating === 'CMP' ? 'plenum' : enhancement.detectedTerms.jacketRating
           searchConditions.push(`jacket_material.ilike.%${jacketSearch}%`)
           searchConditions.push(`short_description.ilike.%${jacketSearch}%`)
+          console.log(`🧥 AI filter: jacket rating = ${jacketSearch}`)
         }
+
+        // Color filter - NOW WORKS!
+        if (enhancement.detectedTerms.color) {
+          searchConditions.push(`jacket_color.ilike.%${enhancement.detectedTerms.color}%`)
+          searchConditions.push(`short_description.ilike.%${enhancement.detectedTerms.color}%`)
+          console.log(`🎨 AI filter: color = ${enhancement.detectedTerms.color}`)
+        }
+
+        // General search terms
+        searchConditions.push(`short_description.ilike.%${searchTerm}%`)
+        searchConditions.push(`part_number.ilike.%${searchTerm}%`)
 
         const categoryResult = await categoryQuery.or(searchConditions.join(','))
 
         if (categoryResult.data && categoryResult.data.length > 0) {
-          const categoryProducts = categoryResult.data.map(item => ({
+          let categoryProducts = categoryResult.data.map(item => ({
             id: item.id?.toString() || Date.now().toString(),
             partNumber: item.part_number || 'No Part Number',
             brand: item.brand || 'Unknown Brand',
@@ -480,27 +556,117 @@ export default function PlecticAI() {
                          item.jacket_material?.includes('riser') ? 'CMR' : undefined,
             searchRelevance: 1.0,
             tableName: 'category_cables',
-            packagingType: item.packaging_type
+            packagingType: item.packaging_type,
+            color: item.jacket_color
           }))
+
+          // If color was specified, prioritize products that match the color
+          if (enhancement.detectedTerms.color) {
+            categoryProducts = categoryProducts.sort((a, b) => {
+              const aHasColor = a.description.toUpperCase().includes(enhancement.detectedTerms.color!)
+              const bHasColor = b.description.toUpperCase().includes(enhancement.detectedTerms.color!)
+              if (aHasColor && !bHasColor) return -1
+              if (!aHasColor && bHasColor) return 1
+              return 0
+            })
+          }
 
           allProducts = [...allProducts, ...categoryProducts]
           console.log(`🌐 Added ${categoryProducts.length} category cable results`)
+          searchStrategy = 'category_cables'
         }
       }
 
-      // Fallback search if still no results
-      if (allProducts.length === 0) {
-        console.log('🚀 Expanding search to additional tables...')
+      // CONNECTOR SEARCH with proper column names
+      if (enhancement.detectedTerms.productType === 'CONNECTOR' && allProducts.length < 5) {
+        console.log('🔌 CONNECTOR SEARCH detected')
 
-        const fallbackResult = await supabase
+        let connectorQuery = supabase
+          .from('products')
+          .select('*')
+          .eq('is_active', true)
+          .ilike('short_description', '%connector%')
+          .limit(20)
+
+        // Apply AI-detected specifications using correct column names
+        if (enhancement.detectedTerms.fiberType) {
+          connectorQuery = connectorQuery.eq('fiber_type_standard', enhancement.detectedTerms.fiberType)
+          console.log(`🌈 AI filter: fiber type = ${enhancement.detectedTerms.fiberType}`)
+        }
+        if (enhancement.detectedTerms.connectorType) {
+          connectorQuery = connectorQuery.eq('connector_type_standard', enhancement.detectedTerms.connectorType)
+          console.log(`🔌 AI filter: connector type = ${enhancement.detectedTerms.connectorType}`)
+        }
+        if (enhancement.detectedTerms.fiberCount) {
+          connectorQuery = connectorQuery.or(`fiber_count.eq.${enhancement.detectedTerms.fiberCount},short_description.ilike.%${enhancement.detectedTerms.fiberCount}%`)
+          console.log(`📊 AI filter: fiber count = ${enhancement.detectedTerms.fiberCount}`)
+        }
+
+        const connectorResult = await connectorQuery
+
+        if (connectorResult.data && connectorResult.data.length > 0) {
+          const connectorProducts = connectorResult.data.map(item => ({
+            id: item.id?.toString() || Date.now().toString(),
+            partNumber: item.part_number || 'No Part Number',
+            brand: 'Brand Name',
+            description: item.short_description || 'No description available',
+            price: parseFloat(item.unit_price) || (Math.random() * 50 + 10),
+            stockLocal: item.stock_quantity || 0,
+            stockDistribution: 100,
+            leadTime: 'Ships Today',
+            category: 'Fiber Connector',
+            fiberType: item.fiber_type_standard,
+            connectorType: item.connector_type_standard,
+            fiberCount: item.fiber_count,
+            searchRelevance: 1.0,
+            tableName: 'products (AI-guided connectors)'
+          }))
+
+          allProducts = [...allProducts, ...connectorProducts]
+          console.log(`🔌 AI found ${connectorProducts.length} connector results from products table`)
+          searchStrategy = 'connectors'
+        }
+
+        // Also search product_search table for connectors
+        console.log('🔍 Searching product_search for additional connectors...')
+        const productSearchConnectors = await supabase
           .from('product_search')
           .select('*')
-          .or(`short_description.ilike.%${searchTerm.split(' ')[0]}%,part_number.ilike.%${searchTerm.split(' ')[0]}%`)
+          .ilike('short_description', '%connector%')
           .limit(10)
 
-        if (fallbackResult.data && fallbackResult.data.length > 0) {
-          allProducts = fallbackResult.data.map(item => ({
-            id: `fallback-${item.id}`,
+        if (productSearchConnectors.data && productSearchConnectors.data.length > 0) {
+          const additionalConnectors = productSearchConnectors.data.map(item => ({
+            id: `search-conn-${item.id}`,
+            partNumber: item.part_number?.toString() || 'No Part Number',
+            brand: item.brand || 'Unknown Brand',
+            description: item.short_description || 'No description available',
+            price: Math.random() * 50 + 10,
+            stockLocal: 15,
+            stockDistribution: 100,
+            leadTime: 'Ships Today',
+            category: 'Connector',
+            searchRelevance: 0.9,
+            tableName: `product_search (${item.product_table})`
+          }))
+
+          allProducts = [...allProducts, ...additionalConnectors]
+          console.log(`🔍 Added ${additionalConnectors.length} connectors from product_search`)
+        }
+      }
+
+      // Fallback search if no results
+      if (allProducts.length === 0) {
+        console.log('🚀 Expanding search to product_search table...')
+        const productSearchResult = await supabase
+          .from('product_search')
+          .select('*')
+          .or(`part_number.ilike.%${searchTerm}%,short_description.ilike.%${searchTerm}%,search_text.ilike.%${searchTerm}%`)
+          .limit(15)
+
+        if (productSearchResult.data && productSearchResult.data.length > 0) {
+          allProducts = productSearchResult.data.map(item => ({
+            id: `search-${item.id}`,
             partNumber: item.part_number?.toString() || 'No Part Number',
             brand: item.brand || 'Unknown Brand',
             description: item.short_description || 'No description available',
@@ -509,11 +675,11 @@ export default function PlecticAI() {
             stockDistribution: 100,
             leadTime: 'Ships Today',
             category: item.category || 'Product',
-            searchRelevance: 0.7,
-            tableName: 'product_search (fallback)'
+            searchRelevance: 0.9,
+            tableName: `product_search (${item.product_table || 'unknown'})`
           }))
-          console.log(`🔄 Fallback found ${allProducts.length} results`)
-          searchStrategy = 'fallback'
+          console.log(`🎯 Found ${allProducts.length} results in product_search`)
+          searchStrategy = 'product_search'
         }
       }
 
@@ -521,6 +687,15 @@ export default function PlecticAI() {
       const uniqueProducts = allProducts.filter((product, index, self) =>
         index === self.findIndex(p => p.partNumber === product.partNumber)
       )
+
+      // Set up smart filters
+      if (uniqueProducts.length > 0) {
+        const filters = generateSmartFilters(uniqueProducts, enhancement.detectedTerms.productType || 'MIXED')
+        setSmartFilters(filters)
+        setCurrentProducts(uniqueProducts)
+        setFilteredProducts(uniqueProducts)
+        setActiveFilters({}) // Reset filters for new search
+      }
 
       const endTime = performance.now()
       const searchTime = Math.round(endTime - startTime)
@@ -600,7 +775,8 @@ Let me help you find what you need:
         timestamp: new Date(),
         searchType,
         searchTime,
-        aiAnalysis
+        aiAnalysis,
+        smartFilters: products.length > 0 ? smartFilters : undefined
       }
 
       setMessages(prev => [...prev, assistantMessage])
@@ -657,7 +833,8 @@ Let me help you find what you need:
         timestamp: new Date(),
         searchType,
         searchTime,
-        aiAnalysis
+        aiAnalysis,
+        smartFilters: products.length > 0 ? smartFilters : undefined
       }
 
       setMessages(prev => [...prev, assistantMessage])
@@ -717,6 +894,9 @@ Let me help you find what you need:
   const totalItems = productList.reduce((sum, item) => sum + item.quantity, 0)
   const hasListItems = productList.length > 0
 
+  // Get products to display (filtered or current)
+  const productsToDisplay = Object.keys(activeFilters).length > 0 ? filteredProducts : currentProducts
+
   return (
     <div className="h-screen bg-gray-50 flex flex-col font-inter">
       {/* Enhanced Header with Debug Button */}
@@ -739,7 +919,7 @@ Let me help you find what you need:
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* ✅ DEBUG BUTTON - Click this to see your database structure */}
+            {/* Debug Button */}
             <button
               onClick={debugDatabase}
               className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-sm font-medium transition-colors"
@@ -781,34 +961,37 @@ Let me help you find what you need:
                     I use advanced AI to understand your needs and search only your database for the perfect products
                   </p>
 
-                  {/* Enhanced Search Examples */}
+                  {/* Recent Searches */}
+                  {recentSearches.length > 0 && (
+                    <div className="max-w-2xl mx-auto mb-6">
+                      <h3 className="text-sm font-medium text-gray-500 mb-3">Your recent searches:</h3>
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {recentSearches.slice(0, 4).map((search, index) => (
+                          <button
+                            key={index}
+                            onClick={() => performSearch(search)}
+                            className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm transition-colors"
+                          >
+                            🔄 {search}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Popular Searches */}
                   <div className="max-w-2xl mx-auto mb-8">
-                    <h3 className="text-sm font-medium text-gray-500 mb-3">Try these AI-powered searches:</h3>
+                    <h3 className="text-sm font-medium text-gray-500 mb-3">Try these popular searches:</h3>
                     <div className="grid grid-cols-2 gap-2 text-sm">
-                      <button
-                        onClick={() => performSearch('Cat 5 plenum blue')}
-                        className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-2 rounded-lg text-left transition-colors"
-                      >
-                        🤖 Cat 5 plenum blue
-                      </button>
-                      <button
-                        onClick={() => performSearch('24 LC connectors OM4')}
-                        className="bg-green-50 hover:bg-green-100 text-green-700 px-3 py-2 rounded-lg text-left transition-colors"
-                      >
-                        🔌 24 LC connectors OM4
-                      </button>
-                      <button
-                        onClick={() => performSearch('fiber optic cable')}
-                        className="bg-purple-50 hover:bg-purple-100 text-purple-700 px-3 py-2 rounded-lg text-left transition-colors"
-                      >
-                        🌈 fiber optic cable
-                      </button>
-                      <button
-                        onClick={() => performSearch('network cable')}
-                        className="bg-orange-50 hover:bg-orange-100 text-orange-700 px-3 py-2 rounded-lg text-left transition-colors"
-                      >
-                        🌐 network cable
-                      </button>
+                      {popularSearches.map((search, index) => (
+                        <button
+                          key={index}
+                          onClick={() => performSearch(search)}
+                          className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-2 rounded-lg text-left transition-colors"
+                        >
+                          🤖 {search}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
@@ -885,6 +1068,7 @@ Let me help you find what you need:
                                   <span key={key} className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs">
                                     {key === 'requestedQuantity' ? `quantity: ${value?.toLocaleString()}ft` :
                                      key === 'productType' ? `type: ${value}` :
+                                     key === 'color' ? `color: ${value}` :
                                      `${key}: ${value}`}
                                   </span>
                                 )
@@ -893,6 +1077,118 @@ Let me help you find what you need:
                           </div>
                         )}
 
+                        {/* Smart Filter Buttons */}
+                        {smartFilters && message.products && (
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-3">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <Filter size={16} className="text-blue-600" />
+                                <span className="text-sm font-medium text-blue-700">Smart Filters</span>
+                                <span className="text-xs text-blue-600">
+                                  ({productsToDisplay.length} of {message.products.length} products)
+                                </span>
+                              </div>
+                              {Object.keys(activeFilters).length > 0 && (
+                                <button
+                                  onClick={clearAllFilters}
+                                  className="text-xs text-red-600 hover:text-red-700 font-medium"
+                                >
+                                  Clear All
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Brand Filters */}
+                            {smartFilters.brands.length > 0 && (
+                              <div className="mb-3">
+                                <span className="text-xs font-medium text-gray-600 block mb-1">Brands:</span>
+                                <div className="flex flex-wrap gap-1">
+                                  {smartFilters.brands.map(brand => (
+                                    <button
+                                      key={brand}
+                                      onClick={() => applySmartFilter('brand', brand)}
+                                      className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                                        activeFilters.brand === brand
+                                          ? 'bg-blue-600 text-white'
+                                          : 'bg-white border border-blue-300 text-blue-700 hover:bg-blue-100'
+                                      }`}
+                                    >
+                                      {brand}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Packaging Type Filters */}
+                            {smartFilters.packagingTypes.length > 0 && (
+                              <div className="mb-3">
+                                <span className="text-xs font-medium text-gray-600 block mb-1">Packaging:</span>
+                                <div className="flex flex-wrap gap-1">
+                                  {smartFilters.packagingTypes.map(type => (
+                                    <button
+                                      key={type}
+                                      onClick={() => applySmartFilter('packagingType', type)}
+                                      className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                                        activeFilters.packagingType === type
+                                          ? 'bg-green-600 text-white'
+                                          : 'bg-white border border-green-300 text-green-700 hover:bg-green-100'
+                                      }`}
+                                    >
+                                      {type}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Color Filters */}
+                            {smartFilters.colors.length > 0 && (
+                              <div className="mb-3">
+                                <span className="text-xs font-medium text-gray-600 block mb-1">Colors:</span>
+                                <div className="flex flex-wrap gap-1">
+                                  {smartFilters.colors.map(color => (
+                                    <button
+                                      key={color}
+                                      onClick={() => applySmartFilter('color', color)}
+                                      className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                                        activeFilters.color === color
+                                          ? 'bg-purple-600 text-white'
+                                          : 'bg-white border border-purple-300 text-purple-700 hover:bg-purple-100'
+                                      }`}
+                                    >
+                                      {color}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Jacket Rating Filters */}
+                            {smartFilters.jacketRatings.length > 0 && (
+                              <div className="mb-3">
+                                <span className="text-xs font-medium text-gray-600 block mb-1">Jacket Rating:</span>
+                                <div className="flex flex-wrap gap-1">
+                                  {smartFilters.jacketRatings.map(rating => (
+                                    <button
+                                      key={rating}
+                                      onClick={() => applySmartFilter('jacketRating', rating)}
+                                      className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                                        activeFilters.jacketRating === rating
+                                          ? 'bg-orange-600 text-white'
+                                          : 'bg-white border border-orange-300 text-orange-700 hover:bg-orange-100'
+                                      }`}
+                                    >
+                                      {rating}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Product Table */}
                         {message.products && (
                           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                             <div className="bg-gray-50 border-b border-gray-200 px-4 py-2">
@@ -915,7 +1211,7 @@ Let me help you find what you need:
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {message.products.map((product, index) => (
+                                  {productsToDisplay.map((product, index) => (
                                     <tr
                                       key={product.id}
                                       className={`border-b border-gray-100 hover:bg-blue-50 transition-colors ${
@@ -944,6 +1240,11 @@ Let me help you find what you need:
                                         {product.categoryRating && (
                                           <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs">
                                             {product.categoryRating}
+                                          </span>
+                                        )}
+                                        {product.packagingType && (
+                                          <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs ml-1">
+                                            {product.packagingType}
                                           </span>
                                         )}
                                       </td>
@@ -1020,6 +1321,10 @@ Let me help you find what you need:
                   onClick={() => {
                     setMessages([])
                     setAiAnalysis(null)
+                    setSmartFilters(null)
+                    setActiveFilters({})
+                    setCurrentProducts([])
+                    setFilteredProducts([])
                   }}
                   className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-bold transition-colors text-base border-2 border-red-700"
                 >
@@ -1030,7 +1335,7 @@ Let me help you find what you need:
           )}
         </div>
 
-        {/* Product List (same as before) */}
+        {/* Product List */}
         {hasListItems && (
           <div className="w-2/5 border-l border-gray-200 bg-white flex flex-col">
             <div className="bg-gray-50 border-b border-gray-200 p-4">
