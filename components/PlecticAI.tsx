@@ -569,7 +569,7 @@ export default function PlecticAI() {
           }
 
           // Log brand diversity
-          const brands = [...new Set(categoryProducts.map(p => p.brand))]
+          const brands = Array.from(new Set(categoryProducts.map(p => p.brand)))
           console.log(`🏷️ Found brands: ${brands.join(', ')}`)
 
           allProducts = [...allProducts, ...categoryProducts]
