@@ -24,6 +24,7 @@ interface Product {
   shielding?: string
   searchRelevance?: number
   tableName?: string
+  packagingType?: string
 }
 
 interface ListItem extends Product {
@@ -78,6 +79,119 @@ export default function PlecticAI() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
+  // ✅ DEBUG FUNCTION - This will help us see your database structure
+  const debugDatabase = async () => {
+    console.log('🔍 DEBUGGING DATABASE STRUCTURE...')
+
+    try {
+      // Check products table
+      console.log('📋 Checking PRODUCTS table...')
+      const productsResult = await supabase
+        .from('products')
+        .select('*')
+        .limit(3)
+
+      console.log('Products table sample:', productsResult.data)
+      console.log('Products error:', productsResult.error)
+
+      if (productsResult.data?.[0]) {
+        console.log('Products columns:', Object.keys(productsResult.data[0]))
+      }
+
+      // Check category_cables table (we know this works)
+      console.log('📋 Checking CATEGORY_CABLES table...')
+      const categoryResult = await supabase
+        .from('category_cables')
+        .select('*')
+        .limit(3)
+
+      console.log('Category cables sample:', categoryResult.data)
+      if (categoryResult.data?.[0]) {
+        console.log('Category cables columns:', Object.keys(categoryResult.data[0]))
+      }
+
+      // Check product_search table
+      console.log('📋 Checking PRODUCT_SEARCH table...')
+      const searchResult = await supabase
+        .from('product_search')
+        .select('*')
+        .limit(3)
+
+      console.log('Product search sample:', searchResult.data)
+      if (searchResult.data?.[0]) {
+        console.log('Product search columns:', Object.keys(searchResult.data[0]))
+      }
+
+      // Search for connectors in products table
+      console.log('🔌 Searching for CONNECTORS in products table...')
+      const connectorResult = await supabase
+        .from('products')
+        .select('*')
+        .ilike('short_description', '%connector%')
+        .limit(5)
+
+      console.log('Connectors found in products table:', connectorResult.data?.length || 0)
+      if (connectorResult.data?.[0]) {
+        console.log('Connector sample:', connectorResult.data[0])
+      }
+
+      // Search for connectors in product_search table
+      console.log('🔌 Searching for CONNECTORS in product_search table...')
+      const connectorSearchResult = await supabase
+        .from('product_search')
+        .select('*')
+        .ilike('short_description', '%connector%')
+        .limit(5)
+
+      console.log('Connectors found in product_search table:', connectorSearchResult.data?.length || 0)
+      if (connectorSearchResult.data?.[0]) {
+        console.log('Product_search connector sample:', connectorSearchResult.data[0])
+      }
+
+      // Search for OM4
+      console.log('🌈 Searching for OM4 in products table...')
+      const om4Result = await supabase
+        .from('products')
+        .select('*')
+        .or('short_description.ilike.%OM4%,part_number.ilike.%OM4%')
+        .limit(5)
+
+      console.log('OM4 found in products table:', om4Result.data?.length || 0)
+      if (om4Result.data?.[0]) {
+        console.log('OM4 sample:', om4Result.data[0])
+      }
+
+      // Search for OM4 in product_search
+      console.log('🌈 Searching for OM4 in product_search table...')
+      const om4SearchResult = await supabase
+        .from('product_search')
+        .select('*')
+        .or('short_description.ilike.%OM4%,part_number.ilike.%OM4%')
+        .limit(5)
+
+      console.log('OM4 found in product_search table:', om4SearchResult.data?.length || 0)
+      if (om4SearchResult.data?.[0]) {
+        console.log('Product_search OM4 sample:', om4SearchResult.data[0])
+      }
+
+      // Search for LC connectors specifically
+      console.log('🔌 Searching for LC connectors...')
+      const lcResult = await supabase
+        .from('product_search')
+        .select('*')
+        .or('short_description.ilike.%LC%,part_number.ilike.%LC%')
+        .limit(5)
+
+      console.log('LC found in product_search table:', lcResult.data?.length || 0)
+      if (lcResult.data?.[0]) {
+        console.log('LC connector sample:', lcResult.data[0])
+      }
+
+    } catch (error) {
+      console.error('❌ Database debug error:', error)
+    }
+  }
+
   // Smooth scroll to bottom
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -95,7 +209,7 @@ export default function PlecticAI() {
     }
   }, [input])
 
-  // ✅ NEW: AI-Enhanced Query Processing
+  // AI-Enhanced Query Processing
   const enhanceQueryWithAI = async (query: string): Promise<AISearchAnalysis | null> => {
     try {
       console.log('🤖 Sending query to AI for analysis:', query)
@@ -109,7 +223,7 @@ export default function PlecticAI() {
           query,
           userContext: {
             businessType: 'electrical_distributor',
-            searchHistory: messages.slice(-3) // Send recent context
+            searchHistory: messages.slice(-3)
           }
         }),
       })
@@ -129,32 +243,263 @@ export default function PlecticAI() {
     }
   }
 
-  // ✅ ENHANCED: AI-Powered Product Search
+  // AI-Enhanced Query Processing (Local - for now)
+  const enhanceQuery = async (query: string) => {
+    try {
+      const enhancement = {
+        originalQuery: query,
+        enhancedQuery: query,
+        suggestedFilters: [],
+        detectedTerms: {} as any,
+        confidence: 0.8
+      }
+
+      console.log('🔍 Analyzing query:', query)
+
+      // Detect fiber types
+      const fiberTypes = ['OM4', 'OM3', 'OM2', 'OM1', 'OS2', 'OS1']
+      const foundFiberType = fiberTypes.find(type => {
+        const regex = new RegExp(`\\b${type}\\b`, 'i')
+        return regex.test(query)
+      })
+      if (foundFiberType) {
+        enhancement.detectedTerms.fiberType = foundFiberType
+        console.log('🌈 Detected fiber type:', foundFiberType)
+      }
+
+      // Detect category ratings
+      const categoryRatings = ['CAT5E', 'CAT6A', 'CAT6', 'CAT5', 'CAT7', 'CAT8']
+      const queryNormalized = query.toUpperCase().replace(/\s+/g, ' ').replace(/CATEGORY\s+/g, 'CAT')
+
+      const foundCategoryRating = categoryRatings.find(rating => {
+        if (rating === 'CAT5' && (queryNormalized.includes('CAT 5') || queryNormalized.includes('CAT5')) && !queryNormalized.includes('CAT5E')) return true
+        if (rating === 'CAT5E' && (queryNormalized.includes('CAT 5E') || queryNormalized.includes('CAT5E'))) return true
+        if (rating === 'CAT6' && (queryNormalized.includes('CAT 6') || queryNormalized.includes('CAT6')) && !queryNormalized.includes('CAT6A')) return true
+        if (rating === 'CAT6A' && (queryNormalized.includes('CAT 6A') || queryNormalized.includes('CAT6A'))) return true
+        return queryNormalized.includes(rating)
+      })
+
+      if (foundCategoryRating) {
+        enhancement.detectedTerms.categoryRating = foundCategoryRating.replace('CATEGORY ', 'CAT')
+      }
+
+      // Detect jacket ratings
+      const jacketRatings = ['CMP', 'CMR', 'CMG', 'LSZH', 'OFNP', 'OFNR', 'OFNG', 'PLENUM', 'RISER']
+      const foundJacketRating = jacketRatings.find(rating =>
+        query.toUpperCase().includes(rating)
+      )
+      if (foundJacketRating) {
+        enhancement.detectedTerms.jacketRating = foundJacketRating === 'PLENUM' ? 'CMP' : foundJacketRating
+      }
+
+      // Detect fiber count
+      const fiberCountPatterns = [
+        /(\d+)\s*(?:fiber|count|strand)/i,
+        /(\d+)\s+(?:LC|SC|ST|FC|MTP|MPO)/i,
+        /(\d+)\s+(?:connector|connectors)/i,
+        /(\d+)\s*(?:F|f)\b/i,
+        /(\d+)[-\s]*(?:way|port)/i
+      ]
+
+      let detectedCount = null
+      for (const pattern of fiberCountPatterns) {
+        const match = query.match(pattern)
+        if (match) {
+          detectedCount = parseInt(match[1])
+          console.log(`📊 Detected fiber count: ${detectedCount}`)
+          break
+        }
+      }
+
+      if (detectedCount) {
+        enhancement.detectedTerms.fiberCount = detectedCount
+      }
+
+      // Detect connector types
+      const connectorTypes = ['LC', 'SC', 'ST', 'FC', 'MTP', 'MPO', 'RJ45', 'RJ-45']
+      const foundConnectorType = connectorTypes.find(type =>
+        query.toUpperCase().includes(type)
+      )
+      if (foundConnectorType) {
+        enhancement.detectedTerms.connectorType = foundConnectorType
+      }
+
+      // Detect product types
+      const queryLower = query.toLowerCase()
+
+      if (queryLower.includes('connector') || queryLower.includes('connectors')) {
+        enhancement.detectedTerms.productType = 'CONNECTOR'
+        console.log('🔌 Detected product type: CONNECTOR')
+      }
+      else if (queryLower.includes('panel') || queryLower.includes('panels')) {
+        enhancement.detectedTerms.productType = 'PANEL'
+        console.log('🏠 Detected product type: PANEL')
+      }
+      else if (queryLower.includes('cable') || queryLower.includes('cables')) {
+        enhancement.detectedTerms.productType = 'CABLE'
+        console.log('🌈 Detected product type: CABLE')
+      }
+
+      return enhancement
+
+    } catch (error) {
+      console.error('Query enhancement error:', error)
+      return {
+        originalQuery: query,
+        enhancedQuery: query,
+        suggestedFilters: [],
+        detectedTerms: {},
+        confidence: 0.5
+      }
+    }
+  }
+
+  // ENHANCED SEARCH with better debugging
   const searchProducts = async (searchTerm: string): Promise<{ products: Product[], searchTime: number, searchType: string, aiAnalysis?: AISearchAnalysis }> => {
     const startTime = performance.now()
 
     try {
-      console.log('🎯 STARTING AI-ENHANCED SEARCH for:', searchTerm)
+      console.log('🎯 ENHANCED SEARCH for:', searchTerm)
 
-      // Step 1: Get AI analysis
-      const analysis = await enhanceQueryWithAI(searchTerm)
-      setAiAnalysis(analysis)
+      const enhancement = await enhanceQuery(searchTerm)
+      setAiAnalysis(enhancement as any)
 
       let allProducts: Product[] = []
-      let searchStrategy = analysis?.searchStrategy || 'standard'
+      let searchStrategy = 'standard'
 
-      if (!analysis) {
-        console.log('🔄 Falling back to basic search...')
-        // Fallback to basic search if AI fails
+      // Try the AI-powered search first
+      const aiAnalysis = await enhanceQueryWithAI(searchTerm)
+
+      if (aiAnalysis) {
+        console.log('🤖 Using AI analysis:', aiAnalysis)
+        // Use AI analysis to guide search
+      }
+
+      // Try product_search table first (this seems to have more data)
+      console.log('🚀 Searching product_search table...')
+      const productSearchResult = await supabase
+        .from('product_search')
+        .select('*')
+        .or(`part_number.ilike.%${searchTerm}%,short_description.ilike.%${searchTerm}%,search_text.ilike.%${searchTerm}%`)
+        .limit(15)
+
+      if (productSearchResult.data && productSearchResult.data.length > 0) {
+        allProducts = productSearchResult.data.map(item => ({
+          id: `search-${item.id}`,
+          partNumber: item.part_number?.toString() || 'No Part Number',
+          brand: item.brand || 'Unknown Brand',
+          description: item.short_description || 'No description available',
+          price: Math.random() * 75 + 25,
+          stockLocal: 10,
+          stockDistribution: 100,
+          leadTime: 'Ships Today',
+          category: item.category || 'Product',
+          searchRelevance: 0.9,
+          tableName: `product_search (${item.product_table || 'unknown'})`
+        }))
+        console.log(`🎯 Found ${allProducts.length} results in product_search`)
+        searchStrategy = 'product_search'
+      }
+
+      // If specific connector search, try targeted searches
+      if (enhancement.detectedTerms.productType === 'CONNECTOR' && allProducts.length < 5) {
+        console.log('🔌 CONNECTOR SEARCH detected')
+
+        // Try searching for connector-related terms
+        const connectorTerms = ['connector', 'LC', 'SC', 'ST', 'FC', 'MTP', 'MPO']
+        const searchTerm1 = connectorTerms.find(term => searchTerm.toUpperCase().includes(term.toUpperCase()))
+
+        if (searchTerm1) {
+          console.log(`🔍 Searching for connector term: ${searchTerm1}`)
+          const connectorResult = await supabase
+            .from('product_search')
+            .select('*')
+            .or(`short_description.ilike.%${searchTerm1}%,part_number.ilike.%${searchTerm1}%`)
+            .limit(10)
+
+          if (connectorResult.data && connectorResult.data.length > 0) {
+            const connectorProducts = connectorResult.data.map(item => ({
+              id: `conn-${item.id}`,
+              partNumber: item.part_number?.toString() || 'No Part Number',
+              brand: item.brand || 'Unknown Brand',
+              description: item.short_description || 'No description available',
+              price: Math.random() * 50 + 10,
+              stockLocal: 15,
+              stockDistribution: 100,
+              leadTime: 'Ships Today',
+              category: 'Connector',
+              searchRelevance: 1.0,
+              tableName: `product_search (connector search)`
+            }))
+
+            allProducts = [...allProducts, ...connectorProducts]
+            console.log(`🔌 Added ${connectorProducts.length} connector results`)
+            searchStrategy = 'connector_search'
+          }
+        }
+      }
+
+      // Category cable search (we know this works)
+      if (enhancement.detectedTerms.categoryRating && allProducts.length < 10) {
+        console.log('🌐 CATEGORY CABLE SEARCH detected')
+
+        const categoryQuery = supabase
+          .from('category_cables')
+          .select('*')
+          .eq('is_active', true)
+          .limit(10)
+
+        const searchConditions = []
+        const catRating = enhancement.detectedTerms.categoryRating
+        searchConditions.push(`category_rating.ilike.%${catRating}%`)
+        searchConditions.push(`part_number.ilike.%${catRating}%`)
+        searchConditions.push(`short_description.ilike.%${catRating}%`)
+
+        if (enhancement.detectedTerms.jacketRating) {
+          const jacketSearch = enhancement.detectedTerms.jacketRating === 'CMP' ? 'plenum' : enhancement.detectedTerms.jacketRating
+          searchConditions.push(`jacket_material.ilike.%${jacketSearch}%`)
+          searchConditions.push(`short_description.ilike.%${jacketSearch}%`)
+        }
+
+        const categoryResult = await categoryQuery.or(searchConditions.join(','))
+
+        if (categoryResult.data && categoryResult.data.length > 0) {
+          const categoryProducts = categoryResult.data.map(item => ({
+            id: item.id?.toString() || Date.now().toString(),
+            partNumber: item.part_number || 'No Part Number',
+            brand: item.brand || 'Unknown Brand',
+            description: item.short_description || 'No description available',
+            price: Math.random() * 150 + 50,
+            stockLocal: 25,
+            stockDistribution: 100,
+            leadTime: 'Ships Today',
+            category: 'Category Cable',
+            categoryRating: item.category_rating,
+            jacketRating: item.jacket_material?.includes('plenum') ? 'CMP' :
+                         item.jacket_material?.includes('riser') ? 'CMR' : undefined,
+            searchRelevance: 1.0,
+            tableName: 'category_cables',
+            packagingType: item.packaging_type
+          }))
+
+          allProducts = [...allProducts, ...categoryProducts]
+          console.log(`🌐 Added ${categoryProducts.length} category cable results`)
+        }
+      }
+
+      // Fallback search if still no results
+      if (allProducts.length === 0) {
+        console.log('🚀 Expanding search to additional tables...')
+
         const fallbackResult = await supabase
           .from('product_search')
           .select('*')
-          .or(`part_number.ilike.%${searchTerm}%,short_description.ilike.%${searchTerm}%`)
+          .or(`short_description.ilike.%${searchTerm.split(' ')[0]}%,part_number.ilike.%${searchTerm.split(' ')[0]}%`)
           .limit(10)
 
-        if (fallbackResult.data) {
+        if (fallbackResult.data && fallbackResult.data.length > 0) {
           allProducts = fallbackResult.data.map(item => ({
-            id: `search-${item.id}`,
+            id: `fallback-${item.id}`,
             partNumber: item.part_number?.toString() || 'No Part Number',
             brand: item.brand || 'Unknown Brand',
             description: item.short_description || 'No description available',
@@ -166,180 +511,12 @@ export default function PlecticAI() {
             searchRelevance: 0.7,
             tableName: 'product_search (fallback)'
           }))
-        }
-      } else {
-        console.log('🤖 Using AI-guided search strategy:', analysis.searchStrategy)
-        console.log('🎯 AI detected specs:', analysis.detectedSpecs)
-
-        // Step 2: Use AI analysis to search database strategically
-
-        // CONNECTOR SEARCH (AI-guided)
-        if (analysis.productType === 'CONNECTOR' || analysis.searchStrategy === 'connectors') {
-          console.log('🔌 AI-GUIDED CONNECTOR SEARCH')
-
-          let connectorQuery = supabase
-            .from('products')
-            .select('*')
-            .eq('is_active', true)
-            .ilike('short_description', '%connector%')
-            .limit(20)
-
-          // Apply AI-detected specifications
-          if (analysis.detectedSpecs.fiberType) {
-            connectorQuery = connectorQuery.eq('fiber_type_standard', analysis.detectedSpecs.fiberType)
-            console.log(`🌈 AI filter: fiber type = ${analysis.detectedSpecs.fiberType}`)
-          }
-          if (analysis.detectedSpecs.connectorType) {
-            connectorQuery = connectorQuery.eq('connector_type_standard', analysis.detectedSpecs.connectorType)
-            console.log(`🔌 AI filter: connector type = ${analysis.detectedSpecs.connectorType}`)
-          }
-          if (analysis.detectedSpecs.fiberCount) {
-            connectorQuery = connectorQuery.or(`fiber_count.eq.${analysis.detectedSpecs.fiberCount},short_description.ilike.%${analysis.detectedSpecs.fiberCount}%`)
-            console.log(`📊 AI filter: fiber count = ${analysis.detectedSpecs.fiberCount}`)
-          }
-
-          const connectorResult = await connectorQuery
-
-          if (connectorResult.data && connectorResult.data.length > 0) {
-            allProducts = connectorResult.data.map(item => ({
-              id: item.id?.toString() || Date.now().toString(),
-              partNumber: item.part_number || 'No Part Number',
-              brand: 'Brand Name',
-              description: item.short_description || 'No description available',
-              price: parseFloat(item.unit_price) || (Math.random() * 50 + 10),
-              stockLocal: item.stock_quantity || 0,
-              stockDistribution: 100,
-              leadTime: 'Ships Today',
-              category: 'Fiber Connector',
-              fiberType: item.fiber_type_standard,
-              connectorType: item.connector_type_standard,
-              fiberCount: item.fiber_count,
-              searchRelevance: 1.0,
-              tableName: 'products (AI-guided connectors)'
-            }))
-            console.log(`🔌 AI found ${allProducts.length} connector results`)
-          }
-        }
-
-        // CATEGORY CABLE SEARCH (AI-guided)
-        if ((analysis.productType === 'CABLE' && analysis.detectedSpecs.categoryRating) ||
-            analysis.searchStrategy === 'cables' ||
-            allProducts.length < 3) {
-          console.log('🌐 AI-GUIDED CATEGORY CABLE SEARCH')
-
-          let categoryQuery = supabase
-            .from('category_cables')
-            .select('*')
-            .eq('is_active', true)
-            .limit(20)
-
-          const searchConditions = []
-
-          // Use AI-detected category rating
-          if (analysis.detectedSpecs.categoryRating) {
-            const catRating = analysis.detectedSpecs.categoryRating
-            searchConditions.push(`category_rating.ilike.%${catRating}%`)
-            searchConditions.push(`part_number.ilike.%${catRating}%`)
-            searchConditions.push(`short_description.ilike.%${catRating}%`)
-            console.log(`🏷️ AI filter: category rating = ${catRating}`)
-          }
-
-          // Use AI-detected jacket rating
-          if (analysis.detectedSpecs.jacketRating) {
-            const jacketSearch = analysis.detectedSpecs.jacketRating === 'CMP' ? 'plenum' : analysis.detectedSpecs.jacketRating
-            searchConditions.push(`jacket_material.ilike.%${jacketSearch}%`)
-            searchConditions.push(`approvals_listings.ilike.%${jacketSearch}%`)
-            searchConditions.push(`short_description.ilike.%${jacketSearch}%`)
-            console.log(`🧥 AI filter: jacket rating = ${jacketSearch}`)
-          }
-
-          // Use AI-detected shielding
-          if (analysis.detectedSpecs.shielding) {
-            searchConditions.push(`shielding_type.ilike.%${analysis.detectedSpecs.shielding}%`)
-            console.log(`🛡️ AI filter: shielding = ${analysis.detectedSpecs.shielding}`)
-          }
-
-          // Use AI search terms if no specific conditions
-          if (searchConditions.length === 0 && analysis.searchTerms.length > 0) {
-            analysis.searchTerms.forEach(term => {
-              searchConditions.push(`short_description.ilike.%${term}%`)
-              searchConditions.push(`part_number.ilike.%${term}%`)
-            })
-          }
-
-          if (searchConditions.length > 0) {
-            categoryQuery = categoryQuery.or(searchConditions.join(','))
-          }
-
-          const categoryResult = await categoryQuery
-
-          if (categoryResult.data && categoryResult.data.length > 0) {
-            const categoryProducts = categoryResult.data.map(item => ({
-              id: item.id?.toString() || Date.now().toString(),
-              partNumber: item.part_number || 'No Part Number',
-              brand: item.brand || 'Unknown Brand',
-              description: item.short_description || 'No description available',
-              price: Math.random() * 150 + 50,
-              stockLocal: 25,
-              stockDistribution: 100,
-              leadTime: 'Ships Today',
-              category: 'Category Cable',
-              categoryRating: item.category_rating,
-              jacketRating: item.jacket_material?.includes('plenum') ? 'CMP' :
-                           item.jacket_material?.includes('riser') ? 'CMR' : undefined,
-              shielding: item.shielding_type,
-              searchRelevance: 1.0,
-              tableName: 'category_cables (AI-guided)'
-            }))
-
-            allProducts = [...allProducts, ...categoryProducts]
-            console.log(`🌐 AI found ${categoryProducts.length} category cable results`)
-          }
-        }
-
-        // AI-GUIDED FALLBACK SEARCH
-        if (allProducts.length < 3) {
-          console.log('🚀 AI expanding search with alternative terms...')
-
-          // Try AI's alternative search terms
-          const searchTermsToTry = [
-            ...analysis.searchTerms,
-            ...analysis.alternativeQueries,
-            searchTerm
-          ]
-
-          for (const term of searchTermsToTry.slice(0, 3)) {
-            if (allProducts.length >= 10) break
-
-            const fallbackResult = await supabase
-              .from('product_search')
-              .select('*')
-              .or(`part_number.ilike.%${term}%,short_description.ilike.%${term}%,search_text.ilike.%${term}%`)
-              .limit(5)
-
-            if (fallbackResult.data && fallbackResult.data.length > 0) {
-              const searchData = fallbackResult.data.map(item => ({
-                id: `search-${item.id}-${term}`,
-                partNumber: item.part_number?.toString() || 'No Part Number',
-                brand: item.brand || 'Unknown Brand',
-                description: item.short_description || 'No description available',
-                price: Math.random() * 75 + 25,
-                stockLocal: 10,
-                stockDistribution: 100,
-                leadTime: 'Ships Today',
-                category: item.category || 'Product',
-                searchRelevance: 0.8,
-                tableName: `product_search (AI term: ${term})`
-              }))
-
-              allProducts = [...allProducts, ...searchData]
-              console.log(`🔍 AI term "${term}" found ${searchData.length} results`)
-            }
-          }
+          console.log(`🔄 Fallback found ${allProducts.length} results`)
+          searchStrategy = 'fallback'
         }
       }
 
-      // Remove duplicates and limit results
+      // Remove duplicates
       const uniqueProducts = allProducts.filter((product, index, self) =>
         index === self.findIndex(p => p.partNumber === product.partNumber)
       )
@@ -347,17 +524,17 @@ export default function PlecticAI() {
       const endTime = performance.now()
       const searchTime = Math.round(endTime - startTime)
 
-      console.log(`✅ AI-Enhanced search completed: ${uniqueProducts.length} products in ${searchTime}ms`)
+      console.log(`✅ Search completed: ${uniqueProducts.length} products in ${searchTime}ms using ${searchStrategy}`)
 
       return {
         products: uniqueProducts.slice(0, 20),
         searchTime,
-        searchType: `ai-${searchStrategy}`,
-        aiAnalysis: analysis || undefined
+        searchType: searchStrategy,
+        aiAnalysis: aiAnalysis || undefined
       }
 
     } catch (error) {
-      console.error('❌ AI-Enhanced search error:', error)
+      console.error('❌ Enhanced search error:', error)
       const endTime = performance.now()
       return {
         products: [],
@@ -395,17 +572,23 @@ export default function PlecticAI() {
           assistantContent += `\n\n🧠 **AI Reasoning:** ${aiAnalysis.reasoning}`
         }
       } else {
-        assistantContent = `🤖 AI analyzed "${originalInput}" but found no matching products in your database.`
+        assistantContent = `🔍 **No exact matches found for "${originalInput}"**
 
-        if (aiAnalysis && aiAnalysis.alternativeQueries.length > 0) {
-          assistantContent += `\n\n💡 **AI Suggestions to try:**\n${aiAnalysis.alternativeQueries.map(q => `• "${q}"`).join('\n')}`
-        }
+Let me help you find what you need:
 
-        assistantContent += `\n\n**AI-Powered Search Tips:**
-• Try "24 LC connectors OM4" for fiber connectors
-• Try "Cat5e plenum blue" for category cables  
-• Try "12 fiber OM3 cable" for fiber optic cables
-• The AI understands technical electrical terminology!`
+**For Fiber Connectors, try:**
+• "24 LC connectors OM4" - LC connectors for OM4 fiber
+• "12 SC connectors OM3" - SC connectors for OM3 fiber  
+
+**For Category Cables, try:**
+• "Cat5 plenum" - Category 5 plenum rated
+• "Cat 5 blue plenum" - With spaces and color
+• "Cat6 cable" - Standard Category 6
+
+**Search Tips:**
+• Use "connectors" for individual connectors vs "cable" for cables vs "panel" for panels
+• Include ratings: "plenum", "CMP", "Cat6A", "OM3", "OM4"
+• Add counts: "24 connectors", "12 fiber cable"`
       }
 
       const assistantMessage: Message = {
@@ -494,7 +677,7 @@ export default function PlecticAI() {
 
   // ADD TO LIST
   const addToList = (product: Product, customQuantity?: number) => {
-    const quantityToAdd = customQuantity || aiAnalysis?.detectedSpecs.requestedQuantity || 1
+    const quantityToAdd = customQuantity || aiAnalysis?.detectedSpecs?.requestedQuantity || 1
 
     setProductList(prev => {
       const existing = prev.find(item => item.id === product.id)
@@ -535,7 +718,7 @@ export default function PlecticAI() {
 
   return (
     <div className="h-screen bg-gray-50 flex flex-col font-inter">
-      {/* Enhanced Header with AI Stats */}
+      {/* Enhanced Header with Debug Button */}
       <header className="bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -555,10 +738,18 @@ export default function PlecticAI() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {aiAnalysis && (
+            {/* ✅ DEBUG BUTTON - Click this to see your database structure */}
+            <button
+              onClick={debugDatabase}
+              className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-sm font-medium transition-colors"
+            >
+              🔍 Debug Database
+            </button>
+
+            {aiAnalysis && Object.keys(aiAnalysis.detectedSpecs || {}).length > 0 && (
               <div className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1">
                 <Brain size={14} />
-                AI Active (Confidence: {Math.round((aiAnalysis.confidence || 0) * 100)}%)
+                AI Active
               </div>
             )}
             {hasListItems && (
@@ -594,28 +785,28 @@ export default function PlecticAI() {
                     <h3 className="text-sm font-medium text-gray-500 mb-3">Try these AI-powered searches:</h3>
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <button
-                        onClick={() => performSearch('5000ft Cat 5 plenum blue')}
+                        onClick={() => performSearch('Cat 5 plenum blue')}
                         className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-2 rounded-lg text-left transition-colors"
                       >
-                        🤖 5000ft Cat 5 plenum blue
+                        🤖 Cat 5 plenum blue
                       </button>
                       <button
-                        onClick={() => performSearch('12 fiber OM3 cable')}
+                        onClick={() => performSearch('24 LC connectors OM4')}
                         className="bg-green-50 hover:bg-green-100 text-green-700 px-3 py-2 rounded-lg text-left transition-colors"
                       >
-                        🤖 12 fiber OM3 cable
+                        🔌 24 LC connectors OM4
                       </button>
                       <button
-                        onClick={() => performSearch('24 LC fiber connectors OM4')}
+                        onClick={() => performSearch('fiber optic cable')}
                         className="bg-purple-50 hover:bg-purple-100 text-purple-700 px-3 py-2 rounded-lg text-left transition-colors"
                       >
-                        🔌 24 LC fiber connectors OM4
+                        🌈 fiber optic cable
                       </button>
                       <button
-                        onClick={() => performSearch('500ft Cat6A UTP')}
+                        onClick={() => performSearch('network cable')}
                         className="bg-orange-50 hover:bg-orange-100 text-orange-700 px-3 py-2 rounded-lg text-left transition-colors"
                       >
-                        500ft Cat6A UTP
+                        🌐 network cable
                       </button>
                     </div>
                   </div>
@@ -681,20 +872,17 @@ export default function PlecticAI() {
                         <div className="text-sm text-gray-700 mb-3 whitespace-pre-line">{message.content}</div>
 
                         {/* Show AI Analysis Details */}
-                        {message.aiAnalysis && Object.keys(message.aiAnalysis.detectedSpecs || {}).length > 0 && (
+                        {aiAnalysis && Object.keys(aiAnalysis.detectedTerms || {}).length > 0 && (
                           <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-3">
                             <div className="flex items-center gap-2 mb-2">
-                              <Brain size={16} className="text-purple-600" />
-                              <span className="text-sm font-medium text-purple-700">AI Analysis</span>
-                              <span className="text-xs bg-purple-100 px-2 py-1 rounded">
-                                {message.aiAnalysis.confidence ? Math.round(message.aiAnalysis.confidence * 100) : 0}% confidence
-                              </span>
+                              <Sparkles size={16} className="text-purple-600" />
+                              <span className="text-sm font-medium text-purple-700">Smart Search Detection</span>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                              {Object.entries(message.aiAnalysis.detectedSpecs).map(([key, value]) => (
+                              {Object.entries(aiAnalysis.detectedTerms).map(([key, value]) => (
                                 value && (
                                   <span key={key} className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs">
-                                    {key === 'requestedQuantity' ? `qty: ${value?.toLocaleString()}ft` :
+                                    {key === 'requestedQuantity' ? `quantity: ${value?.toLocaleString()}ft` :
                                      key === 'productType' ? `type: ${value}` :
                                      `${key}: ${value}`}
                                   </span>
