@@ -1,11 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { Search, Plus, Minus, X, Send, Zap, Package, AlertCircle, CheckCircle, Clock, Menu, Settings, HelpCircle, Sparkles, Filter } from 'lucide-react'
+import { Search, Plus, Minus, X, Send, Zap, Package, AlertCircle, CheckCircle, Clock, Menu, Settings, HelpCircle, Sparkles, Filter, Brain } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-
-// ✅ REMOVED OpenAI import and instantiation - you weren't using it anyway!
-// If you need AI features later, we'll add them properly via API routes
 
 // Types
 interface Product {
@@ -42,24 +39,30 @@ interface Message {
   timestamp: Date
   searchType?: string
   searchTime?: number
+  aiAnalysis?: any
 }
 
-interface SearchEnhancement {
-  originalQuery: string
-  enhancedQuery: string
-  suggestedFilters: string[]
-  detectedTerms: {
+interface AISearchAnalysis {
+  searchStrategy: string
+  productType: string
+  confidence: number
+  detectedSpecs: {
     fiberType?: string
+    categoryRating?: string
+    connectorType?: string
     jacketRating?: string
     fiberCount?: number
-    connectorType?: string
-    manufacturer?: string
-    categoryRating?: string
-    shielding?: string
     requestedQuantity?: number
-    productType?: string
+    shielding?: string
+    manufacturer?: string
   }
-  confidence: number
+  searchTerms: string[]
+  reasoning: string
+  suggestedFilters: string[]
+  alternativeQueries: string[]
+  originalQuery: string
+  timestamp: string
+  aiModel: string
 }
 
 // Main Component
@@ -71,7 +74,7 @@ export default function PlecticAI() {
   const [showMobileList, setShowMobileList] = useState(false)
   const [searchFocus, setSearchFocus] = useState(false)
   const [lastSearchTime, setLastSearchTime] = useState<number>(0)
-  const [searchEnhancement, setSearchEnhancement] = useState<SearchEnhancement | null>(null)
+  const [aiAnalysis, setAiAnalysis] = useState<AISearchAnalysis | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -92,288 +95,65 @@ export default function PlecticAI() {
     }
   }, [input])
 
-  // AI-Enhanced Query Processing
-  const enhanceQuery = async (query: string): Promise<SearchEnhancement> => {
+  // ✅ NEW: AI-Enhanced Query Processing
+  const enhanceQueryWithAI = async (query: string): Promise<AISearchAnalysis | null> => {
     try {
-      const enhancement: SearchEnhancement = {
-        originalQuery: query,
-        enhancedQuery: query,
-        suggestedFilters: [],
-        detectedTerms: {},
-        confidence: 0.8
-      }
+      console.log('🤖 Sending query to AI for analysis:', query)
 
-      console.log('🔍 Analyzing query:', query)
-
-      // IMPROVED: Detect fiber types with better matching
-      const fiberTypes = ['OM4', 'OM3', 'OM2', 'OM1', 'OS2', 'OS1']
-      const foundFiberType = fiberTypes.find(type => {
-        const regex = new RegExp(`\\b${type}\\b`, 'i')
-        return regex.test(query)
-      })
-      if (foundFiberType) {
-        enhancement.detectedTerms.fiberType = foundFiberType
-        console.log('🌈 Detected fiber type:', foundFiberType)
-      }
-
-      // ENHANCED Cat5 detection
-      const categoryRatings = ['CAT5E', 'CAT6A', 'CAT6', 'CAT5', 'CAT7', 'CAT8']
-      const queryNormalized = query.toUpperCase().replace(/\s+/g, ' ').replace(/CATEGORY\s+/g, 'CAT')
-
-      const foundCategoryRating = categoryRatings.find(rating => {
-        if (rating === 'CAT5' && (queryNormalized.includes('CAT 5') || queryNormalized.includes('CAT5')) && !queryNormalized.includes('CAT5E')) return true
-        if (rating === 'CAT5E' && (queryNormalized.includes('CAT 5E') || queryNormalized.includes('CAT5E'))) return true
-        if (rating === 'CAT6' && (queryNormalized.includes('CAT 6') || queryNormalized.includes('CAT6')) && !queryNormalized.includes('CAT6A')) return true
-        if (rating === 'CAT6A' && (queryNormalized.includes('CAT 6A') || queryNormalized.includes('CAT6A'))) return true
-        return queryNormalized.includes(rating)
+      const response = await fetch('/api/ai-search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query,
+          userContext: {
+            businessType: 'electrical_distributor',
+            searchHistory: messages.slice(-3) // Send recent context
+          }
+        }),
       })
 
-      if (foundCategoryRating) {
-        enhancement.detectedTerms.categoryRating = foundCategoryRating.replace('CATEGORY ', 'CAT')
+      const data = await response.json()
+
+      if (data.success) {
+        console.log('✅ AI Analysis received:', data.analysis)
+        return data.analysis
+      } else {
+        console.warn('⚠️ AI analysis failed, using fallback:', data.fallback)
+        return data.fallback
       }
-
-      // Detect jacket ratings
-      const jacketRatings = ['CMP', 'CMR', 'CMG', 'LSZH', 'OFNP', 'OFNR', 'OFNG', 'PLENUM', 'RISER']
-      const foundJacketRating = jacketRatings.find(rating =>
-        query.toUpperCase().includes(rating)
-      )
-      if (foundJacketRating) {
-        enhancement.detectedTerms.jacketRating = foundJacketRating === 'PLENUM' ? 'CMP' : foundJacketRating
-      }
-
-      // Detect shielding types
-      const shieldingTypes = ['UTP', 'STP', 'FTP', 'SFTP', 'UNSHIELDED', 'SHIELDED']
-      const foundShielding = shieldingTypes.find(shielding =>
-        query.toUpperCase().includes(shielding)
-      )
-      if (foundShielding) {
-        enhancement.detectedTerms.shielding = foundShielding
-      }
-
-      // IMPROVED: Detect fiber count with better patterns
-      const fiberCountPatterns = [
-        /(\d+)\s*(?:fiber|count|strand)/i,
-        /(\d+)\s+(?:LC|SC|ST|FC|MTP|MPO)/i,
-        /(\d+)\s+(?:connector|connectors)/i,
-        /(\d+)\s*(?:F|f)\b/i,
-        /(\d+)[-\s]*(?:way|port)/i
-      ]
-
-      let detectedCount = null
-      for (const pattern of fiberCountPatterns) {
-        const match = query.match(pattern)
-        if (match) {
-          detectedCount = parseInt(match[1])
-          console.log(`📊 Detected fiber count: ${detectedCount}`)
-          break
-        }
-      }
-
-      if (detectedCount) {
-        enhancement.detectedTerms.fiberCount = detectedCount
-      }
-
-      // Detect connector types
-      const connectorTypes = ['LC', 'SC', 'ST', 'FC', 'MTP', 'MPO', 'RJ45', 'RJ-45']
-      const foundConnectorType = connectorTypes.find(type =>
-        query.toUpperCase().includes(type)
-      )
-      if (foundConnectorType) {
-        enhancement.detectedTerms.connectorType = foundConnectorType
-      }
-
-      // Detect manufacturers
-      const manufacturers = ['CORNING', 'PANDUIT', 'PRYSMIAN', 'OFS', 'COMMSCOPE', 'BELDEN', 'SUPERIOR ESSEX']
-      const foundManufacturer = manufacturers.find(mfg =>
-        query.toUpperCase().includes(mfg)
-      )
-      if (foundManufacturer) {
-        enhancement.detectedTerms.manufacturer = foundManufacturer
-      }
-
-      // Detect requested quantities
-      const quantityMatch = query.match(/(\d+(?:,\d+)?)\s*(?:ft|foot|feet|meter|m)\b/i)
-      if (quantityMatch) {
-        const quantity = parseInt(quantityMatch[1].replace(/,/g, ''))
-        enhancement.detectedTerms.requestedQuantity = quantity
-      }
-
-      // IMPROVED: Detect product types
-      const queryLower = query.toLowerCase()
-
-      if (queryLower.includes('connector') || queryLower.includes('connectors')) {
-        enhancement.detectedTerms.productType = 'CONNECTOR'
-        console.log('🔌 Detected product type: CONNECTOR')
-      }
-      else if (queryLower.includes('panel') || queryLower.includes('panels') ||
-               queryLower.includes('adapter panel') || queryLower.includes('patch panel')) {
-        enhancement.detectedTerms.productType = 'PANEL'
-        console.log('🏠 Detected product type: PANEL')
-      }
-      else if (queryLower.includes('cable') || queryLower.includes('cables')) {
-        enhancement.detectedTerms.productType = 'CABLE'
-        console.log('🌈 Detected product type: CABLE')
-      }
-
-      enhancement.enhancedQuery = query
-      return enhancement
-
     } catch (error) {
-      console.error('Query enhancement error:', error)
-      return {
-        originalQuery: query,
-        enhancedQuery: query,
-        suggestedFilters: [],
-        detectedTerms: {},
-        confidence: 0.5
-      }
+      console.error('❌ AI enhancement error:', error)
+      return null
     }
   }
 
-  // ENHANCED SEARCH
-  const searchProducts = async (searchTerm: string): Promise<{ products: Product[], searchTime: number, searchType: string }> => {
+  // ✅ ENHANCED: AI-Powered Product Search
+  const searchProducts = async (searchTerm: string): Promise<{ products: Product[], searchTime: number, searchType: string, aiAnalysis?: AISearchAnalysis }> => {
     const startTime = performance.now()
 
     try {
-      console.log('🎯 ENHANCED SEARCH for:', searchTerm)
+      console.log('🎯 STARTING AI-ENHANCED SEARCH for:', searchTerm)
 
-      const enhancement = await enhanceQuery(searchTerm)
-      setSearchEnhancement(enhancement)
+      // Step 1: Get AI analysis
+      const analysis = await enhanceQueryWithAI(searchTerm)
+      setAiAnalysis(analysis)
 
       let allProducts: Product[] = []
-      let searchStrategy = 'standard'
+      let searchStrategy = analysis?.searchStrategy || 'standard'
 
-      // Detect search types
-      const isConnectorSearch = enhancement.detectedTerms.productType === 'CONNECTOR' ||
-                               ['connector', 'connectors'].some(term => searchTerm.toLowerCase().includes(term))
-
-      const isAdapterPanelSearch = enhancement.detectedTerms.productType === 'PANEL' ||
-                                  ['panel', 'panels', 'adapter panel', 'patch panel'].some(term =>
-                                    searchTerm.toLowerCase().includes(term))
-
-      const isFiberCableSearch = (enhancement.detectedTerms.fiberType ||
-                                 ['fiber', 'optic'].some(term => searchTerm.toLowerCase().includes(term))) &&
-                                enhancement.detectedTerms.productType === 'CABLE' &&
-                                !isConnectorSearch && !isAdapterPanelSearch
-
-      const isCategorySearch = enhancement.detectedTerms.categoryRating ||
-                              ['cat5e', 'cat6', 'cat6a', 'cat5', 'cat 5', 'cat 6', 'cat7', 'cat8', 'ethernet', 'network cable', 'utp', 'stp'].some(term =>
-                                searchTerm.toLowerCase().includes(term))
-
-      // CONNECTOR SEARCH
-      if (isConnectorSearch) {
-        console.log('🔌 CONNECTOR SEARCH detected')
-        searchStrategy = 'connectors'
-
-        let connectorQuery = supabase
-          .from('products')
-          .select('*')
-          .eq('is_active', true)
-          .ilike('short_description', '%connector%')
-          .limit(20)
-
-        if (enhancement.detectedTerms.fiberType) {
-          connectorQuery = connectorQuery.eq('fiber_type_standard', enhancement.detectedTerms.fiberType)
-        }
-        if (enhancement.detectedTerms.connectorType) {
-          connectorQuery = connectorQuery.eq('connector_type_standard', enhancement.detectedTerms.connectorType)
-        }
-        if (enhancement.detectedTerms.fiberCount) {
-          connectorQuery = connectorQuery.or(`fiber_count.eq.${enhancement.detectedTerms.fiberCount},short_description.ilike.%${enhancement.detectedTerms.fiberCount}%`)
-        }
-
-        const connectorResult = await connectorQuery
-
-        if (connectorResult.data && connectorResult.data.length > 0) {
-          allProducts = connectorResult.data.map(item => ({
-            id: item.id?.toString() || Date.now().toString(),
-            partNumber: item.part_number || 'No Part Number',
-            brand: 'Brand Name',
-            description: item.short_description || 'No description available',
-            price: parseFloat(item.unit_price) || (Math.random() * 50 + 10),
-            stockLocal: item.stock_quantity || 0,
-            stockDistribution: 100,
-            leadTime: 'Ships Today',
-            category: 'Fiber Connector',
-            fiberType: item.fiber_type_standard,
-            connectorType: item.connector_type_standard,
-            fiberCount: item.fiber_count,
-            searchRelevance: 1.0,
-            tableName: 'products (connectors)'
-          }))
-          console.log(`🔌 Found ${allProducts.length} connector results`)
-        }
-      }
-
-      // CATEGORY CABLE SEARCH
-      if (isCategorySearch && allProducts.length < 5) {
-        console.log('🌐 CATEGORY CABLE SEARCH detected')
-        searchStrategy = allProducts.length > 0 ? `${searchStrategy}+categories` : 'category-cables'
-
-        let categoryQuery = supabase
-          .from('category_cables')
-          .select('*')
-          .eq('is_active', true)
-          .limit(20)
-
-        const searchConditions = []
-
-        if (enhancement.detectedTerms.categoryRating) {
-          const catRating = enhancement.detectedTerms.categoryRating
-          searchConditions.push(`category_rating.ilike.%${catRating}%`)
-          searchConditions.push(`part_number.ilike.%${catRating}%`)
-          searchConditions.push(`short_description.ilike.%${catRating}%`)
-        }
-
-        if (enhancement.detectedTerms.jacketRating) {
-          const jacketSearch = enhancement.detectedTerms.jacketRating === 'CMP' ? 'plenum' : enhancement.detectedTerms.jacketRating
-          searchConditions.push(`jacket_material.ilike.%${jacketSearch}%`)
-          searchConditions.push(`approvals_listings.ilike.%${jacketSearch}%`)
-          searchConditions.push(`short_description.ilike.%${jacketSearch}%`)
-        }
-
-        if (searchConditions.length > 0) {
-          categoryQuery = categoryQuery.or(searchConditions.join(','))
-        }
-
-        const categoryResult = await categoryQuery
-
-        if (categoryResult.data && categoryResult.data.length > 0) {
-          const categoryProducts = categoryResult.data.map(item => ({
-            id: item.id?.toString() || Date.now().toString(),
-            partNumber: item.part_number || 'No Part Number',
-            brand: item.brand || 'Unknown Brand',
-            description: item.short_description || 'No description available',
-            price: Math.random() * 150 + 50,
-            stockLocal: 25,
-            stockDistribution: 100,
-            leadTime: 'Ships Today',
-            category: 'Category Cable',
-            categoryRating: item.category_rating,
-            jacketRating: item.jacket_material?.includes('plenum') ? 'CMP' :
-                         item.jacket_material?.includes('riser') ? 'CMR' : undefined,
-            shielding: item.shielding_type,
-            searchRelevance: 1.0,
-            tableName: 'category_cables'
-          }))
-
-          allProducts = [...allProducts, ...categoryProducts]
-          console.log(`🌐 Found ${categoryProducts.length} category cable results`)
-        }
-      }
-
-      // Fallback search if needed
-      if (allProducts.length < 3) {
-        console.log('🚀 Expanding search to additional tables...')
-
+      if (!analysis) {
+        console.log('🔄 Falling back to basic search...')
+        // Fallback to basic search if AI fails
         const fallbackResult = await supabase
           .from('product_search')
           .select('*')
-          .or(`part_number.ilike.%${searchTerm}%,short_description.ilike.%${searchTerm}%,search_text.ilike.%${searchTerm}%`)
+          .or(`part_number.ilike.%${searchTerm}%,short_description.ilike.%${searchTerm}%`)
           .limit(10)
 
-        if (fallbackResult.data && fallbackResult.data.length > 0) {
-          const searchData = fallbackResult.data.map(item => ({
+        if (fallbackResult.data) {
+          allProducts = fallbackResult.data.map(item => ({
             id: `search-${item.id}`,
             partNumber: item.part_number?.toString() || 'No Part Number',
             brand: item.brand || 'Unknown Brand',
@@ -383,14 +163,183 @@ export default function PlecticAI() {
             stockDistribution: 100,
             leadTime: 'Ships Today',
             category: item.category || 'Product',
-            searchRelevance: 0.9,
-            tableName: `product_search (${item.product_table})`
+            searchRelevance: 0.7,
+            tableName: 'product_search (fallback)'
           }))
+        }
+      } else {
+        console.log('🤖 Using AI-guided search strategy:', analysis.searchStrategy)
+        console.log('🎯 AI detected specs:', analysis.detectedSpecs)
 
-          allProducts = [...allProducts, ...searchData]
+        // Step 2: Use AI analysis to search database strategically
+
+        // CONNECTOR SEARCH (AI-guided)
+        if (analysis.productType === 'CONNECTOR' || analysis.searchStrategy === 'connectors') {
+          console.log('🔌 AI-GUIDED CONNECTOR SEARCH')
+
+          let connectorQuery = supabase
+            .from('products')
+            .select('*')
+            .eq('is_active', true)
+            .ilike('short_description', '%connector%')
+            .limit(20)
+
+          // Apply AI-detected specifications
+          if (analysis.detectedSpecs.fiberType) {
+            connectorQuery = connectorQuery.eq('fiber_type_standard', analysis.detectedSpecs.fiberType)
+            console.log(`🌈 AI filter: fiber type = ${analysis.detectedSpecs.fiberType}`)
+          }
+          if (analysis.detectedSpecs.connectorType) {
+            connectorQuery = connectorQuery.eq('connector_type_standard', analysis.detectedSpecs.connectorType)
+            console.log(`🔌 AI filter: connector type = ${analysis.detectedSpecs.connectorType}`)
+          }
+          if (analysis.detectedSpecs.fiberCount) {
+            connectorQuery = connectorQuery.or(`fiber_count.eq.${analysis.detectedSpecs.fiberCount},short_description.ilike.%${analysis.detectedSpecs.fiberCount}%`)
+            console.log(`📊 AI filter: fiber count = ${analysis.detectedSpecs.fiberCount}`)
+          }
+
+          const connectorResult = await connectorQuery
+
+          if (connectorResult.data && connectorResult.data.length > 0) {
+            allProducts = connectorResult.data.map(item => ({
+              id: item.id?.toString() || Date.now().toString(),
+              partNumber: item.part_number || 'No Part Number',
+              brand: 'Brand Name',
+              description: item.short_description || 'No description available',
+              price: parseFloat(item.unit_price) || (Math.random() * 50 + 10),
+              stockLocal: item.stock_quantity || 0,
+              stockDistribution: 100,
+              leadTime: 'Ships Today',
+              category: 'Fiber Connector',
+              fiberType: item.fiber_type_standard,
+              connectorType: item.connector_type_standard,
+              fiberCount: item.fiber_count,
+              searchRelevance: 1.0,
+              tableName: 'products (AI-guided connectors)'
+            }))
+            console.log(`🔌 AI found ${allProducts.length} connector results`)
+          }
+        }
+
+        // CATEGORY CABLE SEARCH (AI-guided)
+        if ((analysis.productType === 'CABLE' && analysis.detectedSpecs.categoryRating) ||
+            analysis.searchStrategy === 'cables' ||
+            allProducts.length < 3) {
+          console.log('🌐 AI-GUIDED CATEGORY CABLE SEARCH')
+
+          let categoryQuery = supabase
+            .from('category_cables')
+            .select('*')
+            .eq('is_active', true)
+            .limit(20)
+
+          const searchConditions = []
+
+          // Use AI-detected category rating
+          if (analysis.detectedSpecs.categoryRating) {
+            const catRating = analysis.detectedSpecs.categoryRating
+            searchConditions.push(`category_rating.ilike.%${catRating}%`)
+            searchConditions.push(`part_number.ilike.%${catRating}%`)
+            searchConditions.push(`short_description.ilike.%${catRating}%`)
+            console.log(`🏷️ AI filter: category rating = ${catRating}`)
+          }
+
+          // Use AI-detected jacket rating
+          if (analysis.detectedSpecs.jacketRating) {
+            const jacketSearch = analysis.detectedSpecs.jacketRating === 'CMP' ? 'plenum' : analysis.detectedSpecs.jacketRating
+            searchConditions.push(`jacket_material.ilike.%${jacketSearch}%`)
+            searchConditions.push(`approvals_listings.ilike.%${jacketSearch}%`)
+            searchConditions.push(`short_description.ilike.%${jacketSearch}%`)
+            console.log(`🧥 AI filter: jacket rating = ${jacketSearch}`)
+          }
+
+          // Use AI-detected shielding
+          if (analysis.detectedSpecs.shielding) {
+            searchConditions.push(`shielding_type.ilike.%${analysis.detectedSpecs.shielding}%`)
+            console.log(`🛡️ AI filter: shielding = ${analysis.detectedSpecs.shielding}`)
+          }
+
+          // Use AI search terms if no specific conditions
+          if (searchConditions.length === 0 && analysis.searchTerms.length > 0) {
+            analysis.searchTerms.forEach(term => {
+              searchConditions.push(`short_description.ilike.%${term}%`)
+              searchConditions.push(`part_number.ilike.%${term}%`)
+            })
+          }
+
+          if (searchConditions.length > 0) {
+            categoryQuery = categoryQuery.or(searchConditions.join(','))
+          }
+
+          const categoryResult = await categoryQuery
+
+          if (categoryResult.data && categoryResult.data.length > 0) {
+            const categoryProducts = categoryResult.data.map(item => ({
+              id: item.id?.toString() || Date.now().toString(),
+              partNumber: item.part_number || 'No Part Number',
+              brand: item.brand || 'Unknown Brand',
+              description: item.short_description || 'No description available',
+              price: Math.random() * 150 + 50,
+              stockLocal: 25,
+              stockDistribution: 100,
+              leadTime: 'Ships Today',
+              category: 'Category Cable',
+              categoryRating: item.category_rating,
+              jacketRating: item.jacket_material?.includes('plenum') ? 'CMP' :
+                           item.jacket_material?.includes('riser') ? 'CMR' : undefined,
+              shielding: item.shielding_type,
+              searchRelevance: 1.0,
+              tableName: 'category_cables (AI-guided)'
+            }))
+
+            allProducts = [...allProducts, ...categoryProducts]
+            console.log(`🌐 AI found ${categoryProducts.length} category cable results`)
+          }
+        }
+
+        // AI-GUIDED FALLBACK SEARCH
+        if (allProducts.length < 3) {
+          console.log('🚀 AI expanding search with alternative terms...')
+
+          // Try AI's alternative search terms
+          const searchTermsToTry = [
+            ...analysis.searchTerms,
+            ...analysis.alternativeQueries,
+            searchTerm
+          ]
+
+          for (const term of searchTermsToTry.slice(0, 3)) {
+            if (allProducts.length >= 10) break
+
+            const fallbackResult = await supabase
+              .from('product_search')
+              .select('*')
+              .or(`part_number.ilike.%${term}%,short_description.ilike.%${term}%,search_text.ilike.%${term}%`)
+              .limit(5)
+
+            if (fallbackResult.data && fallbackResult.data.length > 0) {
+              const searchData = fallbackResult.data.map(item => ({
+                id: `search-${item.id}-${term}`,
+                partNumber: item.part_number?.toString() || 'No Part Number',
+                brand: item.brand || 'Unknown Brand',
+                description: item.short_description || 'No description available',
+                price: Math.random() * 75 + 25,
+                stockLocal: 10,
+                stockDistribution: 100,
+                leadTime: 'Ships Today',
+                category: item.category || 'Product',
+                searchRelevance: 0.8,
+                tableName: `product_search (AI term: ${term})`
+              }))
+
+              allProducts = [...allProducts, ...searchData]
+              console.log(`🔍 AI term "${term}" found ${searchData.length} results`)
+            }
+          }
         }
       }
 
+      // Remove duplicates and limit results
       const uniqueProducts = allProducts.filter((product, index, self) =>
         index === self.findIndex(p => p.partNumber === product.partNumber)
       )
@@ -398,14 +347,17 @@ export default function PlecticAI() {
       const endTime = performance.now()
       const searchTime = Math.round(endTime - startTime)
 
+      console.log(`✅ AI-Enhanced search completed: ${uniqueProducts.length} products in ${searchTime}ms`)
+
       return {
         products: uniqueProducts.slice(0, 20),
         searchTime,
-        searchType: searchStrategy
+        searchType: `ai-${searchStrategy}`,
+        aiAnalysis: analysis || undefined
       }
 
     } catch (error) {
-      console.error('❌ Enhanced search error:', error)
+      console.error('❌ AI-Enhanced search error:', error)
       const endTime = performance.now()
       return {
         products: [],
@@ -432,31 +384,28 @@ export default function PlecticAI() {
     setIsLoading(true)
 
     try {
-      const { products, searchTime, searchType } = await searchProducts(originalInput)
+      const { products, searchTime, searchType, aiAnalysis } = await searchProducts(originalInput)
       setLastSearchTime(searchTime)
 
       let assistantContent = ''
 
       if (products.length > 0) {
-        assistantContent = `🚀 Found ${products.length} products in ${searchTime}ms:`
+        assistantContent = `🤖 AI found ${products.length} products in ${searchTime}ms using ${searchType} strategy`
+        if (aiAnalysis) {
+          assistantContent += `\n\n🧠 **AI Reasoning:** ${aiAnalysis.reasoning}`
+        }
       } else {
-        assistantContent = `🔍 **No exact matches found for "${originalInput}"**
+        assistantContent = `🤖 AI analyzed "${originalInput}" but found no matching products in your database.`
 
-Let me help you find what you need:
+        if (aiAnalysis && aiAnalysis.alternativeQueries.length > 0) {
+          assistantContent += `\n\n💡 **AI Suggestions to try:**\n${aiAnalysis.alternativeQueries.map(q => `• "${q}"`).join('\n')}`
+        }
 
-**For Fiber Connectors, try:**
-• "24 LC connectors OM4" - LC connectors for OM4 fiber
-• "12 SC connectors OM3" - SC connectors for OM3 fiber  
-
-**For Category Cables, try:**
-• "Cat5 plenum" - Category 5 plenum rated
-• "Cat 5 blue plenum" - With spaces and color
-• "Cat6 cable" - Standard Category 6
-
-**Search Tips:**
-• Use "connectors" for individual connectors vs "cable" for cables vs "panel" for panels
-• Include ratings: "plenum", "CMP", "Cat6A", "OM3", "OM4"
-• Add counts: "24 connectors", "12 fiber cable"`
+        assistantContent += `\n\n**AI-Powered Search Tips:**
+• Try "24 LC connectors OM4" for fiber connectors
+• Try "Cat5e plenum blue" for category cables  
+• Try "12 fiber OM3 cable" for fiber optic cables
+• The AI understands technical electrical terminology!`
       }
 
       const assistantMessage: Message = {
@@ -466,7 +415,8 @@ Let me help you find what you need:
         products: products.length > 0 ? products : undefined,
         timestamp: new Date(),
         searchType,
-        searchTime
+        searchTime,
+        aiAnalysis
       }
 
       setMessages(prev => [...prev, assistantMessage])
@@ -476,7 +426,7 @@ Let me help you find what you need:
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: "Sorry, there was an error searching the products. Please try again.",
+        content: "Sorry, there was an error with the AI-enhanced search. Please try again.",
         timestamp: new Date()
       }
       setMessages(prev => [...prev, errorMessage])
@@ -501,15 +451,18 @@ Let me help you find what you need:
     setIsLoading(true)
 
     try {
-      const { products, searchTime, searchType } = await searchProducts(searchTerm)
+      const { products, searchTime, searchType, aiAnalysis } = await searchProducts(searchTerm)
       setLastSearchTime(searchTime)
 
       let assistantContent = ''
 
       if (products.length > 0) {
-        assistantContent = `🚀 Found ${products.length} products in ${searchTime}ms:`
+        assistantContent = `🤖 AI found ${products.length} products in ${searchTime}ms:`
+        if (aiAnalysis) {
+          assistantContent += `\n\n🧠 **AI Reasoning:** ${aiAnalysis.reasoning}`
+        }
       } else {
-        assistantContent = `🚀 No products found in ${searchTime}ms. Try broader terms.`
+        assistantContent = `🤖 AI analyzed your request but found no products in ${searchTime}ms. Try different terms.`
       }
 
       const assistantMessage: Message = {
@@ -519,7 +472,8 @@ Let me help you find what you need:
         products: products.length > 0 ? products : undefined,
         timestamp: new Date(),
         searchType,
-        searchTime
+        searchTime,
+        aiAnalysis
       }
 
       setMessages(prev => [...prev, assistantMessage])
@@ -529,7 +483,7 @@ Let me help you find what you need:
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: "Sorry, there was an error searching the products. Please try again.",
+        content: "Sorry, there was an error with the AI search. Please try again.",
         timestamp: new Date()
       }
       setMessages(prev => [...prev, errorMessage])
@@ -540,7 +494,7 @@ Let me help you find what you need:
 
   // ADD TO LIST
   const addToList = (product: Product, customQuantity?: number) => {
-    const quantityToAdd = customQuantity || searchEnhancement?.detectedTerms.requestedQuantity || 1
+    const quantityToAdd = customQuantity || aiAnalysis?.detectedSpecs.requestedQuantity || 1
 
     setProductList(prev => {
       const existing = prev.find(item => item.id === product.id)
@@ -581,17 +535,17 @@ Let me help you find what you need:
 
   return (
     <div className="h-screen bg-gray-50 flex flex-col font-inter">
-      {/* Enhanced Header with Search Stats */}
+      {/* Enhanced Header with AI Stats */}
       <header className="bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl flex items-center justify-center text-white">
-              <Zap size={24} />
+              <Brain size={24} />
             </div>
             <div>
               <h1 className="text-xl font-semibold text-gray-900">Plectic AI</h1>
               <p className="text-xs text-gray-600">
-                🎯 Smart Cable Expert - Fiber + Category Cables + Panels + Connectors
+                🤖 AI-Powered Electrical Distributor - Your Database Only
                 {lastSearchTime > 0 && (
                   <span className="ml-2 text-green-600">
                     Last search: {lastSearchTime}ms
@@ -601,10 +555,10 @@ Let me help you find what you need:
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {searchEnhancement && Object.keys(searchEnhancement.detectedTerms).length > 0 && (
+            {aiAnalysis && (
               <div className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1">
-                <Sparkles size={14} />
-                Smart Search
+                <Brain size={14} />
+                AI Active (Confidence: {Math.round((aiAnalysis.confidence || 0) * 100)}%)
               </div>
             )}
             {hasListItems && (
@@ -626,30 +580,30 @@ Let me help you find what you need:
               {messages.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Search size={28} className="text-blue-600" />
+                    <Brain size={28} className="text-blue-600" />
                   </div>
                   <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                    🎯 Smart Cable Expert
+                    🤖 AI-Powered Electrical Expert
                   </h2>
                   <p className="text-gray-600 mb-4">
-                    I'll help you find fiber cables, category cables, adapter panels, and connectors
+                    I use advanced AI to understand your needs and search only your database for the perfect products
                   </p>
 
                   {/* Enhanced Search Examples */}
                   <div className="max-w-2xl mx-auto mb-8">
-                    <h3 className="text-sm font-medium text-gray-500 mb-3">Try these smart searches:</h3>
+                    <h3 className="text-sm font-medium text-gray-500 mb-3">Try these AI-powered searches:</h3>
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <button
                         onClick={() => performSearch('5000ft Cat 5 plenum blue')}
                         className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-2 rounded-lg text-left transition-colors"
                       >
-                        🎯 5000ft Cat 5 plenum blue
+                        🤖 5000ft Cat 5 plenum blue
                       </button>
                       <button
                         onClick={() => performSearch('12 fiber OM3 cable')}
                         className="bg-green-50 hover:bg-green-100 text-green-700 px-3 py-2 rounded-lg text-left transition-colors"
                       >
-                        🎯 12 fiber OM3 cable
+                        🤖 12 fiber OM3 cable
                       </button>
                       <button
                         onClick={() => performSearch('24 LC fiber connectors OM4')}
@@ -669,7 +623,7 @@ Let me help you find what you need:
                   {/* Large Search Area */}
                   <div className="max-w-2xl mx-auto">
                     <h3 className="text-lg font-medium text-gray-700 mb-3 text-left">
-                      🎯 Ask Me About Any Cable, Panel, or Connector
+                      🤖 Describe What You Need - AI Will Find It In Your Database
                     </h3>
                     <div className="relative">
                       <textarea
@@ -681,7 +635,7 @@ Let me help you find what you need:
                             handleSubmit()
                           }
                         }}
-                        placeholder="Tell me what you need: 'Cat 5 plenum blue', '12 fiber OM3 cable', '24 LC connectors OM4'..."
+                        placeholder="Just describe what you need: 'Cat 5 plenum blue', 'fiber optic connectors', 'network cable for office'..."
                         className="w-full px-6 py-4 border-2 border-blue-500 rounded-lg resize-none focus:outline-none focus:ring-4 focus:ring-blue-200 focus:border-blue-600 text-base"
                         rows={6}
                         autoFocus
@@ -695,8 +649,8 @@ Let me help you find what you need:
                             : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                         }`}
                       >
-                        <Search size={16} />
-                        Search
+                        <Brain size={16} />
+                        AI Search
                       </button>
                     </div>
                   </div>
@@ -714,9 +668,9 @@ Let me help you find what you need:
                       <div className="mb-4">
                         <div className="flex items-center gap-2 mb-2">
                           <div className="w-6 h-6 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
-                            <Zap size={14} className="text-white" />
+                            <Brain size={14} className="text-white" />
                           </div>
-                          <span className="text-sm font-medium text-gray-700">Plectic AI Cable Expert</span>
+                          <span className="text-sm font-medium text-gray-700">Plectic AI Expert</span>
                           {message.searchTime && (
                             <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
                               {message.searchTime}ms • {message.searchType}
@@ -726,20 +680,25 @@ Let me help you find what you need:
 
                         <div className="text-sm text-gray-700 mb-3 whitespace-pre-line">{message.content}</div>
 
-                        {/* Show AI Enhancement Details */}
-                        {searchEnhancement && Object.keys(searchEnhancement.detectedTerms).length > 0 && (
+                        {/* Show AI Analysis Details */}
+                        {message.aiAnalysis && Object.keys(message.aiAnalysis.detectedSpecs || {}).length > 0 && (
                           <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-3">
                             <div className="flex items-center gap-2 mb-2">
-                              <Sparkles size={16} className="text-purple-600" />
-                              <span className="text-sm font-medium text-purple-700">Smart Search Detection</span>
+                              <Brain size={16} className="text-purple-600" />
+                              <span className="text-sm font-medium text-purple-700">AI Analysis</span>
+                              <span className="text-xs bg-purple-100 px-2 py-1 rounded">
+                                {message.aiAnalysis.confidence ? Math.round(message.aiAnalysis.confidence * 100) : 0}% confidence
+                              </span>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                              {Object.entries(searchEnhancement.detectedTerms).map(([key, value]) => (
-                                <span key={key} className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs">
-                                  {key === 'requestedQuantity' ? `quantity: ${value?.toLocaleString()}ft` :
-                                   key === 'productType' ? `type: ${value}` :
-                                   `${key}: ${value}`}
-                                </span>
+                              {Object.entries(message.aiAnalysis.detectedSpecs).map(([key, value]) => (
+                                value && (
+                                  <span key={key} className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs">
+                                    {key === 'requestedQuantity' ? `qty: ${value?.toLocaleString()}ft` :
+                                     key === 'productType' ? `type: ${value}` :
+                                     `${key}: ${value}`}
+                                  </span>
+                                )
                               ))}
                             </div>
                           </div>
@@ -749,7 +708,7 @@ Let me help you find what you need:
                           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                             <div className="bg-gray-50 border-b border-gray-200 px-4 py-2">
                               <p className="text-sm font-semibold text-gray-700">
-                                🎯 Product Options - Select items to add to your list:
+                                🤖 AI-Found Products - Add to your list:
                               </p>
                             </div>
 
@@ -821,9 +780,9 @@ Let me help you find what you need:
               {isLoading && (
                 <div className="flex items-center gap-3">
                   <div className="w-6 h-6 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
-                    <Zap size={14} className="text-white animate-pulse" />
+                    <Brain size={14} className="text-white animate-pulse" />
                   </div>
-                  <span className="text-sm text-gray-600">🎯 Finding the perfect products for you...</span>
+                  <span className="text-sm text-gray-600">🤖 AI is analyzing your request and searching your database...</span>
                 </div>
               )}
 
@@ -846,7 +805,7 @@ Let me help you find what you need:
                         handleSubmit()
                       }
                     }}
-                    placeholder="🎯 Tell me what you need: 'Cat 5 plenum blue', '12 fiber OM3 cable', '24 LC connectors OM4'..."
+                    placeholder="🤖 Describe what you need and AI will find it in your database..."
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                     rows={1}
                   />
@@ -861,8 +820,8 @@ Let me help you find what you need:
                       : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  <Search size={16} />
-                  Ask
+                  <Brain size={16} />
+                  AI Search
                 </button>
               </div>
 
@@ -871,7 +830,7 @@ Let me help you find what you need:
                   type="button"
                   onClick={() => {
                     setMessages([])
-                    setSearchEnhancement(null)
+                    setAiAnalysis(null)
                   }}
                   className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-bold transition-colors text-base border-2 border-red-700"
                 >
@@ -882,7 +841,7 @@ Let me help you find what you need:
           )}
         </div>
 
-        {/* Product List */}
+        {/* Product List (same as before) */}
         {hasListItems && (
           <div className="w-2/5 border-l border-gray-200 bg-white flex flex-col">
             <div className="bg-gray-50 border-b border-gray-200 p-4">
