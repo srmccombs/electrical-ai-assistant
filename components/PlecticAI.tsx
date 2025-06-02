@@ -3,13 +3,9 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Search, Plus, Minus, X, Send, Zap, Package, AlertCircle, CheckCircle, Clock, Menu, Settings, HelpCircle, Sparkles, Filter } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import OpenAI from 'openai'
 
-// OpenAI Configuration
-const openai = new OpenAI({
-  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
-  dangerouslyAllowBrowser: true
-})
+// ✅ REMOVED OpenAI import and instantiation - you weren't using it anyway!
+// If you need AI features later, we'll add them properly via API routes
 
 // Types
 interface Product {
