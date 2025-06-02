@@ -36,7 +36,7 @@ interface Message {
   content: string
   products?: Product[]
   timestamp: Date
-  searchType?: 'exact' | 'fulltext' | 'fuzzy' | 'ai-enhanced'
+  searchType?: string
   searchTime?: number
 }
 
