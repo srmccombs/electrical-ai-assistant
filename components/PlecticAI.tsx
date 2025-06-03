@@ -93,7 +93,7 @@ interface AISearchAnalysis {
 const detectPartNumbers = (searchTerm: string): {
   hasParts: boolean;
   partNumbers: string[];
-  quantity: number | null;
+  quantity: number | undefined;
   remainingText: string;
 } => {
   const query = searchTerm.toLowerCase().trim()
@@ -127,7 +127,7 @@ const detectPartNumbers = (searchTerm: string): {
 
   // Extract quantity if present
   const quantityMatch = remainingText.match(/\b(\d{1,6})\s*(ft|feet|foot|pcs|pieces|units?)?\b/)
-  const quantity: number | null = quantityMatch ? parseInt(quantityMatch[1]) : null
+  const quantity: number | undefined = quantityMatch ? parseInt(quantityMatch[1]) : undefined
 
   console.log('🔍 Part number detection:', {
     original: searchTerm,
@@ -1401,7 +1401,7 @@ export default function PlecticAI() {
         // Search by part number
         const partResults = await searchByPartNumber(
           partNumberDetection.partNumbers,
-          partNumberDetection.quantity || undefined
+          partNumberDetection.quantity
         )
 
         if (partResults.length > 0) {
