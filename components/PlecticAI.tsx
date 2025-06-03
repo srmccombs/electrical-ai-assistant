@@ -1401,7 +1401,7 @@ export default function PlecticAI() {
         // Search by part number
         const partResults = await searchByPartNumber(
           partNumberDetection.partNumbers,
-          partNumberDetection.quantity
+          partNumberDetection.quantity || undefined
         )
 
         if (partResults.length > 0) {
