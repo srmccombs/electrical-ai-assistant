@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { Search, Plus, Minus, X, Send, Zap, Package, AlertCircle, CheckCircle, Clock, Menu, Settings, HelpCircle, Sparkles, Filter, Brain } from 'lucide-react'
+import { Search, Plus, Minus, X, Send, Zap, Package, AlertCircle, CheckCircle, Clock, Menu, Settings, HelpCircle, Sparkles, Filter, Brain, Shield, Database, Cpu, Activity } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 // Types
@@ -26,6 +26,10 @@ interface Product {
   tableName?: string
   packagingType?: string
   color?: string
+  // Stock status fields
+  stockStatus?: string
+  stockColor?: string
+  stockMessage?: string
 }
 
 interface ListItem extends Product {
@@ -60,7 +64,7 @@ interface AISearchAnalysis {
   searchStrategy: string
   productType: string
   confidence: number
-  detectedTerms: {
+  detectedSpecs: {
     fiberType?: string
     categoryRating?: string
     connectorType?: string
@@ -81,6 +85,473 @@ interface AISearchAnalysis {
   aiModel: string
 }
 
+// ===================================================================
+// PART NUMBER DETECTION AND SEARCH
+// ===================================================================
+
+// Detect if search contains part numbers
+const detectPartNumbers = (searchTerm: string) => {
+  const query = searchTerm.toLowerCase().trim()
+
+  // Common part number patterns
+  const partNumberPatterns = [
+    /\b\d{6,}\b/g,           // 6+ digit numbers (7131100)
+    /\b[a-z0-9]{6,}-?[a-z0-9]*\b/g,  // Alphanumeric 6+ chars (ABC123, ABC-123)
+    /\b[a-z]+\d{4,}\b/g,     // Letters followed by 4+ digits (CAT1234)
+    /\b\d{4,}[a-z]+\b/g,     // 4+ digits followed by letters (1234ABC)
+    /\b[a-z0-9]+-[a-z0-9-]+\b/g  // Hyphenated patterns (123-456-789)
+  ]
+
+  let detectedParts = []
+  let remainingText = query
+
+  // Extract potential part numbers
+  partNumberPatterns.forEach(pattern => {
+    const matches = query.match(pattern)
+    if (matches) {
+      matches.forEach(match => {
+        // Skip common words that might match patterns
+        const skipWords = ['category', 'plenum', 'ethernet', 'network', 'adapter']
+        if (!skipWords.includes(match)) {
+          detectedParts.push(match)
+          remainingText = remainingText.replace(match, '').trim()
+        }
+      })
+    }
+  })
+
+  // Extract quantity if present
+  const quantityMatch = remainingText.match(/\b(\d{1,6})\s*(ft|feet|foot|pcs|pieces|units?)?\b/)
+  const quantity = quantityMatch ? parseInt(quantityMatch[1]) : null
+
+  console.log('🔍 Part number detection:', {
+    original: searchTerm,
+    detectedParts,
+    quantity,
+    remainingText: remainingText.trim()
+  })
+
+  return {
+    hasParts: detectedParts.length > 0,
+    partNumbers: detectedParts,
+    quantity,
+    remainingText: remainingText.trim()
+  }
+}
+
+// Normalize part number for searching (remove spaces, dashes, make lowercase)
+const normalizePartNumber = (partNumber: string) => {
+  return partNumber.toLowerCase().replace(/[\s\-_]/g, '')
+}
+
+// Search for specific part numbers across all tables
+const searchByPartNumber = async (partNumbers: string[], quantity?: number) => {
+  console.log('🔢 PART NUMBER SEARCH')
+  console.log('🔍 Searching for part numbers:', partNumbers)
+
+  let allResults: Product[] = []
+
+  // Define all tables to search
+  const tables = [
+    { name: 'category_cables', prefix: 'cat' },
+    { name: 'fiber_connectors', prefix: 'conn' },
+    { name: 'adapter_panels', prefix: 'panel' },
+    { name: 'products', prefix: 'prod' }
+  ]
+
+  // Search each table
+  for (const table of tables) {
+    try {
+      console.log(`🔍 Searching ${table.name} for part numbers...`)
+
+      // Build search conditions for each part number variation
+      const searchConditions = []
+
+      partNumbers.forEach(partNum => {
+        const normalized = normalizePartNumber(partNum)
+        const original = partNum
+
+        // Search various part number fields and formats
+        searchConditions.push(`part_number.ilike.%${original}%`)
+        searchConditions.push(`part_number.ilike.%${normalized}%`)
+
+        // Also search with common separators
+        if (normalized.length >= 6) {
+          const withDash = normalized.slice(0, 3) + '-' + normalized.slice(3)
+          const withSpace = normalized.slice(0, 3) + ' ' + normalized.slice(3)
+          searchConditions.push(`part_number.ilike.%${withDash}%`)
+          searchConditions.push(`part_number.ilike.%${withSpace}%`)
+        }
+      })
+
+      const query = supabase
+        .from(table.name)
+        .select('*')
+        .eq('is_active', true)
+        .or(searchConditions.join(','))
+        .limit(20)
+
+      const result = await query
+
+      if (result.data && result.data.length > 0) {
+        console.log(`✅ Found ${result.data.length} matches in ${table.name}`)
+
+        // Convert to standard product format
+        const products = result.data.map((item: any) => ({
+          id: `${table.prefix}-${item.id}`,
+          partNumber: item.part_number || 'No Part Number',
+          brand: item.brand || 'Unknown Brand',
+          description: item.short_description || 'No description available',
+          price: parseFloat(item.unit_price) || Math.random() * 200 + 50,
+          stockLocal: item.stock_quantity || 0,
+          stockDistribution: 100,
+          leadTime: 'Ships Today',
+          category: table.name === 'category_cables' ? 'Category Cable' :
+                   table.name === 'fiber_connectors' ? 'Fiber Connector' :
+                   table.name === 'adapter_panels' ? 'Adapter Panel' : 'Product',
+          searchRelevance: 1.0,
+          tableName: table.name,
+          stockStatus: 'not_in_stock',
+          stockColor: 'red',
+          stockMessage: 'Not currently in stock - contact for availability',
+          // Add type-specific fields
+          ...(table.name === 'category_cables' && {
+            categoryRating: item.category_rating,
+            jacketRating: item.jacket_material,
+            color: item.jacket_color
+          }),
+          ...(table.name === 'fiber_connectors' && {
+            connectorType: item.connector_type,
+            fiberType: item.fiber_category,
+            fiberCount: item.fiber_count
+          }),
+          ...(table.name === 'adapter_panels' && {
+            connectorType: item.connector_type,
+            fiberType: item.fiber_category,
+            fiberCount: item.fiber_count
+          })
+        }))
+
+        allResults = [...allResults, ...products]
+      }
+    } catch (error) {
+      console.error(`❌ Error searching ${table.name}:`, error)
+    }
+  }
+
+  console.log(`🔢 Part number search completed: ${allResults.length} total matches`)
+
+  // If we found results and have a quantity, update the AI analysis
+  if (allResults.length > 0 && quantity) {
+    console.log(`📏 Detected quantity: ${quantity} for part number search`)
+    // This will be used by the Smart Add Button
+  }
+
+  return allResults
+}
+
+// 1. QUERY VALIDATION SYSTEM
+const validateElectricalQuery = (query: string) => {
+  const blockedTerms = [
+    // Medical
+    'cancer', 'medicine', 'doctor', 'prescription', 'surgery', 'treatment',
+    'health', 'medical', 'hospital', 'clinic', 'patient', 'drug',
+
+    // Food/Cooking
+    'recipe', 'cooking', 'restaurant', 'food', 'kitchen', 'meal',
+    'diet', 'nutrition', 'ingredients', 'baking',
+
+    // Automotive
+    'car', 'vehicle', 'automotive', 'engine', 'tire', 'brake',
+    'transmission', 'gasoline', 'motor oil',
+
+    // Finance
+    'investment', 'stock', 'cryptocurrency', 'bitcoin', 'trading',
+    'mortgage', 'loan', 'banking', 'finance'
+  ]
+
+  const electricalTerms = [
+    // Cables
+    'cable', 'wire', 'cat5e', 'cat6', 'cat6a', 'fiber', 'ethernet',
+    'plenum', 'riser', 'armored', 'shielded', 'utp', 'stp',
+
+    // Components
+    'connector', 'panel', 'switch', 'outlet', 'receptacle',
+    'breaker', 'fuse', 'conduit', 'raceway',
+
+    // Specifications
+    'awg', 'volt', 'amp', 'watt', 'ohm', 'impedance',
+    'gauge', 'strand', 'solid', 'stranded'
+  ]
+
+  const queryLower = query.toLowerCase()
+
+  // Check for blocked terms
+  const hasBlockedTerms = blockedTerms.some(term => queryLower.includes(term))
+  if (hasBlockedTerms) {
+    return {
+      isValid: false,
+      message: "I'm specialized in electrical and telecommunications products. Please search for cables, connectors, panels, or other electrical infrastructure items."
+    }
+  }
+
+  // Check for electrical terms or numbers
+  const hasElectricalTerms = electricalTerms.some(term => queryLower.includes(term))
+  const hasNumbers = /\d/.test(query)
+  const hasElectricalPattern = /\b(cat|category|om|os)\s*\d/i.test(query)
+
+  if (hasElectricalTerms || hasNumbers || hasElectricalPattern) {
+    return { isValid: true }
+  }
+
+  return {
+    isValid: true,
+    suggestion: "For best results, try searching for specific electrical products like 'Cat6 cable', 'fiber connector', or part numbers."
+  }
+}
+
+// 2. CAT5 → CAT5E BUSINESS RULE
+const applyBusinessRules = (searchTerm: string) => {
+  let processedTerm = searchTerm.toLowerCase()
+
+  // CRITICAL BUSINESS RULE: Redirect Cat5 to Cat5e
+  const cat5Patterns = [
+    /\bcat\s*5\b/gi,
+    /\bcategory\s*5\b/gi,
+    /\bcat-5\b/gi,
+    /\bcat5\b/gi
+  ]
+
+  let redirected = false
+  cat5Patterns.forEach(pattern => {
+    if (pattern.test(processedTerm)) {
+      processedTerm = processedTerm.replace(pattern, 'cat5e')
+      redirected = true
+    }
+  })
+
+  if (redirected) {
+    console.log('🔄 BUSINESS RULE: Redirected Cat5 → Cat5e')
+  }
+
+  return {
+    originalTerm: searchTerm,
+    processedTerm,
+    wasRedirected: redirected,
+    redirectMessage: redirected ? 'Showing Cat5e results (Cat5e is the current standard)' : null
+  }
+}
+
+// 3. UPDATED POPULAR SEARCHES (No Cat5 references + Part Number Examples)
+const getUpdatedPopularSearches = (): string[] => [
+  "1000 ft Cat5e plenum blue",
+  "Cat6 ethernet cable",
+  "24 fiber OM3 cable",
+  "LC to SC fiber connector",
+  "5000 7131100",  // Part number example
+  "OM4 multimode fiber",
+  "RJ45 connectors",
+  "ABC-123"        // Part number example
+]
+
+// Stock Status Button Component
+const StockStatusButton = ({ product }: { product: Product }) => {
+  const getButtonStyle = () => {
+    switch (product.stockColor) {
+      case 'green':
+        return 'bg-green-600 hover:bg-green-700 text-white border-green-600'
+      case 'yellow':
+        return 'bg-yellow-500 hover:bg-yellow-600 text-white border-yellow-500'
+      case 'red':
+      default:
+        return 'bg-red-600 hover:bg-red-700 text-white border-red-600'
+    }
+  }
+
+  const getButtonText = () => {
+    switch (product.stockStatus) {
+      case 'branch_stock':
+        return 'In Stock'
+      case 'dc_stock':
+        return 'Next Day'
+      case 'other_stock':
+        return 'Available'
+      case 'not_in_stock':
+      default:
+        return 'Special Order'
+    }
+  }
+
+  const getTooltipMessage = () => {
+    switch (product.stockStatus) {
+      case 'branch_stock':
+        return 'Available at your branch - ships today'
+      case 'dc_stock':
+        return 'Available at distribution center - next morning delivery'
+      case 'other_stock':
+        return 'Available at other locations - 2-3 day delivery'
+      case 'not_in_stock':
+      default:
+        return 'Not currently in stock - contact for availability'
+    }
+  }
+
+  return (
+    <button
+      className={`px-3 py-1.5 rounded text-xs font-medium transition-colors border ${getButtonStyle()}`}
+      title={getTooltipMessage()}
+      onClick={() => {
+        console.log('Stock details for:', product.partNumber)
+      }}
+    >
+      {getButtonText()}
+    </button>
+  )
+}
+
+// Stock Status Legend Component
+const StockStatusLegend = () => {
+  return (
+    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mt-4">
+      <h4 className="text-sm font-medium text-gray-700 mb-2">Stock Status Legend:</h4>
+      <div className="flex flex-wrap gap-4 text-xs">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 bg-green-600 rounded"></div>
+          <span>In Stock - Same Day (Branch/DC)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 bg-yellow-500 rounded"></div>
+          <span>Available - Other Locations</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 bg-red-600 rounded"></div>
+          <span>Special Order</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ===================================================================
+// PROFESSIONAL AI SEARCH LOADING COMPONENT
+// ===================================================================
+const AISearchLoading = ({ searchTerm }: { searchTerm: string }) => {
+  const [currentStep, setCurrentStep] = useState(0)
+  const [dots, setDots] = useState('')
+
+  const searchSteps = [
+    {
+      icon: <Brain className="w-6 h-6" />,
+      title: "AI Analyzing Request",
+      desc: "Understanding your product needs with advanced AI",
+      color: "from-purple-500 to-blue-500"
+    },
+    {
+      icon: <Database className="w-6 h-6" />,
+      title: "Searching Your Database",
+      desc: "Scanning your private inventory system securely",
+      color: "from-blue-500 to-cyan-500"
+    },
+    {
+      icon: <Filter className="w-6 h-6" />,
+      title: "Applying Smart Filters",
+      desc: "Filtering results with electrical expertise",
+      color: "from-cyan-500 to-green-500"
+    },
+    {
+      icon: <Sparkles className="w-6 h-6" />,
+      title: "Optimizing Results",
+      desc: "Ranking products by relevance and availability",
+      color: "from-green-500 to-yellow-500"
+    }
+  ]
+
+  useEffect(() => {
+    const stepInterval = setInterval(() => {
+      setCurrentStep(prev => (prev + 1) % searchSteps.length)
+    }, 1500)
+
+    const dotsInterval = setInterval(() => {
+      setDots(prev => prev.length >= 3 ? '' : prev + '.')
+    }, 500)
+
+    return () => {
+      clearInterval(stepInterval)
+      clearInterval(dotsInterval)
+    }
+  }, [])
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 transform animate-pulse">
+        {/* Header */}
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse">
+            <Brain className="w-8 h-8 text-white" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900">Plectic AI Working</h2>
+          <p className="text-sm text-gray-600 mt-1">Searching for: "{searchTerm}"</p>
+        </div>
+
+        {/* Current Step */}
+        <div className="mb-6">
+          <div className={`w-full h-20 bg-gradient-to-r ${searchSteps[currentStep].color} rounded-xl flex items-center justify-center text-white relative overflow-hidden`}>
+            <div className="absolute inset-0 bg-white bg-opacity-20 animate-pulse"></div>
+            <div className="relative z-10 flex items-center gap-3">
+              {searchSteps[currentStep].icon}
+              <div>
+                <div className="font-semibold">{searchSteps[currentStep].title}{dots}</div>
+                <div className="text-xs opacity-90">{searchSteps[currentStep].desc}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Progress Steps */}
+        <div className="space-y-3 mb-6">
+          {searchSteps.map((step, index) => (
+            <div key={index} className={`flex items-center gap-3 p-2 rounded-lg transition-all duration-500 ${
+              index === currentStep ? 'bg-blue-50 border border-blue-200' : 
+              index < currentStep ? 'bg-green-50 border border-green-200' : 
+              'bg-gray-50 border border-gray-200'
+            }`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-500 ${
+                index === currentStep ? 'bg-blue-600 text-white animate-pulse' : 
+                index < currentStep ? 'bg-green-600 text-white' : 
+                'bg-gray-300 text-gray-600'
+              }`}>
+                {index < currentStep ? <CheckCircle className="w-4 h-4" /> :
+                 index === currentStep ? <Activity className="w-4 h-4" /> :
+                 <div className="w-2 h-2 bg-current rounded-full"></div>}
+              </div>
+              <div className="flex-1">
+                <div className={`text-sm font-medium ${
+                  index === currentStep ? 'text-blue-700' : 
+                  index < currentStep ? 'text-green-700' : 
+                  'text-gray-500'
+                }`}>
+                  {step.title}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Security Notice */}
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-green-600" />
+            <span className="text-sm font-medium text-green-700">Secure & Private</span>
+          </div>
+          <p className="text-xs text-green-600 mt-1">
+            Your data stays in your database. We never search the internet or share your information.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Main Component
 export default function PlecticAI() {
   const [messages, setMessages] = useState<Message[]>([])
@@ -90,14 +561,8 @@ export default function PlecticAI() {
   const [lastSearchTime, setLastSearchTime] = useState<number>(0)
   const [aiAnalysis, setAiAnalysis] = useState<AISearchAnalysis | null>(null)
   const [recentSearches, setRecentSearches] = useState<string[]>([])
-  const [popularSearches] = useState<string[]>([
-    'Cat 5e plenum blue',
-    '24 LC connectors OM4',
-    'Cat 6 riser cable',
-    '12 fiber OM3 cable',
-    'SC connectors multimode',
-    'Cat 6A shielded cable'
-  ])
+  const [popularSearches] = useState<string[]>(getUpdatedPopularSearches())
+  const [currentSearchTerm, setCurrentSearchTerm] = useState('')
 
   // Smart Filter States
   const [activeFilters, setActiveFilters] = useState<{[key: string]: string}>({})
@@ -107,6 +572,53 @@ export default function PlecticAI() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  // ENHANCED ADD TO LIST FUNCTION
+  const addToList = (product: Product, customQuantity?: number) => {
+    const quantityToAdd = customQuantity || aiAnalysis?.detectedSpecs?.requestedQuantity || 1
+
+    console.log(`📦 Adding to list:`, {
+      product: product.partNumber,
+      customQuantity,
+      aiDetectedQuantity: aiAnalysis?.detectedSpecs?.requestedQuantity,
+      finalQuantity: quantityToAdd
+    })
+
+    setProductList(prev => {
+      const existing = prev.find(item => item.id === product.id)
+      if (existing) {
+        return prev.map(item =>
+          item.id === product.id
+            ? { ...item, quantity: item.quantity + quantityToAdd }
+            : item
+        )
+      }
+      return [...prev, { ...product, quantity: quantityToAdd, addedAt: new Date() }]
+    })
+  }
+
+  // Quantity Detection Indicator Component
+  const QuantityDetectionIndicator = ({ aiAnalysis }: { aiAnalysis: any }) => {
+    const detectedQuantity = aiAnalysis?.detectedSpecs?.requestedQuantity
+
+    if (!detectedQuantity) return null
+
+    return (
+      <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-green-600 rounded-full flex items-center justify-center">
+            <span className="text-white text-xs">✓</span>
+          </div>
+          <span className="text-sm font-medium text-green-700">
+            Quantity Detected: {detectedQuantity.toLocaleString()} {detectedQuantity >= 100 ? 'ft' : 'units'}
+          </span>
+        </div>
+        <p className="text-xs text-green-600 mt-1">
+          Click "Add" buttons to automatically add this quantity to your list
+        </p>
+      </div>
+    )
+  }
 
   // Load recent searches on component mount
   useEffect(() => {
@@ -123,119 +635,6 @@ export default function PlecticAI() {
     localStorage.setItem('plectic_recent_searches', JSON.stringify(updated))
   }
 
-  // DEBUG FUNCTION - This will help us see your database structure
-  const debugDatabase = async () => {
-    console.log('🔍 DEBUGGING DATABASE STRUCTURE...')
-
-    try {
-      // Check products table
-      console.log('📋 Checking PRODUCTS table...')
-      const productsResult = await supabase
-        .from('products')
-        .select('*')
-        .limit(3)
-
-      console.log('Products table sample:', productsResult.data)
-      console.log('Products error:', productsResult.error)
-
-      if (productsResult.data?.[0]) {
-        console.log('Products columns:', Object.keys(productsResult.data[0]))
-      }
-
-      // Check category_cables table (we know this works)
-      console.log('📋 Checking CATEGORY_CABLES table...')
-      const categoryResult = await supabase
-        .from('category_cables')
-        .select('*')
-        .limit(3)
-
-      console.log('Category cables sample:', categoryResult.data)
-      if (categoryResult.data?.[0]) {
-        console.log('Category cables columns:', Object.keys(categoryResult.data[0]))
-      }
-
-      // Check product_search table
-      console.log('📋 Checking PRODUCT_SEARCH table...')
-      const searchResult = await supabase
-        .from('product_search')
-        .select('*')
-        .limit(3)
-
-      console.log('Product search sample:', searchResult.data)
-      if (searchResult.data?.[0]) {
-        console.log('Product search columns:', Object.keys(searchResult.data[0]))
-      }
-
-      // Search for connectors in products table
-      console.log('🔌 Searching for CONNECTORS in products table...')
-      const connectorResult = await supabase
-        .from('products')
-        .select('*')
-        .ilike('short_description', '%connector%')
-        .limit(5)
-
-      console.log('Connectors found in products table:', connectorResult.data?.length || 0)
-      if (connectorResult.data?.[0]) {
-        console.log('Connector sample:', connectorResult.data[0])
-      }
-
-      // Search for connectors in product_search table
-      console.log('🔌 Searching for CONNECTORS in product_search table...')
-      const connectorSearchResult = await supabase
-        .from('product_search')
-        .select('*')
-        .ilike('short_description', '%connector%')
-        .limit(5)
-
-      console.log('Connectors found in product_search table:', connectorSearchResult.data?.length || 0)
-      if (connectorSearchResult.data?.[0]) {
-        console.log('Product_search connector sample:', connectorSearchResult.data[0])
-      }
-
-      // Search for OM4
-      console.log('🌈 Searching for OM4 in products table...')
-      const om4Result = await supabase
-        .from('products')
-        .select('*')
-        .or('short_description.ilike.%OM4%,part_number.ilike.%OM4%')
-        .limit(5)
-
-      console.log('OM4 found in products table:', om4Result.data?.length || 0)
-      if (om4Result.data?.[0]) {
-        console.log('OM4 sample:', om4Result.data[0])
-      }
-
-      // Search for OM4 in product_search
-      console.log('🌈 Searching for OM4 in product_search table...')
-      const om4SearchResult = await supabase
-        .from('product_search')
-        .select('*')
-        .or('short_description.ilike.%OM4%,part_number.ilike.%OM4%')
-        .limit(5)
-
-      console.log('OM4 found in product_search table:', om4SearchResult.data?.length || 0)
-      if (om4SearchResult.data?.[0]) {
-        console.log('Product_search OM4 sample:', om4SearchResult.data[0])
-      }
-
-      // Search for LC connectors specifically
-      console.log('🔌 Searching for LC connectors...')
-      const lcResult = await supabase
-        .from('product_search')
-        .select('*')
-        .or('short_description.ilike.%LC%,part_number.ilike.%LC%')
-        .limit(5)
-
-      console.log('LC found in product_search table:', lcResult.data?.length || 0)
-      if (lcResult.data?.[0]) {
-        console.log('LC connector sample:', lcResult.data[0])
-      }
-
-    } catch (error) {
-      console.error('❌ Database debug error:', error)
-    }
-  }
-
   // Generate Smart Filters from Products
   const generateSmartFilters = (products: Product[], productType: string): SmartFilters => {
     const brands = Array.from(new Set(products.map(p => p.brand).filter((item): item is string => Boolean(item))))
@@ -245,14 +644,13 @@ export default function PlecticAI() {
     const connectorTypes = Array.from(new Set(products.map(p => p.connectorType).filter((item): item is string => Boolean(item))))
     const categoryRatings = Array.from(new Set(products.map(p => p.categoryRating).filter((item): item is string => Boolean(item))))
     const colors = Array.from(new Set(products.map(p => {
-      // Extract color from description
       const desc = p.description?.toLowerCase() || ''
       const colorWords = ['blue', 'red', 'green', 'yellow', 'orange', 'white', 'black', 'gray', 'grey', 'purple', 'pink', 'violet', 'brown']
       return colorWords.find(color => desc.includes(color))
     }).filter((item): item is string => Boolean(item))))
 
     return {
-      brands: brands.slice(0, 8), // Show top 8
+      brands: brands.slice(0, 8),
       packagingTypes: packagingTypes.slice(0, 6),
       jacketRatings: jacketRatings.slice(0, 4),
       fiberTypes: fiberTypes.slice(0, 4),
@@ -268,16 +666,13 @@ export default function PlecticAI() {
     const newFilters = { ...activeFilters }
 
     if (newFilters[filterType] === value) {
-      // Remove filter if clicking the same one
       delete newFilters[filterType]
     } else {
-      // Apply new filter
       newFilters[filterType] = value
     }
 
     setActiveFilters(newFilters)
 
-    // Filter products based on active filters
     let filtered = currentProducts
 
     Object.entries(newFilters).forEach(([type, filterValue]) => {
@@ -356,387 +751,780 @@ export default function PlecticAI() {
     }
   }
 
-  // Local Query Enhancement
-  const enhanceQuery = async (query: string) => {
-    try {
-      const enhancement = {
-        originalQuery: query,
-        enhancedQuery: query,
-        suggestedFilters: [],
-        detectedTerms: {} as any,
-        confidence: 0.8
+  // =============================================================================
+  // SEARCH FUNCTIONS
+  // =============================================================================
+
+  // Determine Target Table Based on AI Analysis
+  const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: string) => {
+    const query = searchTerm.toLowerCase()
+
+    // Use AI analysis FIRST if available and confident
+    if (aiAnalysis && aiAnalysis.confidence > 0.8) {
+      console.log(`🤖 Using AI analysis (confidence: ${aiAnalysis.confidence})`)
+
+      if (aiAnalysis.productType === 'PANEL' || aiAnalysis.searchStrategy === 'panels') {
+        console.log('🤖 AI detected: ADAPTER PANELS')
+        return 'adapter_panels'
       }
 
-      console.log('🔍 Analyzing query:', query)
-
-      // Detect fiber types
-      const fiberTypes = ['OM4', 'OM3', 'OM2', 'OM1', 'OS2', 'OS1']
-      const foundFiberType = fiberTypes.find(type => {
-        const regex = new RegExp(`\\b${type}\\b`, 'i')
-        return regex.test(query)
-      })
-      if (foundFiberType) {
-        enhancement.detectedTerms.fiberType = foundFiberType
-        console.log('🌈 Detected fiber type:', foundFiberType)
+      if (aiAnalysis.productType === 'CONNECTOR' || aiAnalysis.searchStrategy === 'connectors') {
+        console.log('🤖 AI detected: FIBER CONNECTORS')
+        return 'fiber_connectors'
       }
 
-      // Detect category ratings
-      const categoryRatings = ['CAT5E', 'CAT6A', 'CAT6', 'CAT5', 'CAT7', 'CAT8']
-      const queryNormalized = query.toUpperCase().replace(/\s+/g, ' ').replace(/CATEGORY\s+/g, 'CAT')
-
-      const foundCategoryRating = categoryRatings.find(rating => {
-        if (rating === 'CAT5' && (queryNormalized.includes('CAT 5') || queryNormalized.includes('CAT5')) && !queryNormalized.includes('CAT5E')) return true
-        if (rating === 'CAT5E' && (queryNormalized.includes('CAT 5E') || queryNormalized.includes('CAT5E'))) return true
-        if (rating === 'CAT6' && (queryNormalized.includes('CAT 6') || queryNormalized.includes('CAT6')) && !queryNormalized.includes('CAT6A')) return true
-        if (rating === 'CAT6A' && (queryNormalized.includes('CAT 6A') || queryNormalized.includes('CAT6A'))) return true
-        return queryNormalized.includes(rating)
-      })
-
-      if (foundCategoryRating) {
-        enhancement.detectedTerms.categoryRating = foundCategoryRating.replace('CATEGORY ', 'CAT')
-      }
-
-      // Detect jacket ratings
-      const jacketRatings = ['CMP', 'CMR', 'CMG', 'LSZH', 'OFNP', 'OFNR', 'OFNG', 'PLENUM', 'RISER']
-      const foundJacketRating = jacketRatings.find(rating =>
-        query.toUpperCase().includes(rating)
-      )
-      if (foundJacketRating) {
-        enhancement.detectedTerms.jacketRating = foundJacketRating === 'PLENUM' ? 'CMP' : foundJacketRating
-      }
-
-      // Detect colors
-      const colors = ['BLUE', 'RED', 'GREEN', 'YELLOW', 'ORANGE', 'WHITE', 'BLACK', 'GRAY', 'GREY', 'PURPLE', 'PINK', 'VIOLET', 'BROWN']
-      const foundColor = colors.find(color =>
-        query.toUpperCase().includes(color)
-      )
-      if (foundColor) {
-        enhancement.detectedTerms.color = foundColor === 'GREY' ? 'GRAY' : foundColor
-        console.log('🎨 Detected color:', enhancement.detectedTerms.color)
-      }
-
-      // Detect fiber count
-      const fiberCountPatterns = [
-        /(\d+)\s*(?:fiber|count|strand)/i,
-        /(\d+)\s+(?:LC|SC|ST|FC|MTP|MPO)/i,
-        /(\d+)\s+(?:connector|connectors)/i,
-        /(\d+)\s*(?:F|f)\b/i,
-        /(\d+)[-\s]*(?:way|port)/i
-      ]
-
-      let detectedCount = null
-      for (const pattern of fiberCountPatterns) {
-        const match = query.match(pattern)
-        if (match) {
-          detectedCount = parseInt(match[1])
-          console.log(`📊 Detected fiber count: ${detectedCount}`)
-          break
+      if (aiAnalysis.productType === 'CABLE' || aiAnalysis.searchStrategy === 'cables') {
+        console.log('🤖 AI detected: CABLES')
+        // Determine if fiber or category cable
+        if (aiAnalysis.detectedSpecs?.fiberType) {
+          console.log('🤖 AI detected: FIBER CABLES')
+          return 'fiber_cables'
+        } else if (aiAnalysis.detectedSpecs?.categoryRating) {
+          console.log('🤖 AI detected: CATEGORY CABLES')
+          return 'category_cables'
         }
       }
-
-      if (detectedCount) {
-        enhancement.detectedTerms.fiberCount = detectedCount
-      }
-
-      // Detect connector types
-      const connectorTypes = ['LC', 'SC', 'ST', 'FC', 'MTP', 'MPO', 'RJ45', 'RJ-45']
-      const foundConnectorType = connectorTypes.find(type =>
-        query.toUpperCase().includes(type)
-      )
-      if (foundConnectorType) {
-        enhancement.detectedTerms.connectorType = foundConnectorType
-      }
-
-      // Detect product types
-      const queryLower = query.toLowerCase()
-
-      if (queryLower.includes('connector') || queryLower.includes('connectors')) {
-        enhancement.detectedTerms.productType = 'CONNECTOR'
-        console.log('🔌 Detected product type: CONNECTOR')
-      }
-      else if (queryLower.includes('panel') || queryLower.includes('panels')) {
-        enhancement.detectedTerms.productType = 'PANEL'
-        console.log('🏠 Detected product type: PANEL')
-      }
-      else if (queryLower.includes('cable') || queryLower.includes('cables')) {
-        enhancement.detectedTerms.productType = 'CABLE'
-        console.log('🌈 Detected product type: CABLE')
-      }
-
-      return enhancement
-
-    } catch (error) {
-      console.error('Query enhancement error:', error)
-      return {
-        originalQuery: query,
-        enhancedQuery: query,
-        suggestedFilters: [],
-        detectedTerms: {},
-        confidence: 0.5
-      }
     }
+
+    // FALLBACK TO KEYWORD DETECTION
+    console.log('🔍 Using keyword detection fallback')
+
+    // FIBER OPTIC CABLES - HIGHEST PRIORITY (must come first)
+    const fiberTerms = ['fiber', 'fibre', 'om1', 'om2', 'om3', 'om4', 'om5', 'os1', 'os2', 'singlemode', 'multimode']
+    const hasFiberTerms = fiberTerms.some(term => query.includes(term))
+
+    if (hasFiberTerms && !query.includes('connector') && !query.includes('panel')) {
+      console.log('🌈 FIBER TERMS DETECTED - Looking for fiber optic cables')
+      console.log('🔍 Detected fiber terms:', fiberTerms.filter(term => query.includes(term)))
+      return 'fiber_cables'
+    }
+
+    // Adapter panel indicators (check before general connector search)
+    if (query.includes('adapter panel') || query.includes('patch panel') ||
+        query.includes('fiber panel') ||
+        (query.includes('panel') && (hasFiberTerms || query.includes('adapter')))) {
+      console.log('🏠 PANEL KEYWORDS DETECTED - Looking for adapter panels')
+      return 'adapter_panels'
+    }
+
+    // Individual fiber connector indicators
+    if (query.includes('connector') && !query.includes('panel') ||
+        query.includes(' lc ') || query.includes(' sc ') || query.includes(' st ') ||
+        query.includes('unicam') || query.includes('corning')) {
+      console.log('🔌 CONNECTOR KEYWORDS DETECTED - Looking for fiber connectors')
+      return 'fiber_connectors'
+    }
+
+    // Category cable indicators (Cat5, Cat6, plenum, riser) - BUT NOT if fiber is mentioned
+    if (!hasFiberTerms && (
+        aiAnalysis?.detectedSpecs?.categoryRating ||
+        query.includes('cat') || query.includes('category') ||
+        query.includes('utp') || query.includes('stp') ||
+        query.includes('ethernet') || query.includes('network cable'))) {
+      console.log('🌐 CATEGORY CABLE KEYWORDS DETECTED')
+      return 'category_cables'
+    }
+
+    // Plenum/Riser only go to category cables if no fiber mentioned
+    if (!hasFiberTerms && (query.includes('plenum') || query.includes('riser'))) {
+      console.log('🧥 JACKET KEYWORDS DETECTED - Looking for category cables')
+      return 'category_cables'
+    }
+
+    // General panels/housings (products table)
+    if (query.includes('housing') || query.includes('enclosure') ||
+        query.includes('cch') || query.includes('dmsi')) {
+      console.log('🏠 HOUSING KEYWORDS DETECTED - Looking in products table')
+      return 'products_panels'
+    }
+
+    // Default to multi-table search for complex queries
+    console.log('🚀 Using multi-table search fallback')
+    return 'multi_table'
   }
 
-  // ENHANCED SEARCH with Smart Filters
-  const searchProducts = async (searchTerm: string): Promise<{ products: Product[], searchTime: number, searchType: string, aiAnalysis?: AISearchAnalysis }> => {
+  // PRECISE JACKET FILTERING - searchCategoryCables
+  const searchCategoryCables = async (aiAnalysis: AISearchAnalysis | null, searchTerm: string) => {
+    console.log('🌐 CATEGORY CABLES SEARCH (838 products)')
+    console.log('🤖 AI Analysis:', aiAnalysis?.detectedSpecs)
+
+    // Step 1: Get a broader set of results from database
+    let query = supabase
+      .from('category_cables')
+      .select('*')
+      .eq('is_active', true)
+      .limit(100)
+
+    // Use broad database search for category
+    if (aiAnalysis?.detectedSpecs?.categoryRating) {
+      const catRating = aiAnalysis.detectedSpecs.categoryRating
+      console.log(`🏷️ AI detected category: ${catRating}`)
+
+      if (catRating === 'CAT6') {
+        query = query.or(`category_rating.ilike.%Category 6%,category_rating.ilike.%Cat 6%`)
+      } else if (catRating === 'CAT6A') {
+        query = query.or(`category_rating.ilike.%Category 6A%,category_rating.ilike.%Cat 6A%`)
+      } else if (catRating === 'CAT5E') {
+        query = query.or(`category_rating.ilike.%Category 5e%,category_rating.ilike.%Cat 5e%`)
+      } else if (catRating === 'CAT5') {
+        query = query.or(`category_rating.ilike.%Category 5%,category_rating.ilike.%Cat 5%`)
+      }
+    } else {
+      query = query.ilike('category_rating', '%Category%')
+    }
+
+    console.log('🚀 Executing broad database query...')
+    const result = await query
+
+    console.log(`📊 Database result: ${result.data?.length || 0} products found`)
+
+    if (!result.data || result.data.length === 0) {
+      console.log('❌ No results found in category_cables')
+      return []
+    }
+
+    // Step 2: Apply precise filtering with jacket classifications
+    let filteredResults = result.data
+
+    // Filter for specific category (exact match)
+    if (aiAnalysis?.detectedSpecs?.categoryRating) {
+      const targetCategory = aiAnalysis.detectedSpecs.categoryRating
+      const beforeCount = filteredResults.length
+
+      filteredResults = filteredResults.filter(item => {
+        const category = item.category_rating?.toLowerCase() || ''
+
+        if (targetCategory === 'CAT6') {
+          return (category.includes('category 6') || category.includes('cat 6')) &&
+                 !category.includes('6a')
+        } else if (targetCategory === 'CAT6A') {
+          return category.includes('6a')
+        } else if (targetCategory === 'CAT5E') {
+          return category.includes('5e')
+        } else if (targetCategory === 'CAT5') {
+          return category.includes('category 5') && !category.includes('5e')
+        }
+        return true
+      })
+
+      console.log(`🎯 Category filter (${targetCategory}): ${beforeCount} → ${filteredResults.length} products`)
+    }
+
+    // PRECISE jacket filtering based on classifications
+    if (aiAnalysis?.detectedSpecs?.jacketRating) {
+      const targetJacket = aiAnalysis.detectedSpecs.jacketRating
+      const beforeCount = filteredResults.length
+
+      filteredResults = filteredResults.filter(item => {
+        const jacket = item.jacket_material?.toLowerCase() || ''
+        const description = item.short_description?.toLowerCase() || ''
+
+        console.log(`🔍 Checking jacket: "${jacket}" for target: ${targetJacket}`)
+
+        if (targetJacket === 'CMP' || targetJacket === 'PLENUM') {
+          // ONLY plenum/CMP - exclude riser/CMR
+          const isPlenum = jacket.includes('plenum') || jacket.includes('cmp') || description.includes('plenum')
+          const isRiser = jacket.includes('riser') || jacket.includes('cmr') || description.includes('riser')
+
+          // Must be plenum AND NOT riser
+          return isPlenum && !isRiser
+
+        } else if (targetJacket === 'CMR' || targetJacket === 'RISER') {
+          // ONLY riser/CMR/non-plenum - exclude plenum
+          const isRiser = jacket.includes('riser') || jacket.includes('cmr') || description.includes('riser')
+          const isPlenum = jacket.includes('plenum') || jacket.includes('cmp') || description.includes('plenum')
+
+          // Must be riser AND NOT plenum
+          return isRiser && !isPlenum
+
+        } else if (targetJacket === 'OUTDOOR' || targetJacket === 'OSP') {
+          // Outside plant/outdoor/water resistant/gel filled
+          return jacket.includes('outdoor') || jacket.includes('osp') ||
+                 jacket.includes('outside') || jacket.includes('plant') ||
+                 jacket.includes('water') || jacket.includes('gel') ||
+                 description.includes('outdoor') || description.includes('gel')
+
+        } else if (targetJacket === 'INDOOR_OUTDOOR') {
+          // Indoor/outdoor rated
+          return (jacket.includes('indoor') && jacket.includes('outdoor')) ||
+                 description.includes('indoor/outdoor')
+        }
+
+        return true
+      })
+
+      console.log(`🧥 Jacket filter (${targetJacket}): ${beforeCount} → ${filteredResults.length} products`)
+    }
+
+    // Filter for specific color
+    if (aiAnalysis?.detectedSpecs?.color) {
+      const targetColor = aiAnalysis.detectedSpecs.color.toLowerCase()
+      const beforeCount = filteredResults.length
+
+      filteredResults = filteredResults.filter(item => {
+        const color = item.jacket_color?.toLowerCase() || ''
+        return color.includes(targetColor)
+      })
+
+      console.log(`🎨 Color filter (${targetColor}): ${beforeCount} → ${filteredResults.length} products`)
+    }
+
+    // Show final results
+    if (filteredResults.length > 0) {
+      return filteredResults.map((item: any) => ({
+        id: `cat-${item.id}`,
+        partNumber: item.part_number || 'No Part Number',
+        brand: item.brand || 'Unknown Brand',
+        description: item.short_description || 'No description available',
+        price: Math.random() * 150 + 50,
+        stockLocal: 25,
+        stockDistribution: 100,
+        leadTime: 'Ships Today',
+        category: 'Category Cable',
+        categoryRating: item.category_rating,
+        jacketRating: item.jacket_material?.includes('Plenum') ? 'CMP' :
+                     item.jacket_material?.includes('Riser') ? 'CMR' :
+                     item.jacket_material,
+        color: item.jacket_color,
+        packagingType: item.packaging_type,
+        searchRelevance: 1.0,
+        tableName: 'category_cables',
+        stockStatus: 'not_in_stock',
+        stockColor: 'red',
+        stockMessage: 'Not currently in stock - contact for availability'
+      }))
+    }
+
+    console.log('❌ No products match all criteria')
+    return []
+  }
+
+  // FIBER CONNECTORS SEARCH
+  const searchFiberConnectors = async (aiAnalysis: AISearchAnalysis | null, searchTerm: string) => {
+    console.log('🔌 FIBER CONNECTORS SEARCH')
+
+    let query = supabase
+      .from('fiber_connectors')
+      .select('*')
+      .eq('is_active', true)
+      .limit(20)
+
+    let hasFilters = false
+
+    // Filter by connector type first
+    if (aiAnalysis?.detectedSpecs?.connectorType) {
+      const connType = aiAnalysis.detectedSpecs.connectorType
+      query = query.ilike('connector_type', `%${connType}%`)
+      hasFilters = true
+      console.log(`🔌 AI detected connector: ${connType} - applying filter`)
+    }
+
+    // Then filter by fiber type
+    if (aiAnalysis?.detectedSpecs?.fiberType) {
+      const fiberType = aiAnalysis.detectedSpecs.fiberType
+      query = query.ilike('fiber_category', `%${fiberType}%`)
+      hasFilters = true
+      console.log(`🌈 AI detected fiber type: ${fiberType} - applying filter`)
+    }
+
+    // If no AI filters, fall back to text search
+    if (!hasFilters) {
+      query = query.or(`short_description.ilike.%${searchTerm}%,part_number.ilike.%${searchTerm}%,brand.ilike.%${searchTerm}%`)
+      console.log(`🔍 No AI filters, using text search for: ${searchTerm}`)
+    }
+
+    const result = await query
+
+    if (result.data && result.data.length > 0) {
+      return result.data.map((item: any) => ({
+        id: `conn-${item.id}`,
+        partNumber: item.part_number || 'No Part Number',
+        brand: item.brand || 'Unknown Brand',
+        description: item.short_description || 'No description available',
+        price: Math.random() * 50 + 15,
+        stockLocal: 15,
+        stockDistribution: 100,
+        leadTime: 'Ships Today',
+        category: 'Fiber Connector',
+        connectorType: item.connector_type,
+        fiberType: Array.isArray(item.fiber_category) ? item.fiber_category.join(', ') : item.fiber_category,
+        fiberCount: item.fiber_count,
+        searchRelevance: 1.0,
+        tableName: 'fiber_connectors',
+        stockStatus: 'not_in_stock',
+        stockColor: 'red',
+        stockMessage: 'Not currently in stock - contact for availability'
+      }))
+    }
+
+    return []
+  }
+
+  // ADAPTER PANELS SEARCH
+  const searchAdapterPanels = async (aiAnalysis: AISearchAnalysis | null, searchTerm: string) => {
+    console.log('🏠 ADAPTER PANELS SEARCH')
+    console.log('🤖 AI Analysis:', aiAnalysis?.detectedSpecs)
+
+    let query = supabase
+      .from('adapter_panels')
+      .select('*')
+      .eq('is_active', true)
+      .limit(50) // Increased limit for better results
+
+    const searchConditions = []
+
+    // FIBER TYPE (OM1, OM2, OM3, OM4, etc.) - MOST IMPORTANT
+    if (aiAnalysis?.detectedSpecs?.fiberType) {
+      const fiberType = aiAnalysis.detectedSpecs.fiberType
+      console.log(`🌈 AI detected fiber type: ${fiberType}`)
+      searchConditions.push(`fiber_category.ilike.%${fiberType}%`)
+      searchConditions.push(`short_description.ilike.%${fiberType}%`)
+    }
+
+    // Fiber count
+    if (aiAnalysis?.detectedSpecs?.fiberCount) {
+      const fiberCount = aiAnalysis.detectedSpecs.fiberCount
+      console.log(`📊 AI detected fiber count: ${fiberCount}`)
+      searchConditions.push(`fiber_count.eq.${fiberCount}`)
+    }
+
+    // Connector type
+    if (aiAnalysis?.detectedSpecs?.connectorType) {
+      const connType = aiAnalysis.detectedSpecs.connectorType
+      console.log(`🔌 AI detected connector: ${connType}`)
+      searchConditions.push(`connector_type.ilike.%${connType}%`)
+    }
+
+    // If we have AI-detected specs, use them
+    if (searchConditions.length > 0) {
+      query = query.or(searchConditions.join(','))
+      console.log(`🎯 Using AI-detected specs: ${searchConditions.length} conditions`)
+    } else {
+      // Fallback: Search for panel-related terms
+      const panelTerms = ['adapter', 'panel', 'patch', 'fiber']
+      const panelConditions = panelTerms.map(term =>
+        `short_description.ilike.%${term}%`
+      ).join(',')
+      query = query.or(`${panelConditions},part_number.ilike.%${searchTerm}%,brand.ilike.%${searchTerm}%`)
+      console.log('🔍 Using fallback panel search terms')
+    }
+
+    console.log('🚀 Executing adapter panel query...')
+    const result = await query
+
+    console.log(`📊 Adapter panel result: ${result.data?.length || 0} products found`)
+
+    if (result.data && result.data.length > 0) {
+      // Log what we found for debugging
+      console.log('🏠 Found adapter panels:', result.data.slice(0, 3).map(item => ({
+        part: item.part_number,
+        connector: item.connector_type,
+        fiber: item.fiber_category,
+        count: item.fiber_count,
+        description: item.short_description?.substring(0, 50) + '...'
+      })))
+
+      return result.data.map((item: any) => ({
+        id: `panel-${item.id}`,
+        partNumber: item.part_number || 'No Part Number',
+        brand: item.brand || 'Unknown Brand',
+        description: item.short_description || 'No description available',
+        price: Math.random() * 200 + 75,
+        stockLocal: 10,
+        stockDistribution: 100,
+        leadTime: 'Ships Today',
+        category: 'Adapter Panel',
+        connectorType: item.connector_type,
+        fiberType: item.fiber_category, // Add this for display
+        fiberCount: item.fiber_count,
+        searchRelevance: 1.0,
+        tableName: 'adapter_panels',
+        stockStatus: 'not_in_stock',
+        stockColor: 'red',
+        stockMessage: 'Not currently in stock - contact for availability'
+      }))
+    }
+
+    console.log('❌ No adapter panels found')
+    return []
+  }
+
+  // FIBER OPTIC CABLES SEARCH
+  const searchFiberCables = async (aiAnalysis: AISearchAnalysis | null, searchTerm: string) => {
+    console.log('🌈 FIBER OPTIC CABLES SEARCH - CABLES ONLY')
+
+    let query = supabase
+      .from('products')
+      .select('*')
+      .eq('is_active', true)
+      .limit(50)
+
+    const cableTerms = [
+      'loose tube', 'tight buffer', 'tight buffered',
+      'armored', 'outdoor', 'indoor/outdoor', 'plenum',
+      'riser', 'burial', 'underground', 'aerial',
+      'water block', 'gel filled', 'stranded',
+      'breakout', 'distribution', 'backbone'
+    ]
+
+    const excludeTerms = [
+      'adapter panel', 'panel', 'connector', 'adapter',
+      'enclosure', 'housing', 'patch', 'pigtail',
+      'jumper', 'coupler', 'splice'
+    ]
+
+    // Check for specific fiber types in the search term
+    const queryLower = searchTerm.toLowerCase()
+    const fiberTypes = ['om1', 'om2', 'om3', 'om4', 'om5', 'os1', 'os2']
+    const detectedFiberType = fiberTypes.find(type => queryLower.includes(type))
+
+    // Add AI detected fiber type OR detected fiber type from search term
+    if (aiAnalysis?.detectedSpecs?.fiberType || detectedFiberType) {
+      const fiberType = aiAnalysis?.detectedSpecs?.fiberType || detectedFiberType
+      console.log(`🌈 Searching for fiber type: ${fiberType}`)
+      query = query.or(`short_description.ilike.%${fiberType}%,fiber_type_standard.ilike.%${fiberType}%`)
+    } else {
+      const cableConditions = cableTerms.map(term =>
+        `short_description.ilike.%${term}%`
+      ).join(',')
+      // Also search for general fiber terms
+      const fiberConditions = fiberTypes.map(type =>
+        `short_description.ilike.%${type}%`
+      ).join(',')
+      query = query.or(`${cableConditions},${fiberConditions}`)
+      console.log('🔍 Searching for fiber cables with cable-specific terms and fiber types')
+    }
+
+    console.log('🚀 Executing fiber cable query...')
+    const result = await query
+
+    console.log(`📊 Initial fiber result: ${result.data?.length || 0} products found`)
+
+    if (result.data && result.data.length > 0) {
+      const cableProducts = result.data.filter(item => {
+        const description = item.short_description?.toLowerCase() || ''
+
+        const hasCableTerms = cableTerms.some(term => description.includes(term.toLowerCase()))
+        const hasExcludeTerms = excludeTerms.some(term => description.includes(term.toLowerCase()))
+        const hasFiberCount = /\d+\s*fiber/i.test(description)
+        const hasCableWords = description.includes('cable') || description.includes('cord')
+        const hasFiberTypes = fiberTypes.some(type => description.includes(type))
+
+        // It's a cable if: (has cable terms OR fiber count OR cable words OR fiber types) AND doesn't have exclude terms
+        return (hasCableTerms || hasFiberCount || hasCableWords || hasFiberTypes) && !hasExcludeTerms
+      })
+
+      console.log(`📊 After cable filtering: ${cableProducts.length} actual cables found`)
+
+      if (cableProducts.length > 0) {
+        console.log('🌈 Found fiber CABLES:', cableProducts.slice(0, 3).map(item => ({
+          part: item.part_number,
+          description: item.short_description?.substring(0, 70) + '...'
+        })))
+
+        return cableProducts.map((item: any) => ({
+          id: `fiber-${item.id}`,
+          partNumber: item.part_number || 'No Part Number',
+          brand: 'Fiber Brand',
+          description: item.short_description || 'No description available',
+          price: parseFloat(item.unit_price) || (Math.random() * 500 + 200),
+          stockLocal: item.stock_quantity || 0,
+          stockDistribution: 100,
+          leadTime: 'Ships Today',
+          category: 'Fiber Optic Cable',
+          fiberType: detectedFiberType || aiAnalysis?.detectedSpecs?.fiberType || 'Fiber',
+          searchRelevance: 1.0,
+          tableName: 'fiber_cables',
+          stockStatus: 'not_in_stock',
+          stockColor: 'red',
+          stockMessage: 'Not currently in stock - contact for availability'
+        }))
+      }
+    }
+
+    console.log('❌ No fiber optic CABLES found')
+    return []
+  }
+
+  const searchPanelsAndAdapters = async (aiAnalysis: AISearchAnalysis | null, searchTerm: string) => {
+    console.log('🏠 PRODUCTS TABLE SEARCH (panels/housings)')
+
+    let query = supabase
+      .from('products')
+      .select('*')
+      .eq('is_active', true)
+      .limit(20)
+
+    const searchConditions = []
+
+    if (aiAnalysis?.detectedSpecs?.fiberCount) {
+      searchConditions.push(`fiber_count.eq.${aiAnalysis.detectedSpecs.fiberCount}`)
+    }
+
+    if (aiAnalysis?.detectedSpecs?.connectorType) {
+      const connType = aiAnalysis.detectedSpecs.connectorType
+      searchConditions.push(`connector_type_standard.ilike.%${connType}%`)
+    }
+
+    if (aiAnalysis?.detectedSpecs?.fiberType) {
+      searchConditions.push(`fiber_type_standard.eq.${aiAnalysis.detectedSpecs.fiberType}`)
+    }
+
+    if (searchConditions.length > 0) {
+      query = query.or(searchConditions.join(','))
+    } else {
+      query = query.or(`short_description.ilike.%${searchTerm}%,part_number.ilike.%${searchTerm}%`)
+    }
+
+    const result = await query
+
+    if (result.data && result.data.length > 0) {
+      return result.data.map((item: any) => ({
+        id: item.id,
+        partNumber: item.part_number || 'No Part Number',
+        brand: 'Brand Name',
+        description: item.short_description || 'No description available',
+        price: parseFloat(item.unit_price) || (Math.random() * 200 + 50),
+        stockLocal: item.stock_quantity || 0,
+        stockDistribution: 100,
+        leadTime: 'Ships Today',
+        category: 'Panel/Housing',
+        fiberType: item.fiber_type_standard,
+        connectorType: item.connector_type_standard,
+        fiberCount: item.fiber_count,
+        searchRelevance: 1.0,
+        tableName: 'products',
+        stockStatus: 'not_in_stock',
+        stockColor: 'red',
+        stockMessage: 'Not currently in stock - contact for availability'
+      }))
+    }
+
+    return []
+  }
+
+  // MULTI-TABLE FALLBACK SEARCH
+  const searchMultipleTables = async (aiAnalysis: AISearchAnalysis | null, searchTerm: string) => {
+    console.log('🚀 MULTI-TABLE SEARCH')
+
+    let allProducts: Product[] = []
+    const query = searchTerm.toLowerCase()
+
+    // Check for fiber terms more comprehensively
+    const fiberTerms = ['fiber', 'fibre', 'om1', 'om2', 'om3', 'om4', 'om5', 'os1', 'os2', 'singlemode', 'multimode']
+    const hasFiberTerms = fiberTerms.some(term => query.includes(term))
+
+    if (hasFiberTerms) {
+      console.log('🌈 Fiber terms detected in multi-table search - prioritizing fiber cables')
+      console.log('🔍 Detected fiber terms:', fiberTerms.filter(term => query.includes(term)))
+
+      const fiberResults = await searchFiberCables(aiAnalysis, searchTerm)
+      allProducts = [...allProducts, ...fiberResults]
+      console.log(`📊 Fiber cables found: ${fiberResults.length}`)
+
+      if (allProducts.length < 10) {
+        const connectorResults = await searchFiberConnectors(aiAnalysis, searchTerm)
+        allProducts = [...allProducts, ...connectorResults]
+        console.log(`📊 Fiber connectors found: ${connectorResults.length}`)
+      }
+
+      if (allProducts.length < 15) {
+        const adapterResults = await searchAdapterPanels(aiAnalysis, searchTerm)
+        allProducts = [...allProducts, ...adapterResults]
+        console.log(`📊 Adapter panels found: ${adapterResults.length}`)
+      }
+    } else {
+      // No fiber mentioned - try category cables first (largest table - 838 products)
+      console.log('🌐 No fiber terms - trying category cables first')
+      const categoryResults = await searchCategoryCables(aiAnalysis, searchTerm)
+      allProducts = [...allProducts, ...categoryResults]
+      console.log(`📊 Category cables found: ${categoryResults.length}`)
+
+      if (allProducts.length < 10) {
+        const connectorResults = await searchFiberConnectors(aiAnalysis, searchTerm)
+        allProducts = [...allProducts, ...connectorResults]
+        console.log(`📊 Fiber connectors found: ${connectorResults.length}`)
+      }
+
+      if (allProducts.length < 15) {
+        const adapterResults = await searchAdapterPanels(aiAnalysis, searchTerm)
+        allProducts = [...allProducts, ...adapterResults]
+        console.log(`📊 Adapter panels found: ${adapterResults.length}`)
+      }
+    }
+
+    // Try products table if still not enough
+    if (allProducts.length < 20) {
+      const productResults = await searchPanelsAndAdapters(aiAnalysis, searchTerm)
+      allProducts = [...allProducts, ...productResults]
+      console.log(`📊 Products table found: ${productResults.length}`)
+    }
+
+    console.log(`✅ Multi-table search completed: ${allProducts.length} total products`)
+    return allProducts
+  }
+
+  // ENHANCED MAIN SEARCH FUNCTION
+  const searchProducts = async (searchTerm: string): Promise<{ products: Product[], searchTime: number, searchType: string, aiAnalysis?: AISearchAnalysis, redirectMessage?: string }> => {
     const startTime = performance.now()
 
     try {
       console.log('🎯 ENHANCED SEARCH for:', searchTerm)
-      saveRecentSearch(searchTerm) // Save to recent searches
 
-      const enhancement = await enhanceQuery(searchTerm)
-      setAiAnalysis(enhancement as any)
-
-      let allProducts: Product[] = []
-      let searchStrategy = 'standard'
-
-      // Try the AI-powered search first
-      const aiAnalysis = await enhanceQueryWithAI(searchTerm)
-
-      if (aiAnalysis) {
-        console.log('🤖 Using AI analysis:', aiAnalysis)
+      // Step 1: Validate query first
+      const validation = validateElectricalQuery(searchTerm)
+      if (!validation.isValid) {
+        throw new Error(validation.message)
       }
 
-      // Category cable search with color filtering
-      if (enhancement.detectedTerms.categoryRating) {
-        console.log('🌐 CATEGORY CABLE SEARCH detected')
-        console.log(`🔍 Searching for: ${enhancement.detectedTerms.categoryRating} cables`)
+      // Step 2: Apply business rules (Cat5 → Cat5e)
+      const processedQuery = applyBusinessRules(searchTerm)
+      console.log('🔄 Query after business rules:', processedQuery.processedTerm)
 
-        // First try exact category match
-        let categoryQuery = supabase
-          .from('category_cables')
-          .select('*')
-          .eq('is_active', true)
-          .limit(50)
+      // Step 3: Check for part numbers FIRST
+      const partNumberDetection = detectPartNumbers(processedQuery.processedTerm)
 
-        const searchConditions = []
+      if (partNumberDetection.hasParts) {
+        console.log('🔢 PART NUMBER DETECTED - Using part number search')
+        console.log('📋 Part numbers found:', partNumberDetection.partNumbers)
 
-        // STRICT Category rating filter - handle multiple formats
-        if (enhancement.detectedTerms.categoryRating) {
-          const catRating = enhancement.detectedTerms.categoryRating
+        // Search by part number
+        const partResults = await searchByPartNumber(
+          partNumberDetection.partNumbers,
+          partNumberDetection.quantity
+        )
 
-          // Map AI detection to database format
-          let dbCategorySearch = catRating
-          if (catRating === 'CAT5') dbCategorySearch = 'Category 5'
-          if (catRating === 'CAT5E') dbCategorySearch = 'Category 5e'
-          if (catRating === 'CAT6') dbCategorySearch = 'Category 6'
-          if (catRating === 'CAT6A') dbCategorySearch = 'Category 6A'
-          if (catRating === 'CAT7') dbCategorySearch = 'Category 7'
-          if (catRating === 'CAT8') dbCategorySearch = 'Category 8'
+        if (partResults.length > 0) {
+          // Save to recent searches
+          saveRecentSearch(processedQuery.processedTerm)
 
-          // Try multiple variations
-          searchConditions.push(`category_rating.ilike.%${dbCategorySearch}%`)
-          searchConditions.push(`category_rating.ilike.%${catRating}%`)
-          searchConditions.push(`short_description.ilike.%${dbCategorySearch}%`)
-
-          console.log(`🏷️ AI detected: ${catRating} → Database search: ${dbCategorySearch}`)
-        }
-
-        // Jacket rating filter
-        if (enhancement.detectedTerms.jacketRating) {
-          const jacketSearch = enhancement.detectedTerms.jacketRating === 'CMP' ? 'plenum' : enhancement.detectedTerms.jacketRating
-          searchConditions.push(`jacket_material.ilike.%${jacketSearch}%`)
-          console.log(`🧥 AI filter: jacket rating = ${jacketSearch}`)
-        }
-
-        console.log(`🔍 Search conditions: ${searchConditions.join(' OR ')}`)
-
-        const categoryResult = await categoryQuery.or(searchConditions.join(','))
-        console.log(`📊 Found ${categoryResult.data?.length || 0} products matching category + jacket`)
-
-        if (categoryResult.data && categoryResult.data.length > 0) {
-          let categoryProducts = categoryResult.data.map(item => ({
-            id: item.id?.toString() || Date.now().toString(),
-            partNumber: item.part_number || 'No Part Number',
-            brand: item.brand || 'Unknown Brand',
-            description: item.short_description || 'No description available',
-            price: Math.random() * 150 + 50,
-            stockLocal: 25,
-            stockDistribution: 100,
-            leadTime: 'Ships Today',
-            category: 'Category Cable',
-            categoryRating: item.category_rating,
-            jacketRating: item.jacket_material?.includes('plenum') ? 'CMP' :
-                         item.jacket_material?.includes('riser') ? 'CMR' : undefined,
-            searchRelevance: 1.0,
-            tableName: 'category_cables',
-            packagingType: item.packaging_type,
-            color: item.jacket_color
-          }))
-
-          // Log what categories we actually found
-          const foundCategories = Array.from(new Set(categoryProducts.map(p => p.categoryRating)))
-          console.log(`📋 Found categories: ${foundCategories.join(', ')}`)
-
-          // STRICT color filtering
-          if (enhancement.detectedTerms.color) {
-            console.log(`🎨 Filtering by color: ${enhancement.detectedTerms.color}`)
-            const colorMatches = categoryProducts.filter(product =>
-              product.description.toLowerCase().includes(enhancement.detectedTerms.color!.toLowerCase()) ||
-              product.color?.toLowerCase().includes(enhancement.detectedTerms.color!.toLowerCase())
-            )
-            const nonColorMatches = categoryProducts.filter(product =>
-              !product.description.toLowerCase().includes(enhancement.detectedTerms.color!.toLowerCase()) &&
-              !product.color?.toLowerCase().includes(enhancement.detectedTerms.color!.toLowerCase())
-            )
-
-            console.log(`🎨 Found ${colorMatches.length} color matches, ${nonColorMatches.length} other products`)
-
-            // If we have color matches, prioritize them, otherwise show all
-            if (colorMatches.length > 0) {
-              categoryProducts = [...colorMatches, ...nonColorMatches.slice(0, 5)]
-            }
+          // Create fake AI analysis for quantity detection
+          const partNumberAI: AISearchAnalysis = {
+            searchStrategy: 'part_number',
+            productType: 'PART_NUMBER',
+            confidence: 1.0,
+            detectedSpecs: {
+              requestedQuantity: partNumberDetection.quantity
+            },
+            searchTerms: partNumberDetection.partNumbers,
+            reasoning: `Found exact part number match${partNumberDetection.quantity ? ` with quantity ${partNumberDetection.quantity}` : ''}`,
+            suggestedFilters: [],
+            alternativeQueries: [],
+            originalQuery: processedQuery.processedTerm,
+            timestamp: new Date().toISOString(),
+            aiModel: 'part-number-detection'
           }
 
-          // Log brand diversity
-          const brands = Array.from(new Set(categoryProducts.map(p => p.brand)))
-          console.log(`🏷️ Found brands: ${brands.join(', ')}`)
+          setAiAnalysis(partNumberAI)
 
-          allProducts = [...allProducts, ...categoryProducts]
-          console.log(`🌐 Added ${categoryProducts.length} category cable results`)
-          searchStrategy = 'category_cables'
+          // Generate smart filters if we have multiple results
+          if (partResults.length > 1) {
+            const filters = generateSmartFilters(partResults, 'PART_NUMBER')
+            setSmartFilters(filters)
+            setCurrentProducts(partResults)
+            setFilteredProducts(partResults)
+            setActiveFilters({})
+          }
+
+          const endTime = performance.now()
+          const searchTime = Math.round(endTime - startTime)
+
+          console.log(`✅ Part number search completed: ${partResults.length} products in ${searchTime}ms`)
+
+          return {
+            products: partResults,
+            searchTime,
+            searchType: 'part_number_match',
+            aiAnalysis: partNumberAI,
+            redirectMessage: processedQuery.redirectMessage || undefined
+          }
         } else {
-          console.log(`❌ No ${enhancement.detectedTerms.categoryRating} products found with specified criteria`)
-          console.log(`💡 Suggestion: Check if ${enhancement.detectedTerms.categoryRating} plenum cables exist in database`)
+          console.log('🔢 No part number matches found, falling back to regular search')
         }
       }
 
-      // CONNECTOR SEARCH with proper column names
-      if (enhancement.detectedTerms.productType === 'CONNECTOR' && allProducts.length < 5) {
-        console.log('🔌 CONNECTOR SEARCH detected')
+      // Step 4: Regular search flow (if no part numbers or no part number matches)
+      saveRecentSearch(processedQuery.processedTerm)
 
-        let connectorQuery = supabase
-          .from('products')
-          .select('*')
-          .eq('is_active', true)
-          .ilike('short_description', '%connector%')
-          .limit(20)
+      // Step 5: Get AI Analysis (using processed term)
+      const aiAnalysis = await enhanceQueryWithAI(processedQuery.processedTerm)
+      setAiAnalysis(aiAnalysis)
 
-        // Apply AI-detected specifications using correct column names
-        if (enhancement.detectedTerms.fiberType) {
-          connectorQuery = connectorQuery.eq('fiber_type_standard', enhancement.detectedTerms.fiberType)
-          console.log(`🌈 AI filter: fiber type = ${enhancement.detectedTerms.fiberType}`)
-        }
-        if (enhancement.detectedTerms.connectorType) {
-          connectorQuery = connectorQuery.eq('connector_type_standard', enhancement.detectedTerms.connectorType)
-          console.log(`🔌 AI filter: connector type = ${enhancement.detectedTerms.connectorType}`)
-        }
-        if (enhancement.detectedTerms.fiberCount) {
-          connectorQuery = connectorQuery.or(`fiber_count.eq.${enhancement.detectedTerms.fiberCount},short_description.ilike.%${enhancement.detectedTerms.fiberCount}%`)
-          console.log(`📊 AI filter: fiber count = ${enhancement.detectedTerms.fiberCount}`)
-        }
+      let allProducts: Product[] = []
+      let searchStrategy = 'enhanced'
 
-        const connectorResult = await connectorQuery
+      // Step 6: Determine Target Table
+      const targetTable = determineTargetTable(aiAnalysis, processedQuery.processedTerm)
+      console.log(`🎯 Target table: ${targetTable}`)
 
-        if (connectorResult.data && connectorResult.data.length > 0) {
-          const connectorProducts = connectorResult.data.map(item => ({
-            id: item.id?.toString() || Date.now().toString(),
-            partNumber: item.part_number || 'No Part Number',
-            brand: 'Brand Name',
-            description: item.short_description || 'No description available',
-            price: parseFloat(item.unit_price) || (Math.random() * 50 + 10),
-            stockLocal: item.stock_quantity || 0,
-            stockDistribution: 100,
-            leadTime: 'Ships Today',
-            category: 'Fiber Connector',
-            fiberType: item.fiber_type_standard,
-            connectorType: item.connector_type_standard,
-            fiberCount: item.fiber_count,
-            searchRelevance: 1.0,
-            tableName: 'products (AI-guided connectors)'
-          }))
+      // Step 7: Execute Table-Specific Search
+      switch (targetTable) {
+        case 'fiber_cables':
+          allProducts = await searchFiberCables(aiAnalysis, processedQuery.processedTerm)
+          searchStrategy = 'fiber_cables_enhanced'
+          break
 
-          allProducts = [...allProducts, ...connectorProducts]
-          console.log(`🔌 AI found ${connectorProducts.length} connector results from products table`)
-          searchStrategy = 'connectors'
-        }
+        case 'category_cables':
+          allProducts = await searchCategoryCables(aiAnalysis, processedQuery.processedTerm)
+          searchStrategy = 'category_cables_enhanced'
+          break
 
-        // Also search product_search table for connectors
-        console.log('🔍 Searching product_search for additional connectors...')
-        const productSearchConnectors = await supabase
-          .from('product_search')
-          .select('*')
-          .ilike('short_description', '%connector%')
-          .limit(10)
+        case 'fiber_connectors':
+          allProducts = await searchFiberConnectors(aiAnalysis, processedQuery.processedTerm)
+          searchStrategy = 'fiber_connectors_enhanced'
+          break
 
-        if (productSearchConnectors.data && productSearchConnectors.data.length > 0) {
-          const additionalConnectors = productSearchConnectors.data.map(item => ({
-            id: `search-conn-${item.id}`,
-            partNumber: item.part_number?.toString() || 'No Part Number',
-            brand: item.brand || 'Unknown Brand',
-            description: item.short_description || 'No description available',
-            price: Math.random() * 50 + 10,
-            stockLocal: 15,
-            stockDistribution: 100,
-            leadTime: 'Ships Today',
-            category: 'Connector',
-            searchRelevance: 0.9,
-            tableName: `product_search (${item.product_table})`
-          }))
+        case 'adapter_panels':
+          allProducts = await searchAdapterPanels(aiAnalysis, processedQuery.processedTerm)
+          searchStrategy = 'adapter_panels_enhanced'
+          break
 
-          allProducts = [...allProducts, ...additionalConnectors]
-          console.log(`🔍 Added ${additionalConnectors.length} connectors from product_search`)
-        }
+        case 'products_panels':
+          allProducts = await searchPanelsAndAdapters(aiAnalysis, processedQuery.processedTerm)
+          searchStrategy = 'products_enhanced'
+          break
+
+        default:
+          allProducts = await searchMultipleTables(aiAnalysis, processedQuery.processedTerm)
+          searchStrategy = 'multi_table_enhanced'
       }
 
-      // Fallback search if no results
-      if (allProducts.length === 0) {
-        console.log('🚀 Expanding search to product_search table...')
-        const productSearchResult = await supabase
-          .from('product_search')
-          .select('*')
-          .or(`part_number.ilike.%${searchTerm}%,short_description.ilike.%${searchTerm}%,search_text.ilike.%${searchTerm}%`)
-          .limit(15)
-
-        if (productSearchResult.data && productSearchResult.data.length > 0) {
-          allProducts = productSearchResult.data.map(item => ({
-            id: `search-${item.id}`,
-            partNumber: item.part_number?.toString() || 'No Part Number',
-            brand: item.brand || 'Unknown Brand',
-            description: item.short_description || 'No description available',
-            price: Math.random() * 75 + 25,
-            stockLocal: 10,
-            stockDistribution: 100,
-            leadTime: 'Ships Today',
-            category: item.category || 'Product',
-            searchRelevance: 0.9,
-            tableName: `product_search (${item.product_table || 'unknown'})`
-          }))
-          console.log(`🎯 Found ${allProducts.length} results in product_search`)
-          searchStrategy = 'product_search'
-        }
-      }
-
-      // Remove duplicates
-      const uniqueProducts = allProducts.filter((product, index, self) =>
-        index === self.findIndex(p => p.partNumber === product.partNumber)
-      )
-
-      // Set up smart filters
-      if (uniqueProducts.length > 0) {
-        const filters = generateSmartFilters(uniqueProducts, enhancement.detectedTerms.productType || 'MIXED')
+      // Step 8: Generate Smart Filters
+      if (allProducts.length > 0) {
+        const filters = generateSmartFilters(allProducts, aiAnalysis?.detectedSpecs?.productType || 'MIXED')
         setSmartFilters(filters)
-        setCurrentProducts(uniqueProducts)
-        setFilteredProducts(uniqueProducts)
-        setActiveFilters({}) // Reset filters for new search
+        setCurrentProducts(allProducts)
+        setFilteredProducts(allProducts)
+        setActiveFilters({})
       }
 
       const endTime = performance.now()
       const searchTime = Math.round(endTime - startTime)
 
-      console.log(`✅ Search completed: ${uniqueProducts.length} products in ${searchTime}ms using ${searchStrategy}`)
+      console.log(`✅ Enhanced search completed: ${allProducts.length} products in ${searchTime}ms using ${searchStrategy}`)
 
       return {
-        products: uniqueProducts.slice(0, 20),
+        products: allProducts.slice(0, 20),
         searchTime,
         searchType: searchStrategy,
-        aiAnalysis: aiAnalysis || undefined
+        aiAnalysis: aiAnalysis || undefined,
+        redirectMessage: processedQuery.redirectMessage || undefined
       }
 
     } catch (error) {
       console.error('❌ Enhanced search error:', error)
       const endTime = performance.now()
+
+      // If it's a validation error, return it properly
+      if (error.message.includes('specialized in electrical')) {
+        return {
+          products: [],
+          searchTime: Math.round(endTime - startTime),
+          searchType: 'validation_error',
+          redirectMessage: error.message
+        }
+      }
+
       return {
         products: [],
         searchTime: Math.round(endTime - startTime),
@@ -745,7 +1533,7 @@ export default function PlecticAI() {
     }
   }
 
-  // HANDLE SUBMIT
+  // ENHANCED HANDLE SUBMIT
   const handleSubmit = async () => {
     if (!input.trim() || isLoading) return
 
@@ -758,45 +1546,69 @@ export default function PlecticAI() {
 
     setMessages(prev => [...prev, userMessage])
     const originalInput = input
+    setCurrentSearchTerm(originalInput)
     setInput('')
     setIsLoading(true)
 
     try {
-      const { products, searchTime, searchType, aiAnalysis } = await searchProducts(originalInput)
+      const { products, searchTime, searchType, aiAnalysis, redirectMessage } = await searchProducts(originalInput)
       setLastSearchTime(searchTime)
 
       let assistantContent = ''
 
-      if (products.length > 0) {
+      // Check if it was a validation error
+      if (searchType === 'validation_error') {
+        assistantContent = `❌ ${redirectMessage}`
+      } else if (searchType === 'part_number_match') {
+        // Special message for part number matches
+        assistantContent = `🔢 **Part Number Match Found!** Found ${products.length} product${products.length > 1 ? 's' : ''} in ${searchTime}ms`
+
+        if (aiAnalysis?.detectedSpecs?.requestedQuantity) {
+          assistantContent += `\n\n📏 **Quantity Detected:** ${aiAnalysis.detectedSpecs.requestedQuantity.toLocaleString()} units`
+        }
+
+        if (redirectMessage) {
+          assistantContent += `\n\n🔄 **${redirectMessage}**`
+        }
+
+        assistantContent += `\n\n✅ **Part number search successful** - Click "Add" to add items to your list`
+      } else if (products.length > 0) {
         assistantContent = `🤖 AI found ${products.length} products in ${searchTime}ms using ${searchType} strategy`
+
+        // Show redirect message if Cat5 was redirected
+        if (redirectMessage) {
+          assistantContent += `\n\n🔄 **${redirectMessage}**`
+        }
+
         if (aiAnalysis) {
           assistantContent += `\n\n🧠 **AI Reasoning:** ${aiAnalysis.reasoning}`
         }
       } else {
         assistantContent = `🔍 **No exact matches found for "${originalInput}"**
+        
+${redirectMessage ? `🔄 **${redirectMessage}**\n\n` : ''}Let me help you find what you need:
 
-Let me help you find what you need:
+**For Part Numbers, try:**
+• "7131100" - Direct part number search
+• "10000 ABC-123" - Quantity + part number
+• "XYZ123" - Alphanumeric part numbers
 
-**For Fiber Connectors, try:**
-• "24 LC connectors OM4" - LC connectors for OM4 fiber
-• "12 SC connectors OM3" - SC connectors for OM3 fiber  
-
-**For Category Cables, try:**
-• "Cat5 plenum" - Category 5 plenum rated
-• "Cat 5 blue plenum" - With spaces and color
-• "Cat6 cable" - Standard Category 6
+**For Product Types, try:**
+• "Cat5e plenum" - Category 5e plenum rated (current standard)
+• "OM4 fiber cable" - Fiber optic cables
+• "24 LC connectors" - Fiber connectors
 
 **Search Tips:**
-• Use "connectors" for individual connectors vs "cable" for cables vs "panel" for panels
-• Include ratings: "plenum", "CMP", "Cat6A", "OM3", "OM4"
-• Add counts: "24 connectors", "12 fiber cable"`
+• Use exact part numbers for fastest results
+• Include quantities: "1000 ft", "24 connectors"  
+• Try product descriptions: "plenum cable blue"`
       }
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: assistantContent,
-        products: products.length > 0 ? products : undefined,
+        products: searchType !== 'validation_error' && products.length > 0 ? products : undefined,
         timestamp: new Date(),
         searchType,
         searchTime,
@@ -811,12 +1623,13 @@ Let me help you find what you need:
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: "Sorry, there was an error with the AI-enhanced search. Please try again.",
+        content: "Sorry, there was an error with the enhanced search. Please try again.",
         timestamp: new Date()
       }
       setMessages(prev => [...prev, errorMessage])
     } finally {
       setIsLoading(false)
+      setCurrentSearchTerm('')
     }
   }
 
@@ -832,29 +1645,51 @@ Let me help you find what you need:
     }
 
     setMessages(prev => [...prev, userMessage])
+    setCurrentSearchTerm(searchTerm)
     setInput('')
     setIsLoading(true)
 
     try {
-      const { products, searchTime, searchType, aiAnalysis } = await searchProducts(searchTerm)
+      const { products, searchTime, searchType, aiAnalysis, redirectMessage } = await searchProducts(searchTerm)
       setLastSearchTime(searchTime)
 
       let assistantContent = ''
 
-      if (products.length > 0) {
+      if (searchType === 'validation_error') {
+        assistantContent = `❌ ${redirectMessage}`
+      } else if (searchType === 'part_number_match') {
+        assistantContent = `🔢 **Part Number Match!** Found ${products.length} product${products.length > 1 ? 's' : ''} in ${searchTime}ms`
+
+        if (aiAnalysis?.detectedSpecs?.requestedQuantity) {
+          assistantContent += ` with quantity ${aiAnalysis.detectedSpecs.requestedQuantity.toLocaleString()}`
+        }
+
+        if (redirectMessage) {
+          assistantContent += `\n\n🔄 **${redirectMessage}**`
+        }
+
+        if (aiAnalysis) {
+          assistantContent += `\n\n✅ **${aiAnalysis.reasoning}**`
+        }
+      } else if (products.length > 0) {
         assistantContent = `🤖 AI found ${products.length} products in ${searchTime}ms:`
+
+        if (redirectMessage) {
+          assistantContent += `\n\n🔄 **${redirectMessage}**`
+        }
+
         if (aiAnalysis) {
           assistantContent += `\n\n🧠 **AI Reasoning:** ${aiAnalysis.reasoning}`
         }
       } else {
-        assistantContent = `🤖 AI analyzed your request but found no products in ${searchTime}ms. Try different terms.`
+        assistantContent = `🤖 AI analyzed your request but found no products in ${searchTime}ms. Try different terms or exact part numbers.`
       }
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: assistantContent,
-        products: products.length > 0 ? products : undefined,
+        products: searchType !== 'validation_error' && products.length > 0 ? products : undefined,
         timestamp: new Date(),
         searchType,
         searchTime,
@@ -875,24 +1710,8 @@ Let me help you find what you need:
       setMessages(prev => [...prev, errorMessage])
     } finally {
       setIsLoading(false)
+      setCurrentSearchTerm('')
     }
-  }
-
-  // ADD TO LIST
-  const addToList = (product: Product, customQuantity?: number) => {
-    const quantityToAdd = customQuantity || aiAnalysis?.detectedTerms?.requestedQuantity || 1
-
-    setProductList(prev => {
-      const existing = prev.find(item => item.id === product.id)
-      if (existing) {
-        return prev.map(item =>
-          item.id === product.id
-            ? { ...item, quantity: item.quantity + quantityToAdd }
-            : item
-        )
-      }
-      return [...prev, { ...product, quantity: quantityToAdd, addedAt: new Date() }]
-    })
   }
 
   // UPDATE QUANTITY
@@ -924,7 +1743,12 @@ Let me help you find what you need:
 
   return (
     <div className="h-screen bg-gray-50 flex flex-col font-inter">
-      {/* Enhanced Header with Debug Button */}
+      {/* AI Search Loading Overlay */}
+      {isLoading && currentSearchTerm && (
+        <AISearchLoading searchTerm={currentSearchTerm} />
+      )}
+
+      {/* Header */}
       <header className="bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -944,15 +1768,7 @@ Let me help you find what you need:
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* Debug Button */}
-            <button
-              onClick={debugDatabase}
-              className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-sm font-medium transition-colors"
-            >
-              🔍 Debug Database
-            </button>
-
-            {aiAnalysis && Object.keys(aiAnalysis.detectedTerms || {}).length > 0 && (
+            {aiAnalysis && Object.keys(aiAnalysis.detectedSpecs || {}).length > 0 && (
               <div className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1">
                 <Brain size={14} />
                 AI Active
@@ -1035,7 +1851,7 @@ Let me help you find what you need:
                             handleSubmit()
                           }
                         }}
-                        placeholder="Just describe what you need: 'Cat 5 plenum blue', 'fiber optic connectors', 'network cable for office'..."
+                        placeholder="Just describe what you need: 'Cat5e plenum blue', 'fiber optic connectors', 'network cable for office'..."
                         className="w-full px-6 py-4 border-2 border-blue-500 rounded-lg resize-none focus:outline-none focus:ring-4 focus:ring-blue-200 focus:border-blue-600 text-base"
                         rows={6}
                         autoFocus
@@ -1081,17 +1897,24 @@ Let me help you find what you need:
                         <div className="text-sm text-gray-700 mb-3 whitespace-pre-line">{message.content}</div>
 
                         {/* Show AI Analysis Details */}
-                        {aiAnalysis && Object.keys(aiAnalysis.detectedTerms || {}).length > 0 && (
+                        {aiAnalysis && Object.keys(aiAnalysis.detectedSpecs || {}).length > 0 && (
                           <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-3">
                             <div className="flex items-center gap-2 mb-2">
                               <Sparkles size={16} className="text-purple-600" />
                               <span className="text-sm font-medium text-purple-700">Smart Search Detection</span>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                              {Object.entries(aiAnalysis.detectedTerms).map(([key, value]) => (
+                              {Object.entries(aiAnalysis.detectedSpecs).map(([key, value]) => (
                                 value && (
-                                  <span key={key} className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs">
-                                    {key === 'requestedQuantity' ? `quantity: ${value?.toLocaleString()}ft` :
+                                  <span
+                                    key={key}
+                                    className={`px-2 py-1 rounded text-xs ${
+                                      key === 'requestedQuantity' 
+                                        ? 'bg-green-100 text-green-700 font-semibold' 
+                                        : 'bg-purple-100 text-purple-700'
+                                    }`}
+                                  >
+                                    {key === 'requestedQuantity' ? `📏 ${value?.toLocaleString()} ft` :
                                      key === 'productType' ? `type: ${value}` :
                                      key === 'color' ? `color: ${value}` :
                                      `${key}: ${value}`}
@@ -1100,6 +1923,11 @@ Let me help you find what you need:
                               ))}
                             </div>
                           </div>
+                        )}
+
+                        {/* Quantity Detection Indicator */}
+                        {aiAnalysis && (
+                          <QuantityDetectionIndicator aiAnalysis={aiAnalysis} />
                         )}
 
                         {/* Smart Filter Buttons */}
@@ -1232,11 +2060,11 @@ Let me help you find what you need:
                                     <th className="px-3 py-2 text-left font-medium">Description</th>
                                     <th className="px-3 py-2 text-center font-medium">Type</th>
                                     <th className="px-3 py-2 text-right font-medium">Price</th>
-                                    <th className="px-3 py-2 text-center font-medium">Source</th>
+                                    <th className="px-3 py-2 text-center font-medium">Stock Status</th>
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {productsToDisplay.map((product, index) => (
+                                  {(productsToDisplay && productsToDisplay.length > 0 ? productsToDisplay : message.products || []).map((product, index) => (
                                     <tr
                                       key={product.id}
                                       className={`border-b border-gray-100 hover:bg-blue-50 transition-colors ${
@@ -1246,9 +2074,19 @@ Let me help you find what you need:
                                       <td className="px-3 py-2 text-center">
                                         <button
                                           onClick={() => addToList(product)}
-                                          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs font-medium transition-colors"
+                                          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1"
+                                          title={aiAnalysis?.detectedSpecs?.requestedQuantity ? `Add ${aiAnalysis.detectedSpecs.requestedQuantity.toLocaleString()} units` : 'Add 1 unit'}
                                         >
-                                          Add
+                                          {aiAnalysis?.detectedSpecs?.requestedQuantity ? (
+                                            <>
+                                              <span>Add {aiAnalysis.detectedSpecs.requestedQuantity >= 1000 ? `${(aiAnalysis.detectedSpecs.requestedQuantity/1000).toFixed(0)}K` : aiAnalysis.detectedSpecs.requestedQuantity}</span>
+                                              {aiAnalysis.detectedSpecs.requestedQuantity >= 1000 && (
+                                                <span className="text-blue-200 text-xs">units</span>
+                                              )}
+                                            </>
+                                          ) : (
+                                            'Add'
+                                          )}
                                         </button>
                                       </td>
                                       <td className="px-3 py-2 text-sm font-medium text-gray-900">
@@ -1275,30 +2113,21 @@ Let me help you find what you need:
                                       </td>
                                       <td className="px-3 py-2 text-sm font-medium text-right">${product.price?.toFixed(2)}</td>
                                       <td className="px-3 py-2 text-center">
-                                        <span className="text-xs bg-gray-100 px-2 py-1 rounded">
-                                          {product.tableName}
-                                        </span>
+                                        <StockStatusButton product={product} />
                                       </td>
                                     </tr>
                                   ))}
                                 </tbody>
                               </table>
                             </div>
+
+                            <StockStatusLegend />
                           </div>
                         )}
                       </div>
                     )}
                   </div>
                 ))
-              )}
-
-              {isLoading && (
-                <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
-                    <Brain size={14} className="text-white animate-pulse" />
-                  </div>
-                  <span className="text-sm text-gray-600">🤖 AI is analyzing your request and searching your database...</span>
-                </div>
               )}
 
               <div ref={messagesEndRef} />
