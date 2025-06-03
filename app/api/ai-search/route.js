@@ -1,5 +1,5 @@
-// ENHANCED AI PROMPT - Better Quantity Detection
-// Replace your app/api/ai-search/route.js with this version
+// COMPLETE FILE: app/api/ai-search/route.js
+// Copy this entire file and replace your existing route.js
 
 import OpenAI from 'openai'
 
@@ -42,38 +42,47 @@ export async function POST(request) {
     console.log('🔍 Analyzing query:', query)
 
     const aiPrompt = `You are an expert electrical distributor AI assistant with 35+ years of experience.
-Your job is to analyze customer requests and provide the best search strategy for finding products in their database.
+Your job is to analyze customer requests and provide the MOST SPECIFIC search strategy.
 
 CUSTOMER QUERY: "${query}"
 
-AVAILABLE PRODUCT TYPES IN DATABASE:
-- Category Cables (Cat5, Cat5e, Cat6, Cat6a, Cat7, Cat8)
-- Fiber Optic Cables (OM1, OM2, OM3, OM4, OS1, OS2)
-- Fiber Connectors (LC, SC, ST, FC, MTP, MPO)
-- Adapter Panels and Patch Panels
-- Ethernet/Network Cables (UTP, STP, FTP, SFTP)
+CRITICAL ROUTING RULES (follow these exactly):
 
-JACKET RATING CLASSIFICATIONS (CRITICAL - these are exact equivalents):
-1. PLENUM group: CMP = Plenum (same thing)
-2. RISER group: CMR = Riser = Non-Plenum (same thing)  
-3. OUTDOOR group: OSP = Outside Plant = Outdoor = Water resistant = Gel filled (same thing)
-4. INDOOR_OUTDOOR: Indoor/outdoor rated (separate category)
+1. If query mentions "connectors" + fiber type (LC, SC, ST, FC, MTP, MPO, OM1-5, OS1-2):
+   → searchStrategy: "connectors", productType: "CONNECTOR"
+
+2. If query mentions cable length (ft, feet, meters) + fiber type:
+   → searchStrategy: "cables", productType: "CABLE"
+
+3. If query mentions "panel" or "patch panel":
+   → searchStrategy: "panels", productType: "PANEL"
+
+4. If query mentions category cable (Cat5, Cat6, ethernet):
+   → searchStrategy: "cables", productType: "CABLE"
+
+5. ONLY use "mixed" for very general queries with no specific product type
+
+EXAMPLES:
+- "lc connectors om4" → productType: "CONNECTOR", searchStrategy: "connectors" 
+- "sc adapters multimode" → productType: "CONNECTOR", searchStrategy: "connectors"
+- "1000 ft om3 cable" → productType: "CABLE", searchStrategy: "cables"
+- "cat6 plenum blue" → productType: "CABLE", searchStrategy: "cables"
+- "fiber patch panel" → productType: "PANEL", searchStrategy: "panels"
+- "fiber optic" (general) → productType: "MIXED", searchStrategy: "mixed"
 
 QUANTITY DETECTION (VERY IMPORTANT):
-- Extract any quantities mentioned: "10000 ft", "5000 feet", "1000'", "500 foot"
-- Common formats: "10,000 ft", "10000 feet", "10K ft", "5000'"  
-- For connectors: "24 connectors", "12 LC", "48 adapters"
-- Convert to pure numbers: "10,000 ft" → 10000, "5K ft" → 5000
+- Extract any quantities: "10000 ft", "24 connectors", "12 LC", "48 adapters"
+- Convert to numbers: "10,000 ft" → 10000, "24 LC" → 24
 
-ANALYZE THE QUERY AND RESPOND WITH ONLY A JSON OBJECT:
+RESPOND WITH ONLY JSON:
 {
-  "searchStrategy": "cables|connectors|panels|mixed",
-  "productType": "CABLE|CONNECTOR|PANEL|MIXED",
+  "searchStrategy": "connectors|cables|panels|mixed",
+  "productType": "CONNECTOR|CABLE|PANEL|MIXED",
   "confidence": 0.0-1.0,
   "detectedSpecs": {
-    "fiberType": "OM3|OM4|etc or null",
+    "fiberType": "OM3|OM4|OS1|OS2|singlemode|multimode or null",
     "categoryRating": "CAT5|CAT5E|CAT6|CAT6A|etc or null",
-    "connectorType": "LC|SC|etc or null",
+    "connectorType": "LC|SC|ST|FC|MTP|MPO|etc or null",
     "jacketRating": "CMP|CMR|OSP|INDOOR_OUTDOOR or null",
     "fiberCount": number or null,
     "requestedQuantity": number or null,
@@ -81,26 +90,11 @@ ANALYZE THE QUERY AND RESPOND WITH ONLY A JSON OBJECT:
     "manufacturer": "CORNING|PANDUIT|etc or null",
     "color": "BLUE|WHITE|GRAY|RED|GREEN|YELLOW|ORANGE|BLACK or null"
   },
-  "searchTerms": ["primary_search_term", "secondary_term", "fallback_term"],
-  "reasoning": "Why you chose this strategy in 1-2 sentences",
-  "suggestedFilters": ["filter1", "filter2"],
-  "alternativeQueries": ["alternative search if no results"]
-}
-
-QUANTITY DETECTION EXAMPLES:
-Query: "I need 10000 ft of Cat 6 plenum blue" → requestedQuantity: 10000
-Query: "10,000 feet of Cat6A cable" → requestedQuantity: 10000  
-Query: "5K feet Cat5e blue" → requestedQuantity: 5000
-Query: "1000' of fiber cable OM3" → requestedQuantity: 1000
-Query: "24 LC connectors OM4" → requestedQuantity: 24
-Query: "12 SC adapters" → requestedQuantity: 12
-
-JACKET EXAMPLES:
-Query: "Cat 6 plenum blue" → jacketRating: "CMP", requestedQuantity: null
-Query: "I need 5000 ft Cat 6 riser red" → jacketRating: "CMR", requestedQuantity: 5000
-Query: "outdoor cable 1000 ft" → jacketRating: "OSP", requestedQuantity: 1000
-
-CRITICAL: Always extract requestedQuantity if ANY quantity is mentioned in the query.`
+  "searchTerms": ["primary_term"],
+  "reasoning": "Brief explanation",
+  "suggestedFilters": ["filter1"],
+  "alternativeQueries": ["backup_query"]
+}`
 
     console.log('🚀 Sending request to OpenAI...')
 
@@ -109,20 +103,30 @@ CRITICAL: Always extract requestedQuantity if ANY quantity is mentioned in the q
       messages: [
         {
           role: "system",
-          content: "You are an expert electrical distributor assistant. Respond ONLY with valid JSON. Pay special attention to extracting quantities - if customer mentions '10000 ft' then requestedQuantity should be 10000."
+          content: "You are an expert electrical distributor. Respond ONLY with valid JSON. Be SPECIFIC - if query mentions 'connectors', use productType: 'CONNECTOR' and searchStrategy: 'connectors'."
         },
         { role: "user", content: aiPrompt }
       ],
-      temperature: 0.2,
-      max_tokens: 1000
+      temperature: 0.1, // Lower temperature for more consistent results
+      max_tokens: 800
     })
 
     const aiResponse = completion.choices[0].message.content.trim()
-    console.log('✅ AI Response received:', aiResponse.substring(0, 200) + '...')
+    console.log('✅ AI Response received:', aiResponse)
 
     let searchAnalysis
     try {
       searchAnalysis = JSON.parse(aiResponse)
+
+      // FORCE FIX: If query contains "connectors" but AI said "MIXED", fix it
+      const queryLower = query.toLowerCase()
+      if (queryLower.includes('connector') && searchAnalysis.productType === 'MIXED') {
+        console.log('🔧 FORCE FIX: Correcting MIXED to CONNECTOR')
+        searchAnalysis.productType = 'CONNECTOR'
+        searchAnalysis.searchStrategy = 'connectors'
+        searchAnalysis.confidence = 0.95
+        searchAnalysis.reasoning = 'Force corrected to connectors based on keyword detection'
+      }
 
       // Log the detected quantity for debugging
       if (searchAnalysis.detectedSpecs?.requestedQuantity) {
@@ -149,7 +153,7 @@ CRITICAL: Always extract requestedQuantity if ANY quantity is mentioned in the q
     // Add metadata
     searchAnalysis.originalQuery = query
     searchAnalysis.timestamp = new Date().toISOString()
-    searchAnalysis.aiModel = "gpt-4"
+    searchAnalysis.aiModel = "gpt-4o-mini"
 
     console.log('🎯 Final analysis:', searchAnalysis)
 
