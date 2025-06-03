@@ -90,7 +90,12 @@ interface AISearchAnalysis {
 // ===================================================================
 
 // Detect if search contains part numbers
-const detectPartNumbers = (searchTerm: string) => {
+const detectPartNumbers = (searchTerm: string): {
+  hasParts: boolean;
+  partNumbers: string[];
+  quantity: number | null;
+  remainingText: string;
+} => {
   const query = searchTerm.toLowerCase().trim()
 
   // Common part number patterns
@@ -102,7 +107,7 @@ const detectPartNumbers = (searchTerm: string) => {
     /\b[a-z0-9]+-[a-z0-9-]+\b/g  // Hyphenated patterns (123-456-789)
   ]
 
-  let detectedParts = []
+  let detectedParts: string[] = []
   let remainingText = query
 
   // Extract potential part numbers
@@ -122,7 +127,7 @@ const detectPartNumbers = (searchTerm: string) => {
 
   // Extract quantity if present
   const quantityMatch = remainingText.match(/\b(\d{1,6})\s*(ft|feet|foot|pcs|pieces|units?)?\b/)
-  const quantity = quantityMatch ? parseInt(quantityMatch[1]) : null
+  const quantity: number | null = quantityMatch ? parseInt(quantityMatch[1]) : null
 
   console.log('🔍 Part number detection:', {
     original: searchTerm,
@@ -140,19 +145,19 @@ const detectPartNumbers = (searchTerm: string) => {
 }
 
 // Normalize part number for searching (remove spaces, dashes, make lowercase)
-const normalizePartNumber = (partNumber: string) => {
+const normalizePartNumber = (partNumber: string): string => {
   return partNumber.toLowerCase().replace(/[\s\-_]/g, '')
 }
 
 // Search for specific part numbers across all tables
-const searchByPartNumber = async (partNumbers: string[], quantity?: number) => {
+const searchByPartNumber = async (partNumbers: string[], quantity?: number): Promise<Product[]> => {
   console.log('🔢 PART NUMBER SEARCH')
   console.log('🔍 Searching for part numbers:', partNumbers)
 
   let allResults: Product[] = []
 
   // Define all tables to search
-  const tables = [
+  const tables: Array<{ name: string; prefix: string }> = [
     { name: 'category_cables', prefix: 'cat' },
     { name: 'fiber_connectors', prefix: 'conn' },
     { name: 'adapter_panels', prefix: 'panel' },
@@ -165,7 +170,7 @@ const searchByPartNumber = async (partNumbers: string[], quantity?: number) => {
       console.log(`🔍 Searching ${table.name} for part numbers...`)
 
       // Build search conditions for each part number variation
-      const searchConditions = []
+      const searchConditions: string[] = []
 
       partNumbers.forEach(partNum => {
         const normalized = normalizePartNumber(partNum)
@@ -197,7 +202,7 @@ const searchByPartNumber = async (partNumbers: string[], quantity?: number) => {
         console.log(`✅ Found ${result.data.length} matches in ${table.name}`)
 
         // Convert to standard product format
-        const products = result.data.map((item: any) => ({
+        const products: Product[] = result.data.map((item: any) => ({
           id: `${table.prefix}-${item.id}`,
           partNumber: item.part_number || 'No Part Number',
           brand: item.brand || 'Unknown Brand',
@@ -251,7 +256,7 @@ const searchByPartNumber = async (partNumbers: string[], quantity?: number) => {
 }
 
 // 1. QUERY VALIDATION SYSTEM
-const validateElectricalQuery = (query: string) => {
+const validateElectricalQuery = (query: string): { isValid: boolean; message?: string; suggestion?: string } => {
   const blockedTerms = [
     // Medical
     'cancer', 'medicine', 'doctor', 'prescription', 'surgery', 'treatment',
@@ -311,7 +316,12 @@ const validateElectricalQuery = (query: string) => {
 }
 
 // 2. CAT5 → CAT5E BUSINESS RULE
-const applyBusinessRules = (searchTerm: string) => {
+const applyBusinessRules = (searchTerm: string): {
+  originalTerm: string;
+  processedTerm: string;
+  wasRedirected: boolean;
+  redirectMessage: string | null
+} => {
   let processedTerm = searchTerm.toLowerCase()
 
   // CRITICAL BUSINESS RULE: Redirect Cat5 to Cat5e
@@ -629,7 +639,7 @@ export default function PlecticAI() {
   }, [])
 
   // Save recent searches
-  const saveRecentSearch = (query: string) => {
+  const saveRecentSearch = (query: string): void => {
     const updated = [query, ...recentSearches.filter(s => s !== query)].slice(0, 8)
     setRecentSearches(updated)
     localStorage.setItem('plectic_recent_searches', JSON.stringify(updated))
@@ -662,7 +672,7 @@ export default function PlecticAI() {
   }
 
   // Apply Smart Filter
-  const applySmartFilter = (filterType: string, value: string) => {
+  const applySmartFilter = (filterType: string, value: string): void => {
     const newFilters = { ...activeFilters }
 
     if (newFilters[filterType] === value) {
@@ -695,13 +705,13 @@ export default function PlecticAI() {
   }
 
   // Clear all filters
-  const clearAllFilters = () => {
+  const clearAllFilters = (): void => {
     setActiveFilters({})
     setFilteredProducts(currentProducts)
   }
 
   // Smooth scroll to bottom
-  const scrollToBottom = () => {
+  const scrollToBottom = (): void => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
@@ -756,7 +766,7 @@ export default function PlecticAI() {
   // =============================================================================
 
   // Determine Target Table Based on AI Analysis
-  const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: string) => {
+  const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: string): string => {
     const query = searchTerm.toLowerCase()
 
     // Use AI analysis FIRST if available and confident
@@ -844,7 +854,7 @@ export default function PlecticAI() {
   }
 
   // PRECISE JACKET FILTERING - searchCategoryCables
-  const searchCategoryCables = async (aiAnalysis: AISearchAnalysis | null, searchTerm: string) => {
+  const searchCategoryCables = async (aiAnalysis: AISearchAnalysis | null, searchTerm: string): Promise<Product[]> => {
     console.log('🌐 CATEGORY CABLES SEARCH (838 products)')
     console.log('🤖 AI Analysis:', aiAnalysis?.detectedSpecs)
 
@@ -1000,7 +1010,7 @@ export default function PlecticAI() {
   }
 
   // FIBER CONNECTORS SEARCH
-  const searchFiberConnectors = async (aiAnalysis: AISearchAnalysis | null, searchTerm: string) => {
+  const searchFiberConnectors = async (aiAnalysis: AISearchAnalysis | null, searchTerm: string): Promise<Product[]> => {
     console.log('🔌 FIBER CONNECTORS SEARCH')
 
     let query = supabase
@@ -1061,7 +1071,7 @@ export default function PlecticAI() {
   }
 
   // ADAPTER PANELS SEARCH
-  const searchAdapterPanels = async (aiAnalysis: AISearchAnalysis | null, searchTerm: string) => {
+  const searchAdapterPanels = async (aiAnalysis: AISearchAnalysis | null, searchTerm: string): Promise<Product[]> => {
     console.log('🏠 ADAPTER PANELS SEARCH')
     console.log('🤖 AI Analysis:', aiAnalysis?.detectedSpecs)
 
@@ -1150,7 +1160,7 @@ export default function PlecticAI() {
   }
 
   // FIBER OPTIC CABLES SEARCH
-  const searchFiberCables = async (aiAnalysis: AISearchAnalysis | null, searchTerm: string) => {
+  const searchFiberCables = async (aiAnalysis: AISearchAnalysis | null, searchTerm: string): Promise<Product[]> => {
     console.log('🌈 FIBER OPTIC CABLES SEARCH - CABLES ONLY')
 
     let query = supabase
@@ -1246,7 +1256,7 @@ export default function PlecticAI() {
     return []
   }
 
-  const searchPanelsAndAdapters = async (aiAnalysis: AISearchAnalysis | null, searchTerm: string) => {
+  const searchPanelsAndAdapters = async (aiAnalysis: AISearchAnalysis | null, searchTerm: string): Promise<Product[]> => {
     console.log('🏠 PRODUCTS TABLE SEARCH (panels/housings)')
 
     let query = supabase
@@ -1304,7 +1314,7 @@ export default function PlecticAI() {
   }
 
   // MULTI-TABLE FALLBACK SEARCH
-  const searchMultipleTables = async (aiAnalysis: AISearchAnalysis | null, searchTerm: string) => {
+  const searchMultipleTables = async (aiAnalysis: AISearchAnalysis | null, searchTerm: string): Promise<Product[]> => {
     console.log('🚀 MULTI-TABLE SEARCH')
 
     let allProducts: Product[] = []
@@ -1715,7 +1725,7 @@ ${redirectMessage ? `🔄 **${redirectMessage}**\n\n` : ''}Let me help you find 
   }
 
   // UPDATE QUANTITY
-  const updateQuantity = (id: string, delta: number) => {
+  const updateQuantity = (id: string, delta: number): void => {
     setProductList(prev => prev.map(item => {
       if (item.id === id) {
         const newQuantity = Math.max(0, item.quantity + delta)
@@ -1726,12 +1736,12 @@ ${redirectMessage ? `🔄 **${redirectMessage}**\n\n` : ''}Let me help you find 
   }
 
   // REMOVE FROM LIST
-  const removeFromList = (id: string) => {
+  const removeFromList = (id: string): void => {
     setProductList(prev => prev.filter(item => item.id !== id))
   }
 
   // SEND LIST
-  const sendList = () => {
+  const sendList = (): void => {
     alert('List sent! (This would email/text the list in production)')
   }
 
@@ -1844,8 +1854,8 @@ ${redirectMessage ? `🔄 **${redirectMessage}**\n\n` : ''}Let me help you find 
                     <div className="relative">
                       <textarea
                         value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => {
+                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value)}
+                        onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
                           if (e.key === 'Enter' && !e.shiftKey) {
                             e.preventDefault()
                             handleSubmit()
@@ -2142,8 +2152,8 @@ ${redirectMessage ? `🔄 **${redirectMessage}**\n\n` : ''}Let me help you find 
                   <textarea
                     ref={inputRef}
                     value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => {
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value)}
+                    onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault()
                         handleSubmit()
