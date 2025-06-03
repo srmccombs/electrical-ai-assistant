@@ -352,16 +352,16 @@ const applyBusinessRules = (searchTerm: string): {
   }
 }
 
-// 3. UPDATED POPULAR SEARCHES (No Cat5 references + Part Number Examples)
+// 3. REALISTIC POPULAR SEARCHES (Actual electrical distribution searches)
 const getUpdatedPopularSearches = (): string[] => [
-  "1000 ft Cat5e plenum blue",
-  "Cat6 ethernet cable",
-  "24 fiber OM3 cable",
-  "LC to SC fiber connector",
-  "5000 7131100",  // Part number example
-  "OM4 multimode fiber",
-  "RJ45 connectors",
-  "ABC-123"        // Part number example
+  "1000 ft Cat6 plenum",
+  "Cat5e cable blue",
+  "LC connectors OM4",
+  "12 fiber multimode cable",
+  "Cat6A shielded",
+  "SC adapters",
+  "ethernet cable plenum rated",
+  "fiber patch panel"
 ]
 
 // Stock Status Button Component
