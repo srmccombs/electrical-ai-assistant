@@ -1521,12 +1521,12 @@ export default function PlecticAI() {
         redirectMessage: processedQuery.redirectMessage || undefined
       }
 
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('❌ Enhanced search error:', error)
       const endTime = performance.now()
 
       // If it's a validation error, return it properly
-      if (error.message.includes('specialized in electrical')) {
+      if (error instanceof Error && error.message.includes('specialized in electrical')) {
         return {
           products: [],
           searchTime: Math.round(endTime - startTime),
