@@ -4,7 +4,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { Search, Plus, Minus, X, Send, Zap, Package, AlertCircle, CheckCircle, Clock, Menu, Settings, HelpCircle, Sparkles, Filter, Brain, Shield, Database, Cpu, Activity } from 'lucide-react'
+import { Search, Plus, Minus, X, Send, Zap, Package, AlertCircle, CheckCircle, Clock, Menu, Settings, HelpCircle, Sparkles, Filter, Brain, Shield, Database, Cpu, Activity, Copy } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 // ===================================================================
@@ -985,7 +985,7 @@ const searchFiberConnectors = async (aiAnalysis: AISearchAnalysis | null, search
 
     if (detectedFiberCat || detectedFiberType) {
       const searchFiberCat = detectedFiberCat || detectedFiberType
-      console.log(`🌈 STRATEGY 4: Fiber category search for: "${searchFiberCat}"`)
+      console.log(`🔺 STRATEGY 4: Fiber category search for: "${searchFiberCat}"`)
 
       let query = supabase
         .from('fiber_connectors')
@@ -1199,7 +1199,7 @@ const searchAdapterPanels = async (aiAnalysis: AISearchAnalysis | null, searchTe
 
 // FIBER CABLES SEARCH - FIXED TYPESCRIPT ISSUE
 const searchFiberCables = async (aiAnalysis: AISearchAnalysis | null, searchTerm: string): Promise<Product[]> => {
-  console.log('🌈 FIBER CABLES SEARCH')
+  console.log('🔺 FIBER CABLES SEARCH')
 
   let query = supabase
     .from('products')
@@ -1513,7 +1513,7 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
   const hasFiberTerms = fiberTerms.some(term => query.includes(term))
 
   if (hasFiberTerms && !hasConnectorTerms) {
-    console.log('🌈 Keyword routing to fiber_cables')
+    console.log('🔺 Keyword routing to fiber_cables')
     return 'fiber_cables'
   }
 
@@ -1574,7 +1574,7 @@ const searchMultipleTables = async (aiAnalysis: AISearchAnalysis | null, searchT
     if (allProducts.length < 25) {
       const fiberResults = await searchFiberCables(aiAnalysis, searchTerm)
       allProducts = [...allProducts, ...fiberResults]
-      console.log(`🌈 Brand search - Fiber cables: ${fiberResults.length} results`)
+      console.log(`🔺 Brand search - Fiber cables: ${fiberResults.length} results`)
     }
 
   } else {
@@ -2055,6 +2055,24 @@ const PlecticAI: React.FC = () => {
 
   const sendList = (): void => {
     alert('List sent! (This would email/text the list in production)')
+  }
+
+  // Copy part number to clipboard
+  const copyPartNumber = async (partNumber: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(partNumber)
+      // You could add a toast notification here if desired
+      console.log('Part number copied:', partNumber)
+    } catch (error) {
+      console.error('Failed to copy part number:', error)
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea')
+      textArea.value = partNumber
+      document.body.appendChild(textArea)
+      textArea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textArea)
+    }
   }
 
   // ===================================================================
@@ -2789,7 +2807,7 @@ const PlecticAI: React.FC = () => {
                                           : 'bg-white border border-purple-300 text-purple-700 hover:bg-purple-100'
                                       }`}
                                     >
-                                      🌈 {fiberType}
+                                      {fiberType}
                                     </button>
                                   ))}
                                   {activeFilters.fiberType && (
@@ -3163,10 +3181,19 @@ const PlecticAI: React.FC = () => {
                 </thead>
                 <tbody>
                   {productList.map((item, index) => (
-                    <tr key={item.id} className={`border-b border-gray-100 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                    <tr key={item.id} className={`group border-b border-gray-100 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                       <td className="px-3 py-2">
                         <div>
-                          <p className="text-sm font-medium text-gray-900">{item.partNumber}</p>
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="text-sm font-medium text-gray-900">{item.partNumber}</p>
+                            <button
+                              onClick={() => copyPartNumber(item.partNumber)}
+                              className="opacity-0 group-hover:opacity-100 hover:opacity-100 p-1 rounded hover:bg-gray-100 transition-all duration-200 flex items-center justify-center"
+                              title="Copy part number"
+                            >
+                              <Copy size={12} className="text-gray-500 hover:text-gray-700" />
+                            </button>
+                          </div>
                           <p className="text-xs text-gray-500">{item.brand}</p>
                           {item.productLine && (
                             <p className="text-xs text-indigo-600 font-medium">
@@ -3198,7 +3225,7 @@ const PlecticAI: React.FC = () => {
                           )}
                           {item.fiberType && (
                             <p className="text-xs text-purple-600 font-medium">
-                              🌈 {item.fiberType}
+                              {item.fiberType}
                             </p>
                           )}
                           {item.technology && (
