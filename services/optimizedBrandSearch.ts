@@ -2,11 +2,11 @@
 // Optimized parallel brand search implementation
 
 import { Product } from './searchService'
-import { searchCategoryCablesImpl } from '@/search/categoryCables/categoryCableSearch'
-import { searchFiberConnectorsImpl } from '@/search/fiberConnectors/fiberConnectorSearch'
-import { searchFiberCablesImpl } from '@/search/fiberCables/fiberCableSearch'
-import { searchAdapterPanelsImpl } from '@/search/fiberadapterPanels/fiberadapterPanelSearch'
-import { searchRackMountFiberEnclosuresImpl } from '@/search/fiberenclosure/rack_mount_fiber_enclosure_Search'
+import { searchCategoryCables as searchCategoryCablesImpl } from '@/search/categoryCables/categoryCableSearch'
+import { searchFiberConnectors as searchFiberConnectorsImpl } from '@/search/fiberConnectors/fiberConnectorSearch'
+import { searchFiberCables as searchFiberCablesImpl } from '@/search/fiberCables/fiberCableSearch'
+import { searchAdapterPanels as searchAdapterPanelsImpl } from '@/search/fiberadapterPanels/fiberadapterPanelSearch'
+import { searchRackMountFiberEnclosures as searchRackMountFiberEnclosuresImpl } from '@/search/fiberenclosure/rack_mount_fiber_enclosure_Search'
 import { logger } from '@/utils/logger'
 import { SEARCH_LIMITS } from '@/config/constants'
 

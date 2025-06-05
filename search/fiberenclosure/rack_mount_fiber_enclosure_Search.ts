@@ -202,7 +202,7 @@ const extractCommonTerms = (searchTerm: string): string[] => {
     }
   }
 
-  return [...new Set(detectedTerms)]
+  return Array.from(new Set(detectedTerms))
 }
 
 // ===================================================================

@@ -8,7 +8,7 @@
 // Update: Added dynamic table discovery - June 5, 2025
 
 import { supabase } from '@/lib/supabase'
-import { searchAllTablesForPartNumber } from './tableDiscoveryService'
+import { searchAllTablesForPartNumber } from '@/search/shared/tableDiscoveryService'
 
 // Import the actual search implementations
 import {
@@ -1143,10 +1143,4 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
 // EXPORTS
 // ===================================================================
 
-export type {
-  Product,
-  AISearchAnalysis,
-  SmartFilters,
-  SearchResult,
-  SearchOptions
-}
+// Types are already exported at their definitions above

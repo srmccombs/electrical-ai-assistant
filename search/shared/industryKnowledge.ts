@@ -1,6 +1,6 @@
 // src/search/shared/industryKnowledge.ts
 // Your 35 years of electrical industry knowledge - centralized and reusable
-// CREATE THIS FILE: src/search/shared/industryKnowledge.ts
+// FIXED: Detection order for jacket types - check "non-plenum" BEFORE "plenum"
 
 // ===================================================================
 // TYPE DEFINITIONS
@@ -29,15 +29,78 @@ export interface DetectedParts {
 }
 
 // ===================================================================
-// ELECTRICAL INDUSTRY KNOWLEDGE -
+// COMPREHENSIVE SEARCH TERMS
+// ===================================================================
+
+export const COMPREHENSIVE_CATEGORY_TERMS = {
+  // Category 5e Variations
+  cat5e: [
+    'Cat5e', 'cat5e', 'CAT5e', 'CAT5E', 'Cat 5e', 'cat 5e', 'CAT 5e', 'CAT 5E',
+    'Category 5e', 'category 5e', 'CATEGORY 5e', 'CATEGORY 5E',
+    'Category 5 enhanced', 'category 5 enhanced',
+    'Cat5E', 'cat5E', 'enhanced cat5', 'enhanced Cat5', 'enhanced CAT5',
+    'enhanced category 5'
+  ],
+
+  // Category 6 Variations
+  cat6: [
+    'Cat6', 'cat6', 'CAT6', 'Cat 6', 'cat 6', 'CAT 6',
+    'Category 6', 'category 6', 'CATEGORY 6',
+    'Category six', 'category six', 'cat six', 'Cat six', 'CAT six',
+    'category six unshielded',
+    'gigabit cable', 'gigabit ethernet', '1000BaseT', '1000Base-T', '1000 BaseT'
+  ],
+
+  // Category 6a Variations
+  cat6a: [
+    'Cat6a', 'cat6a', 'CAT6a', 'CAT6A', 'Cat 6a', 'cat 6a', 'CAT 6a', 'CAT 6A',
+    'Cat6A', 'cat6A', 'Category 6a', 'category 6a', 'CATEGORY 6a', 'CATEGORY 6A',
+    'Category 6 augmented', 'category 6 augmented', 'augmented category 6',
+    'augmented cat6', 'augmented Cat6',
+    'TIA-568-B.2-10', '10-gig cable', '10 gig cable', '10-gigabit', '10 gigabit',
+    '10GBaseT', '10GBase-T', '10G BaseT'
+  ]
+}
+
+export const COMPREHENSIVE_CABLE_TYPE_TERMS = {
+  utp: [
+    'UTP', 'utp', 'U.T.P.', 'u.t.p.',
+    'unshielded twisted pair', 'unshielded-twisted-pair', 'unshieldedtwistedpair'
+  ],
+  stp: [
+    'STP', 'stp', 'S.T.P.', 's.t.p.',
+    'shielded twisted pair', 'shielded-twisted-pair', 'shieldedtwistedpair'
+  ]
+}
+
+export const COMPREHENSIVE_JACKET_TERMS = {
+  // RISER terms - includes non-plenum variations
+  riser: [
+    'non-plenum', 'non plenum', 'nonplenum', 'non-plenum rated',
+    'riser', 'riser rated', 'riser-rated', 'riserrated',
+    'CMR', 'cmr', 'C.M.R.', 'c.m.r.', 'PVC', 'pvc'
+  ],
+  // PLENUM terms - ONLY actual plenum
+  plenum: [
+    'plenum rated', 'plenum-rated', 'plenumrated',
+    'CMP', 'cmp', 'C.M.P.', 'c.m.p.'
+    // NOTE: "plenum" by itself is checked AFTER non-plenum terms
+  ]
+}
+
+// ===================================================================
+// ELECTRICAL INDUSTRY KNOWLEDGE
 // ===================================================================
 
 // CRITICAL: Enhanced Jacket Rating Equivalencies (from your experience)
 export const JACKET_EQUIVALENCIES = {
   // RISER = CMR = NON-PLENUM = PVC (all exactly the same thing!)
-  riser: ["riser", "cmr", "non-plenum", "non plenum", "nonplenum", "cmr rated", "pvc"],
+  riser: [
+    "non-plenum", "non plenum", "nonplenum", "non-plenum rated",
+    "riser", "cmr", "cmr rated", "pvc"
+  ],
   // PLENUM = CMP
-  plenum: ["plenum", "cmp", "plenum rated", "cmp rated"],
+  plenum: ["plenum rated", "cmp", "cmp rated", "plenum-rated"],
   // OUTDOOR variations
   outdoor: ["outdoor", "osp", "outside plant", "burial", "underground", "gel filled", "gel-filled", "water block", "waterblock"]
 } as const
@@ -91,27 +154,40 @@ export const DATABASE_PAIR_COUNTS = ["4-Pair"]
 // DETECTION FUNCTIONS - YOUR INDUSTRY EXPERTISE
 // ===================================================================
 
-// Enhanced jacket type detection with more patterns
+// FIXED: Enhanced jacket type detection with correct order
 export const detectJacketType = (searchTerm: string): string | null => {
   const query = searchTerm.toLowerCase().trim()
 
   console.log(`🧥 Detecting jacket type from: "${query}"`)
 
-  // Check for riser equivalents (highest priority - most common)
-  // INCLUDES PVC (PVC = Riser = CMR = Non-Plenum)
-  for (const term of JACKET_EQUIVALENCIES.riser) {
+  // CRITICAL: Check for NON-PLENUM variations FIRST
+  if (query.includes('non-plenum') || query.includes('non plenum') || query.includes('nonplenum')) {
+    console.log(`🧥 DETECTED RISER from non-plenum variation`)
+    return "RISER"
+  }
+
+  // Then check for other RISER terms (CMR, PVC, riser)
+  const riserOnlyTerms = ['riser', 'cmr', 'c.m.r.', 'pvc']
+  for (const term of riserOnlyTerms) {
     if (query.includes(term)) {
       console.log(`🧥 DETECTED RISER from term: "${term}"`)
       return "RISER"
     }
   }
 
-  // Check for plenum
-  for (const term of JACKET_EQUIVALENCIES.plenum) {
+  // Check for PLENUM terms (including standalone "plenum")
+  const plenumTerms = ['plenum rated', 'plenum-rated', 'plenumrated', 'cmp', 'c.m.p.']
+  for (const term of plenumTerms) {
     if (query.includes(term)) {
       console.log(`🧥 DETECTED PLENUM from term: "${term}"`)
       return "PLENUM"
     }
+  }
+
+  // Finally check for standalone "plenum" (only if NOT part of "non-plenum")
+  if (query.includes('plenum')) {
+    console.log(`🧥 DETECTED PLENUM from standalone "plenum"`)
+    return "PLENUM"
   }
 
   // Check for outdoor
@@ -126,10 +202,21 @@ export const detectJacketType = (searchTerm: string): string | null => {
   return null
 }
 
-// Enhanced category detection
+// Enhanced category detection with comprehensive terms
 export const detectCategoryRating = (searchTerm: string): string | null => {
   const query = searchTerm.toLowerCase().trim()
 
+  // First check comprehensive terms
+  for (const [category, terms] of Object.entries(COMPREHENSIVE_CATEGORY_TERMS)) {
+    for (const term of terms) {
+      if (query.includes(term.toLowerCase())) {
+        console.log(`📊 DETECTED CATEGORY: ${category.toUpperCase()} from comprehensive term: "${term}"`)
+        return category.toUpperCase()
+      }
+    }
+  }
+
+  // Fallback to original patterns
   for (const [category, patterns] of Object.entries(CATEGORY_PATTERNS)) {
     for (const pattern of patterns) {
       if (query.includes(pattern)) {
@@ -142,10 +229,21 @@ export const detectCategoryRating = (searchTerm: string): string | null => {
   return null
 }
 
-// Enhanced shielding detection
+// Enhanced shielding detection with comprehensive terms
 export const detectShielding = (searchTerm: string): string | null => {
   const query = searchTerm.toLowerCase().trim()
 
+  // Check comprehensive terms first
+  for (const [type, terms] of Object.entries(COMPREHENSIVE_CABLE_TYPE_TERMS)) {
+    for (const term of terms) {
+      if (query.includes(term.toLowerCase())) {
+        console.log(`🛡️ DETECTED SHIELDING: ${type.toUpperCase()} from comprehensive term: "${term}"`)
+        return type.toUpperCase()
+      }
+    }
+  }
+
+  // Fallback to original patterns
   for (const [type, patterns] of Object.entries(SHIELDING_PATTERNS)) {
     for (const pattern of patterns) {
       if (query.includes(pattern)) {
@@ -187,8 +285,10 @@ export const detectColor = (searchTerm: string): string | null => {
 
   for (const color of colors) {
     if (query.includes(color)) {
-      console.log(`🎨 DETECTED COLOR: ${color}`)
-      return color
+      // Normalize gray/grey to gray
+      const normalizedColor = color === 'grey' ? 'gray' : color
+      console.log(`🎨 DETECTED COLOR: ${normalizedColor}`)
+      return normalizedColor.charAt(0).toUpperCase() + normalizedColor.slice(1)
     }
   }
 
@@ -239,7 +339,8 @@ export const detectPartNumbers = (searchTerm: string): DetectedParts => {
     'ethernet', 'network', 'category', 'plenum', 'riser', 'outdoor', 'indoor',
     'single', 'multimode', 'singlemode', 'corning', 'panduit', 'leviton',
     'superior', 'essex', 'enclosure', 'housing', 'patch', 'pigtail',
-    'jumper', 'coupler', 'splice', 'terminal', 'termination'
+    'jumper', 'coupler', 'splice', 'terminal', 'termination',
+    'non-plenum', 'nonplenum', 'cmr', 'cmp', 'pvc'  // Added jacket terms
   ]
 
   // Enhanced part number patterns - more restrictive to avoid false positives

@@ -1,5 +1,5 @@
 // src/search/categoryCables/categoryCableSearch.ts
-// FIXED VERSION - Variable declarations moved before usage
+// FIXED VERSION - Strict jacket filtering that works
 
 import { supabase } from '@/lib/supabase'
 import {
@@ -33,8 +33,61 @@ export interface CategoryCableSearchResult {
 }
 
 // ===================================================================
+// COMPREHENSIVE SEARCH TERMS
+// ===================================================================
+
+const CATEGORY_SEARCH_TERMS = {
+  // Category 5e Variations
+  cat5e: [
+    'Cat5e', 'cat5e', 'CAT5e', 'CAT5E', 'Cat 5e', 'cat 5e', 'CAT 5e', 'CAT 5E',
+    'Category 5e', 'category 5e', 'CATEGORY 5e', 'CATEGORY 5E',
+    'Category 5 enhanced', 'category 5 enhanced',
+    'Cat5E', 'cat5E', 'enhanced cat5', 'enhanced Cat5', 'enhanced CAT5',
+    'enhanced category 5'
+  ],
+
+  // Category 6 Variations
+  cat6: [
+    'Cat6', 'cat6', 'CAT6', 'Cat 6', 'cat 6', 'CAT 6',
+    'Category 6', 'category 6', 'CATEGORY 6',
+    'Category six', 'category six', 'cat six', 'Cat six', 'CAT six',
+    'category six unshielded',
+    'gigabit cable', 'gigabit ethernet', '1000BaseT', '1000Base-T', '1000 BaseT'
+  ],
+
+  // Category 6a Variations
+  cat6a: [
+    'Cat6a', 'cat6a', 'CAT6a', 'CAT6A', 'Cat 6a', 'cat 6a', 'CAT 6a', 'CAT 6A',
+    'Cat6A', 'cat6A', 'Category 6a', 'category 6a', 'CATEGORY 6a', 'CATEGORY 6A',
+    'Category 6 augmented', 'category 6 augmented', 'augmented category 6',
+    'augmented cat6', 'augmented Cat6',
+    'TIA-568-B.2-10', '10-gig cable', '10 gig cable', '10-gigabit', '10 gigabit',
+    '10GBaseT', '10GBase-T', '10G BaseT'
+  ]
+}
+
+// ===================================================================
 // HELPER FUNCTIONS - AI ANALYSIS INTEGRATION
 // ===================================================================
+
+/**
+ * Detect category from comprehensive search terms
+ */
+const detectCategoryFromTerms = (searchTerm: string): string | null => {
+  const query = searchTerm.toLowerCase()
+
+  // Check each category's terms
+  for (const [category, terms] of Object.entries(CATEGORY_SEARCH_TERMS)) {
+    for (const term of terms) {
+      if (query.includes(term.toLowerCase())) {
+        console.log(`📊 DETECTED CATEGORY: ${category.toUpperCase()} from term: "${term}"`)
+        return category.toUpperCase()
+      }
+    }
+  }
+
+  return null
+}
 
 /**
  * Convert AI jacket rating to search format
@@ -42,16 +95,15 @@ export interface CategoryCableSearchResult {
 const normalizeJacketRating = (aiJacketRating?: string, textDetected?: string | null): string | undefined => {
   // Prioritize AI analysis
   if (aiJacketRating) {
-    if (aiJacketRating.toUpperCase() === 'CMP') {
+    const rating = aiJacketRating.toUpperCase()
+
+    // Handle all PLENUM variations
+    if (rating === 'CMP' || rating === 'PLENUM') {
       return 'PLENUM'
     }
-    if (aiJacketRating.toUpperCase() === 'CMR') {
-      return 'RISER'
-    }
-    if (aiJacketRating.toUpperCase() === 'PLENUM') {
-      return 'PLENUM'
-    }
-    if (aiJacketRating.toUpperCase() === 'RISER') {
+
+    // Handle all RISER/NON-PLENUM variations
+    if (rating === 'CMR' || rating === 'RISER' || rating === 'NON_PLENUM' || rating === 'NON-PLENUM' || rating === 'NONPLENUM') {
       return 'RISER'
     }
   }
@@ -70,11 +122,15 @@ const normalizeCategoryRating = (aiCategoryRating?: string, textDetected?: strin
     if (normalized === 'CAT6' || normalized === 'CATEGORY6') return 'CAT6'
     if (normalized === 'CAT6A' || normalized === 'CATEGORY6A') return 'CAT6A'
     if (normalized === 'CAT5E' || normalized === 'CATEGORY5E') return 'CAT5E'
-    if (normalized === 'CAT5' || normalized === 'CATEGORY5') return 'CAT5'
+    if (normalized === 'CAT5' || normalized === 'CATEGORY5') return 'CAT5E'
     return normalized
   }
 
-  // Fall back to text detection (handle null case)
+  // Fall back to comprehensive term detection
+  const termsDetected = detectCategoryFromTerms(textDetected || '')
+  if (termsDetected) return termsDetected
+
+  // Finally fall back to original text detection
   return textDetected || undefined
 }
 
@@ -91,11 +147,11 @@ const normalizeColor = (aiColor?: string, textDetected?: string | null): string 
 }
 
 // ===================================================================
-// SEARCH STRATEGIES
+// SEARCH STRATEGIES - FIXED WITH STRICT JACKET FILTERING
 // ===================================================================
 
 /**
- * STRATEGY 1: Product Line Search - Enhanced with AI
+ * STRATEGY 1: Product Line Search - Enhanced with strict jacket filtering
  */
 const searchByProductLine = async (
   productLine: string,
@@ -116,22 +172,21 @@ const searchByProductLine = async (
     console.log(`🎨 Adding color filter: ${detectedColor}`)
   }
 
-  if (detectedJacket === 'RISER') {
-    query = query.eq('jacket_material', 'Non-Plenum Rated CMR ')
-    console.log(`🧥 Adding riser filter: Non-Plenum Rated CMR`)
-  } else if (detectedJacket === 'PLENUM') {
-    query = query.eq('jacket_material', 'Plenum Rated CMP ')
-    console.log(`🧥 Adding plenum filter: Plenum Rated CMP`)
+  const result = await query
+  let products = result.data ? formatCableResults(result.data, 'product_line_match') : []
+
+  // Apply jacket filtering to results
+  if (detectedJacket && products.length > 0) {
+    const beforeCount = products.length
+    products = filterByJacket(products, detectedJacket)
+    console.log(`🧥 Product line jacket filter (${detectedJacket}): ${beforeCount} → ${products.length}`)
   }
 
-  const result = await query
-  console.log(`📊 Product line search result: ${result.data?.length || 0} products found`)
-
-  return result.data ? formatCableResults(result.data, 'product_line_match') : []
+  return products
 }
 
 /**
- * STRATEGY 2: Multi-Criteria Targeted Search
+ * STRATEGY 2: Multi-Criteria Targeted Search - FIXED WITH BETTER FILTERING
  */
 const searchByMultiCriteria = async (
   searchTerm: string,
@@ -144,80 +199,120 @@ const searchByMultiCriteria = async (
   console.log(`🎯 STRATEGY 2: AI-Enhanced Targeted Search: "${searchTerm}"`)
   console.log(`🤖 AI Specs:`, aiAnalysis?.detectedSpecs)
 
+  // For jacket-specific searches, use a focused approach
+  if (detectedJacket && !detectedCategory && !detectedProductLine) {
+    console.log(`🧥 Jacket-focused search for ${detectedJacket}`)
+
+    let query = supabase
+      .from('category_cables')
+      .select('*')
+      .eq('is_active', true)
+      .limit(150)
+
+    // Search in both jacket_material and description
+    const jacketConditions: string[] = []
+
+    if (detectedJacket === 'RISER') {
+      // For RISER, search for all non-plenum variations
+      jacketConditions.push('jacket_material.ilike.%CMR%')
+      jacketConditions.push('jacket_material.ilike.%Non-Plenum%')
+      jacketConditions.push('short_description.ilike.%non-plenum%')
+      jacketConditions.push('short_description.ilike.%riser%')
+      jacketConditions.push('short_description.ilike.%cmr%')
+    } else if (detectedJacket === 'PLENUM') {
+      // For PLENUM, search for plenum variations
+      jacketConditions.push('jacket_material.ilike.%CMP%')
+      jacketConditions.push('jacket_material.ilike.%Plenum%')
+      jacketConditions.push('short_description.ilike.%plenum%')
+      jacketConditions.push('short_description.ilike.%cmp%')
+    }
+
+    if (jacketConditions.length > 0) {
+      query = query.or(jacketConditions.join(','))
+    }
+
+    const result = await query
+    let products = result.data ? formatCableResults(result.data, 'jacket_search') : []
+
+    // Double-check with post-filtering
+    if (products.length > 0) {
+      const beforeCount = products.length
+      products = filterByJacket(products, detectedJacket)
+      console.log(`🧥 Post-filter verification (${detectedJacket}): ${beforeCount} → ${products.length}`)
+    }
+
+    return products
+  }
+
+  // Regular multi-criteria search
   let query = supabase
     .from('category_cables')
     .select('*')
     .eq('is_active', true)
     .limit(150)
 
+  // Apply exact match filters
+  if (detectedColor) {
+    query = query.eq('jacket_color', detectedColor)
+    console.log(`🎨 REQUIRED: Color filter ${detectedColor}`)
+  }
+
+  if (detectedProductLine) {
+    query = query.eq('product_line', detectedProductLine)
+    console.log(`📋 REQUIRED: Product line filter ${detectedProductLine}`)
+  }
+
+  // Build search conditions for category
   const searchConditions: string[] = []
 
-  // 1. Direct term searches
-  searchConditions.push(`part_number.ilike.%${searchTerm}%`)
-  searchConditions.push(`short_description.ilike.%${searchTerm}%`)
-  searchConditions.push(`product_line.ilike.%${searchTerm}%`)
-
-  // 2. ENHANCED CATEGORY SEARCH - Use AI analysis first
   if (detectedCategory === 'CAT6') {
-    searchConditions.push(`category_rating.ilike.%Category 6%`)
-    console.log('🎯 AI + Pattern: CAT6 → "Category 6"')
+    searchConditions.push('category_rating.ilike.%Category 6%')
+    searchConditions.push('short_description.ilike.%cat6%')
+    searchConditions.push('short_description.ilike.%cat 6%')
+    searchConditions.push('short_description.ilike.%category 6%')
+    console.log('🎯 Using comprehensive CAT6 search terms')
   } else if (detectedCategory === 'CAT6A') {
-    searchConditions.push(`category_rating.ilike.%Category 6A%`)
-    console.log('🎯 AI + Pattern: CAT6A → "Category 6A"')
+    searchConditions.push('category_rating.ilike.%Category 6A%')
+    searchConditions.push('short_description.ilike.%cat6a%')
+    searchConditions.push('short_description.ilike.%cat 6a%')
+    searchConditions.push('short_description.ilike.%category 6a%')
+    console.log('🎯 Using comprehensive CAT6A search terms')
   } else if (detectedCategory === 'CAT5E') {
-    searchConditions.push(`category_rating.ilike.%Category 5e%`)
-    console.log('🎯 AI + Pattern: CAT5E → "Category 5e"')
-  } else if (searchTerm.includes('cat6') || searchTerm.includes('cat 6') || searchTerm.includes('category 6')) {
-    searchConditions.push(`category_rating.ilike.%Category 6%`)
-    console.log('🎯 Text Pattern: "cat 6" → "Category 6"')
-  } else if (searchTerm.includes('cat5e') || searchTerm.includes('cat 5e')) {
-    searchConditions.push(`category_rating.ilike.%Category 5e%`)
-    console.log('🎯 Text Pattern: "cat 5e" → "Category 5e"')
+    searchConditions.push('category_rating.ilike.%Category 5e%')
+    searchConditions.push('short_description.ilike.%cat5e%')
+    searchConditions.push('short_description.ilike.%cat 5e%')
+    searchConditions.push('short_description.ilike.%category 5e%')
+    console.log('🎯 Using comprehensive CAT5E search terms')
   } else {
-    searchConditions.push(`category_rating.ilike.%${searchTerm}%`)
-  }
-
-  // 3. Product line detection
-  if (detectedProductLine) {
-    searchConditions.push(`product_line.eq.${detectedProductLine}`)
-    console.log(`📋 Product line filter: ${detectedProductLine}`)
-  }
-
-  // 4. ENHANCED COLOR SEARCH - Use AI analysis first
-  if (detectedColor) {
-    searchConditions.push(`jacket_color.eq.${detectedColor}`)
-    console.log(`🎨 Color filter: ${detectedColor}`)
-  }
-
-  // 5. ENHANCED JACKET SEARCH - Use AI analysis with proper CMP/CMR handling
-  if (detectedJacket === 'RISER') {
-    searchConditions.push(`jacket_material.eq.Non-Plenum Rated CMR `)
-    searchConditions.push(`short_description.ilike.%CMR%`)
-    console.log(`🧥 Jacket filter: RISER (CMR)`)
-  } else if (detectedJacket === 'PLENUM') {
-    searchConditions.push(`jacket_material.eq.Plenum Rated CMP `)
-    searchConditions.push(`short_description.ilike.%CMP%`)
-    console.log(`🧥 Jacket filter: PLENUM (CMP)`)
+    // General search
+    searchConditions.push(`part_number.ilike.%${searchTerm}%`)
+    searchConditions.push(`short_description.ilike.%${searchTerm}%`)
   }
 
   if (searchConditions.length > 0) {
     query = query.or(searchConditions.join(','))
-    console.log(`🚀 Applying ${searchConditions.length} search conditions`)
-    console.log(`🔍 Search conditions:`, searchConditions)
   }
 
   const result = await query
-  console.log(`📊 Targeted search result: ${result.data?.length || 0} products found`)
+  let products = result.data ? formatCableResults(result.data, 'targeted_search') : []
 
-  return result.data ? formatCableResults(result.data, 'targeted_search') : []
+  // Apply jacket filtering to results
+  if (detectedJacket && products.length > 0) {
+    const beforeCount = products.length
+    products = filterByJacket(products, detectedJacket)
+    console.log(`🧥 Multi-criteria jacket filter (${detectedJacket}): ${beforeCount} → ${products.length}`)
+  }
+
+  return products
 }
 
 /**
- * STRATEGY 3: Fallback Broad Search - Enhanced with AI
+ * STRATEGY 3: Fallback Broad Search - Enhanced with better filtering
  */
 const searchByFallback = async (
   searchTerm: string,
-  aiAnalysis?: AISearchAnalysis | null
+  aiAnalysis?: AISearchAnalysis | null,
+  detectedJacket?: string | undefined
 ): Promise<Product[]> => {
   console.log(`🔍 STRATEGY 3: AI-Enhanced Fallback Search: "${searchTerm}"`)
 
@@ -225,49 +320,105 @@ const searchByFallback = async (
     .from('category_cables')
     .select('*')
     .eq('is_active', true)
-    .limit(100)
+    .limit(200)  // Increased limit for fallback
 
   const searchConditions: string[] = []
 
+  // Add general search conditions
   searchConditions.push(`short_description.ilike.%${searchTerm}%`)
   searchConditions.push(`product_line.ilike.%${searchTerm}%`)
-  searchConditions.push(`jacket_color.ilike.%${searchTerm}%`)
   searchConditions.push(`part_number.ilike.%${searchTerm}%`)
 
-  // Enhanced category matching with AI backup
-  const aiCategory = aiAnalysis?.detectedSpecs?.categoryRating
-  if (aiCategory === 'CAT6') {
-    searchConditions.push(`category_rating.ilike.%Category 6%`)
-    console.log('🎯 AI Fallback: CAT6 → "Category 6"')
-  } else if (aiCategory === 'CAT6A') {
-    searchConditions.push(`category_rating.ilike.%Category 6A%`)
-    console.log('🎯 AI Fallback: CAT6A → "Category 6A"')
-  } else if (aiCategory === 'CAT5E') {
-    searchConditions.push(`category_rating.ilike.%Category 5e%`)
-    console.log('🎯 AI Fallback: CAT5E → "Category 5e"')
-  } else if (searchTerm.includes('cat6') || searchTerm.includes('cat 6')) {
-    searchConditions.push(`category_rating.ilike.%Category 6%`)
-    console.log('🎯 Text Fallback: "cat 6" → "Category 6"')
-  } else {
-    searchConditions.push(`category_rating.ilike.%${searchTerm}%`)
+  // Also search for individual terms
+  const terms = searchTerm.split(' ').filter(t => t.length > 2)
+  terms.forEach(term => {
+    searchConditions.push(`short_description.ilike.%${term}%`)
+  })
+
+  // Enhanced category matching
+  const detectedCategory = detectCategoryFromTerms(searchTerm)
+  if (detectedCategory) {
+    if (detectedCategory === 'CAT6') {
+      searchConditions.push(`category_rating.ilike.%Category 6%`)
+    } else if (detectedCategory === 'CAT6A') {
+      searchConditions.push(`category_rating.ilike.%Category 6A%`)
+    } else if (detectedCategory === 'CAT5E') {
+      searchConditions.push(`category_rating.ilike.%Category 5e%`)
+    }
   }
 
-  query = query.or(searchConditions.join(','))
+  if (searchConditions.length > 0) {
+    query = query.or(searchConditions.join(','))
+  }
 
   const fallbackResult = await query
   console.log(`📊 Fallback search result: ${fallbackResult.data?.length || 0} products found`)
 
-  return fallbackResult.data ? formatCableResults(fallbackResult.data, 'fallback_search') : []
+  let products = fallbackResult.data ? formatCableResults(fallbackResult.data, 'fallback_search') : []
+
+  // STRICT jacket filtering for fallback results
+  if (detectedJacket && products.length > 0) {
+    const beforeCount = products.length
+    products = filterByJacket(products, detectedJacket)
+    console.log(`🧥 Fallback jacket filter (${detectedJacket}): ${beforeCount} → ${products.length}`)
+  }
+
+  return products
 }
 
 // ===================================================================
 // POST-PROCESSING AND FILTERING
 // ===================================================================
 
+/**
+ * Filter products by jacket type - FIXED LOGIC
+ */
+const filterByJacket = (products: Product[], jacketType: string): Product[] => {
+  console.log(`🧥 Filtering ${products.length} products for jacket type: ${jacketType}`)
+
+  return products.filter(item => {
+    const jacketMaterial = item.jacketRating?.toUpperCase() || ''
+    const description = item.description?.toLowerCase() || ''
+    const partNumber = item.partNumber?.toLowerCase() || ''
+
+    if (jacketType === 'PLENUM') {
+      // Only allow CMP/Plenum products
+      const isPlenum = jacketMaterial === 'CMP' ||
+                      jacketMaterial.includes('PLENUM') ||
+                      description.includes('plenum') ||
+                      description.includes('cmp') ||
+                      partNumber.includes('cmp')
+
+      // Make sure it's NOT non-plenum
+      const isNonPlenum = description.includes('non-plenum') ||
+                         description.includes('non plenum') ||
+                         description.includes('cmr') ||
+                         description.includes('riser')
+
+      return isPlenum && !isNonPlenum
+
+    } else if (jacketType === 'RISER') {
+      // Allow CMR/Riser/PVC/Non-Plenum products
+      // The key is to EXCLUDE plenum products
+      const isPlenum = (jacketMaterial === 'CMP' ||
+                       jacketMaterial.includes('PLENUM') ||
+                       (description.includes('plenum') && !description.includes('non-plenum') && !description.includes('non plenum')) ||
+                       description.includes('cmp') ||
+                       partNumber.includes('cmp'))
+
+      // It's riser if it's NOT plenum
+      return !isPlenum
+    }
+
+    return true
+  })
+}
+
 const applyIntelligentFiltering = (
   products: Product[],
   detectedCategory?: string | undefined,
   detectedShielding?: string | null,
+  detectedJacket?: string | undefined,
   aiAnalysis?: AISearchAnalysis | null
 ): Product[] => {
   let filteredResults = products
@@ -275,7 +426,19 @@ const applyIntelligentFiltering = (
   // Use AI analysis for more precise filtering
   const finalCategory = detectedCategory || aiAnalysis?.detectedSpecs?.categoryRating
   const finalShielding = detectedShielding || aiAnalysis?.detectedSpecs?.shielding
+  const finalJacket = detectedJacket || normalizeJacketRating(
+    aiAnalysis?.detectedSpecs?.jacketRating,
+    null
+  )
 
+  // Apply jacket filtering FIRST (most important)
+  if (finalJacket) {
+    const beforeCount = filteredResults.length
+    filteredResults = filterByJacket(filteredResults, finalJacket)
+    console.log(`🧥 Intelligent jacket filter (${finalJacket}): ${beforeCount} → ${filteredResults.length} products`)
+  }
+
+  // Apply category filtering
   if (finalCategory) {
     const beforeCount = filteredResults.length
 
@@ -298,6 +461,7 @@ const applyIntelligentFiltering = (
     console.log(`🎯 Category filter (${finalCategory}): ${beforeCount} → ${filteredResults.length} products`)
   }
 
+  // Apply shielding filtering
   if (finalShielding) {
     const beforeCount = filteredResults.length
 
@@ -313,7 +477,7 @@ const applyIntelligentFiltering = (
 }
 
 // ===================================================================
-// MAIN SEARCH FUNCTION - FIXED VARIABLE DECLARATIONS
+// MAIN SEARCH FUNCTION
 // ===================================================================
 
 export const searchCategoryCables = async (
@@ -322,20 +486,20 @@ export const searchCategoryCables = async (
   const startTime = performance.now()
   const { searchTerm, aiAnalysis, limit = 100 } = options
 
-  console.log('🌐 CATEGORY CABLES SEARCH - AI Analysis Integration Fixed')
+  console.log('🌐 CATEGORY CABLES SEARCH - Strict Jacket Filtering')
   console.log('🔍 Search term:', searchTerm)
   console.log('🤖 AI Analysis:', aiAnalysis?.detectedSpecs)
 
   try {
     // ENHANCED DETECTION - Declare all variables FIRST
     const textDetectedJacket = detectJacketType(searchTerm)
-    const textDetectedCategory = detectCategoryRating(searchTerm)
+    const textDetectedCategory = detectCategoryFromTerms(searchTerm) || detectCategoryRating(searchTerm)
     const textDetectedColor = detectColor(searchTerm)
     const textDetectedProductLine = detectProductLine(searchTerm)
     const textDetectedShielding = detectShielding(searchTerm)
     const textDetectedQuantity = detectQuantity(searchTerm)
 
-    // NORMALIZE AI ANALYSIS (Now variables are declared above)
+    // NORMALIZE AI ANALYSIS - AI takes priority
     const detectedJacket = normalizeJacketRating(
       aiAnalysis?.detectedSpecs?.jacketRating,
       textDetectedJacket
@@ -350,7 +514,7 @@ export const searchCategoryCables = async (
     )
     const detectedQuantity = aiAnalysis?.detectedSpecs?.requestedQuantity || textDetectedQuantity
     const detectedShielding = aiAnalysis?.detectedSpecs?.shielding || textDetectedShielding
-    const detectedProductLine = textDetectedProductLine // Keep text detection for product lines
+    const detectedProductLine = textDetectedProductLine
 
     console.log('🎯 FINAL DETECTION RESULTS (AI + Text):', {
       jacket: `${detectedJacket} (AI: ${aiAnalysis?.detectedSpecs?.jacketRating}, Text: ${textDetectedJacket})`,
@@ -370,7 +534,7 @@ export const searchCategoryCables = async (
       products = await searchByProductLine(detectedProductLine, detectedColor, detectedJacket)
       if (products.length > 0) {
         searchStrategy = 'product_line_match'
-        products = applyIntelligentFiltering(products, detectedCategory, detectedShielding, aiAnalysis)
+        products = applyIntelligentFiltering(products, detectedCategory, detectedShielding, detectedJacket, aiAnalysis)
         const endTime = performance.now()
         return {
           products: products.slice(0, limit),
@@ -381,7 +545,7 @@ export const searchCategoryCables = async (
       }
     }
 
-    // STRATEGY 2: Multi-Criteria Search (ENHANCED WITH AI)
+    // STRATEGY 2: Multi-Criteria Search
     console.log(`🚀 STRATEGY 2: AI-Enhanced Multi-Criteria Search`)
     products = await searchByMultiCriteria(
       searchTerm,
@@ -394,13 +558,13 @@ export const searchCategoryCables = async (
 
     if (products.length > 0) {
       searchStrategy = 'targeted_search'
-      products = applyIntelligentFiltering(products, detectedCategory, detectedShielding, aiAnalysis)
+      products = applyIntelligentFiltering(products, detectedCategory, detectedShielding, detectedJacket, aiAnalysis)
     } else {
-      // STRATEGY 3: Fallback Search (ENHANCED WITH AI)
+      // STRATEGY 3: Fallback Search
       console.log(`🚀 STRATEGY 3: AI-Enhanced Fallback Search`)
-      products = await searchByFallback(searchTerm, aiAnalysis)
+      products = await searchByFallback(searchTerm, aiAnalysis, detectedJacket)
       searchStrategy = 'fallback_search'
-      products = applyIntelligentFiltering(products, detectedCategory, detectedShielding, aiAnalysis)
+      products = applyIntelligentFiltering(products, detectedCategory, detectedShielding, detectedJacket, aiAnalysis)
     }
 
     const endTime = performance.now()
@@ -447,6 +611,8 @@ const formatCableResults = (data: any[], searchType: string): Product[] => {
     categoryRating: item.category_rating?.trim() || undefined,
     jacketRating: item.jacket_material?.includes('Plenum') ? 'CMP' :
                  item.jacket_material?.includes('Non-Plenum') ? 'CMR' :
+                 item.jacket_material?.includes('CMR') ? 'CMR' :
+                 item.jacket_material?.includes('CMP') ? 'CMP' :
                  item.jacket_material?.trim() || undefined,
     color: item.jacket_color?.trim() || undefined,
     packagingType: item.packaging_type?.trim() || undefined,
