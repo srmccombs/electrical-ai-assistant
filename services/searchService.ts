@@ -65,7 +65,8 @@ export interface Product {
   category: string
   imageUrl?: string
   fiberType?: string
-  jacketRating?: string
+  jacketRating?: string        // Keep this for display (e.g., "Non-Plenum Rated CMR")
+  jacketCode?: string         // NEW: Add this for filtering (e.g., "CMR")
   fiberCount?: number
   connectorType?: string
   categoryRating?: string
