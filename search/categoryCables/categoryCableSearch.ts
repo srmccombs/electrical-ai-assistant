@@ -1,5 +1,5 @@
 // src/search/categoryCables/categoryCableSearch.ts
-// FIXED VERSION - Strict jacket filtering that works
+// UPDATED VERSION - Using new jacket_code column for fast, accurate filtering
 
 import { supabase } from '@/lib/supabase'
 import {
@@ -33,7 +33,7 @@ export interface CategoryCableSearchResult {
 }
 
 // ===================================================================
-// COMPREHENSIVE SEARCH TERMS
+// COMPREHENSIVE SEARCH TERMS (keeping existing)
 // ===================================================================
 
 const CATEGORY_SEARCH_TERMS = {
@@ -67,6 +67,18 @@ const CATEGORY_SEARCH_TERMS = {
 }
 
 // ===================================================================
+// JACKET CODE MAPPING - NEW!
+// ===================================================================
+
+// Map our detection terms to the actual jacket codes in the database
+const JACKET_CODE_MAPPING: Record<string, string> = {
+  'PLENUM': 'CMP',
+  'RISER': 'CMR',
+  'OUTDOOR': 'OSP',
+  'LSZH': 'LSZH'
+}
+
+// ===================================================================
 // HELPER FUNCTIONS - AI ANALYSIS INTEGRATION
 // ===================================================================
 
@@ -90,26 +102,35 @@ const detectCategoryFromTerms = (searchTerm: string): string | null => {
 }
 
 /**
- * Convert AI jacket rating to search format
+ * Convert AI jacket rating to database jacket code
  */
 const normalizeJacketRating = (aiJacketRating?: string, textDetected?: string | null): string | undefined => {
+  let detectedType: string | undefined
+
   // Prioritize AI analysis
   if (aiJacketRating) {
     const rating = aiJacketRating.toUpperCase()
 
-    // Handle all PLENUM variations
     if (rating === 'CMP' || rating === 'PLENUM') {
-      return 'PLENUM'
-    }
-
-    // Handle all RISER/NON-PLENUM variations
-    if (rating === 'CMR' || rating === 'RISER' || rating === 'NON_PLENUM' || rating === 'NON-PLENUM' || rating === 'NONPLENUM') {
-      return 'RISER'
+      detectedType = 'PLENUM'
+    } else if (rating === 'CMR' || rating === 'RISER' || rating === 'NON_PLENUM' || rating === 'NON-PLENUM' || rating === 'NONPLENUM') {
+      detectedType = 'RISER'
+    } else if (rating === 'OSP' || rating === 'OUTDOOR') {
+      detectedType = 'OUTDOOR'
     }
   }
 
-  // Fall back to text detection (handle null case)
-  return textDetected || undefined
+  // Fall back to text detection if no AI result
+  if (!detectedType && textDetected) {
+    detectedType = textDetected
+  }
+
+  // Convert to actual database code
+  if (detectedType && JACKET_CODE_MAPPING[detectedType]) {
+    return JACKET_CODE_MAPPING[detectedType]
+  }
+
+  return undefined
 }
 
 /**
@@ -147,16 +168,16 @@ const normalizeColor = (aiColor?: string, textDetected?: string | null): string 
 }
 
 // ===================================================================
-// SEARCH STRATEGIES - FIXED WITH STRICT JACKET FILTERING
+// SEARCH STRATEGIES - SIMPLIFIED WITH jacket_code
 // ===================================================================
 
 /**
- * STRATEGY 1: Product Line Search - Enhanced with strict jacket filtering
+ * STRATEGY 1: Product Line Search - Now with jacket_code filtering
  */
 const searchByProductLine = async (
   productLine: string,
   detectedColor?: string | undefined,
-  detectedJacket?: string | undefined
+  detectedJacketCode?: string | undefined
 ): Promise<Product[]> => {
   console.log(`📋 STRATEGY 1: Searching by product line: "${productLine}"`)
 
@@ -172,75 +193,48 @@ const searchByProductLine = async (
     console.log(`🎨 Adding color filter: ${detectedColor}`)
   }
 
-  const result = await query
-  let products = result.data ? formatCableResults(result.data, 'product_line_match') : []
-
-  // Apply jacket filtering to results
-  if (detectedJacket && products.length > 0) {
-    const beforeCount = products.length
-    products = filterByJacket(products, detectedJacket)
-    console.log(`🧥 Product line jacket filter (${detectedJacket}): ${beforeCount} → ${products.length}`)
+  // NEW: Direct jacket_code filtering
+  if (detectedJacketCode) {
+    query = query.eq('jacket_code', detectedJacketCode)
+    console.log(`🧥 Adding jacket_code filter: ${detectedJacketCode}`)
   }
 
+  const result = await query
+  const products = result.data ? formatCableResults(result.data, 'product_line_match') : []
+
+  console.log(`📋 Product line search found: ${products.length} products`)
   return products
 }
 
 /**
- * STRATEGY 2: Multi-Criteria Targeted Search - FIXED WITH BETTER FILTERING
+ * STRATEGY 2: Multi-Criteria Targeted Search - SIMPLIFIED
  */
 const searchByMultiCriteria = async (
   searchTerm: string,
   aiAnalysis?: AISearchAnalysis | null,
   detectedProductLine?: string | null,
   detectedColor?: string | undefined,
-  detectedJacket?: string | undefined,
+  detectedJacketCode?: string | undefined,
   detectedCategory?: string | undefined
 ): Promise<Product[]> => {
   console.log(`🎯 STRATEGY 2: AI-Enhanced Targeted Search: "${searchTerm}"`)
   console.log(`🤖 AI Specs:`, aiAnalysis?.detectedSpecs)
 
-  // For jacket-specific searches, use a focused approach
-  if (detectedJacket && !detectedCategory && !detectedProductLine) {
-    console.log(`🧥 Jacket-focused search for ${detectedJacket}`)
+  // For jacket-specific searches, use direct jacket_code filter
+  if (detectedJacketCode && !detectedCategory && !detectedProductLine) {
+    console.log(`🧥 Jacket-focused search for jacket_code: ${detectedJacketCode}`)
 
     let query = supabase
       .from('category_cables')
       .select('*')
       .eq('is_active', true)
+      .eq('jacket_code', detectedJacketCode)  // Simple, direct filter!
       .limit(150)
 
-    // Search in both jacket_material and description
-    const jacketConditions: string[] = []
-
-    if (detectedJacket === 'RISER') {
-      // For RISER, search for all non-plenum variations
-      jacketConditions.push('jacket_material.ilike.%CMR%')
-      jacketConditions.push('jacket_material.ilike.%Non-Plenum%')
-      jacketConditions.push('short_description.ilike.%non-plenum%')
-      jacketConditions.push('short_description.ilike.%riser%')
-      jacketConditions.push('short_description.ilike.%cmr%')
-    } else if (detectedJacket === 'PLENUM') {
-      // For PLENUM, search for plenum variations
-      jacketConditions.push('jacket_material.ilike.%CMP%')
-      jacketConditions.push('jacket_material.ilike.%Plenum%')
-      jacketConditions.push('short_description.ilike.%plenum%')
-      jacketConditions.push('short_description.ilike.%cmp%')
-    }
-
-    if (jacketConditions.length > 0) {
-      query = query.or(jacketConditions.join(','))
-    }
-
     const result = await query
-    let products = result.data ? formatCableResults(result.data, 'jacket_search') : []
+    const products = result.data ? formatCableResults(result.data, 'jacket_search') : []
 
-    // Double-check with post-filtering
-    if (products.length > 0) {
-      const beforeCount = products.length
-      products = filterByJacket(products, detectedJacket)
-      console.log(`🧥 Post-filter verification (${detectedJacket}): ${beforeCount} → ${products.length}`)
-    }
-
+    console.log(`🧥 Jacket search found: ${products.length} products with jacket_code ${detectedJacketCode}`)
     return products
   }
 
@@ -260,6 +254,11 @@ const searchByMultiCriteria = async (
   if (detectedProductLine) {
     query = query.eq('product_line', detectedProductLine)
     console.log(`📋 REQUIRED: Product line filter ${detectedProductLine}`)
+  }
+
+  if (detectedJacketCode) {
+    query = query.eq('jacket_code', detectedJacketCode)
+    console.log(`🧥 REQUIRED: Jacket code filter ${detectedJacketCode}`)
   }
 
   // Build search conditions for category
@@ -294,15 +293,9 @@ const searchByMultiCriteria = async (
   }
 
   const result = await query
-  let products = result.data ? formatCableResults(result.data, 'targeted_search') : []
+  const products = result.data ? formatCableResults(result.data, 'targeted_search') : []
 
-  // Apply jacket filtering to results
-  if (detectedJacket && products.length > 0) {
-    const beforeCount = products.length
-    products = filterByJacket(products, detectedJacket)
-    console.log(`🧥 Multi-criteria jacket filter (${detectedJacket}): ${beforeCount} → ${products.length}`)
-  }
-
+  console.log(`🎯 Multi-criteria search found: ${products.length} products`)
   return products
 }
 
@@ -312,7 +305,7 @@ const searchByMultiCriteria = async (
 const searchByFallback = async (
   searchTerm: string,
   aiAnalysis?: AISearchAnalysis | null,
-  detectedJacket?: string | undefined
+  detectedJacketCode?: string | undefined
 ): Promise<Product[]> => {
   console.log(`🔍 STRATEGY 3: AI-Enhanced Fallback Search: "${searchTerm}"`)
 
@@ -320,7 +313,13 @@ const searchByFallback = async (
     .from('category_cables')
     .select('*')
     .eq('is_active', true)
-    .limit(200)  // Increased limit for fallback
+    .limit(200)
+
+  // If we have a jacket code, apply it as a filter
+  if (detectedJacketCode) {
+    query = query.eq('jacket_code', detectedJacketCode)
+    console.log(`🧥 Fallback search with jacket_code filter: ${detectedJacketCode}`)
+  }
 
   const searchConditions: string[] = []
 
@@ -354,71 +353,22 @@ const searchByFallback = async (
   const fallbackResult = await query
   console.log(`📊 Fallback search result: ${fallbackResult.data?.length || 0} products found`)
 
-  let products = fallbackResult.data ? formatCableResults(fallbackResult.data, 'fallback_search') : []
-
-  // STRICT jacket filtering for fallback results
-  if (detectedJacket && products.length > 0) {
-    const beforeCount = products.length
-    products = filterByJacket(products, detectedJacket)
-    console.log(`🧥 Fallback jacket filter (${detectedJacket}): ${beforeCount} → ${products.length}`)
-  }
-
+  const products = fallbackResult.data ? formatCableResults(fallbackResult.data, 'fallback_search') : []
   return products
 }
 
 // ===================================================================
-// POST-PROCESSING AND FILTERING
+// POST-PROCESSING AND FILTERING - MUCH SIMPLER NOW!
 // ===================================================================
 
 /**
- * Filter products by jacket type - FIXED LOGIC
+ * Apply intelligent filtering - Now simplified with jacket_code
  */
-const filterByJacket = (products: Product[], jacketType: string): Product[] => {
-  console.log(`🧥 Filtering ${products.length} products for jacket type: ${jacketType}`)
-
-  return products.filter(item => {
-    const jacketMaterial = item.jacketRating?.toUpperCase() || ''
-    const description = item.description?.toLowerCase() || ''
-    const partNumber = item.partNumber?.toLowerCase() || ''
-
-    if (jacketType === 'PLENUM') {
-      // Only allow CMP/Plenum products
-      const isPlenum = jacketMaterial === 'CMP' ||
-                      jacketMaterial.includes('PLENUM') ||
-                      description.includes('plenum') ||
-                      description.includes('cmp') ||
-                      partNumber.includes('cmp')
-
-      // Make sure it's NOT non-plenum
-      const isNonPlenum = description.includes('non-plenum') ||
-                         description.includes('non plenum') ||
-                         description.includes('cmr') ||
-                         description.includes('riser')
-
-      return isPlenum && !isNonPlenum
-
-    } else if (jacketType === 'RISER') {
-      // Allow CMR/Riser/PVC/Non-Plenum products
-      // The key is to EXCLUDE plenum products
-      const isPlenum = (jacketMaterial === 'CMP' ||
-                       jacketMaterial.includes('PLENUM') ||
-                       (description.includes('plenum') && !description.includes('non-plenum') && !description.includes('non plenum')) ||
-                       description.includes('cmp') ||
-                       partNumber.includes('cmp'))
-
-      // It's riser if it's NOT plenum
-      return !isPlenum
-    }
-
-    return true
-  })
-}
-
 const applyIntelligentFiltering = (
   products: Product[],
   detectedCategory?: string | undefined,
   detectedShielding?: string | null,
-  detectedJacket?: string | undefined,
+  detectedJacketCode?: string | undefined,
   aiAnalysis?: AISearchAnalysis | null
 ): Product[] => {
   let filteredResults = products
@@ -426,17 +376,8 @@ const applyIntelligentFiltering = (
   // Use AI analysis for more precise filtering
   const finalCategory = detectedCategory || aiAnalysis?.detectedSpecs?.categoryRating
   const finalShielding = detectedShielding || aiAnalysis?.detectedSpecs?.shielding
-  const finalJacket = detectedJacket || normalizeJacketRating(
-    aiAnalysis?.detectedSpecs?.jacketRating,
-    null
-  )
 
-  // Apply jacket filtering FIRST (most important)
-  if (finalJacket) {
-    const beforeCount = filteredResults.length
-    filteredResults = filterByJacket(filteredResults, finalJacket)
-    console.log(`🧥 Intelligent jacket filter (${finalJacket}): ${beforeCount} → ${filteredResults.length} products`)
-  }
+  // NO NEED for post-filtering by jacket anymore - it's handled in the query!
 
   // Apply category filtering
   if (finalCategory) {
@@ -486,7 +427,7 @@ export const searchCategoryCables = async (
   const startTime = performance.now()
   const { searchTerm, aiAnalysis, limit = 100 } = options
 
-  console.log('🌐 CATEGORY CABLES SEARCH - Strict Jacket Filtering')
+  console.log('🌐 CATEGORY CABLES SEARCH - With jacket_code Column')
   console.log('🔍 Search term:', searchTerm)
   console.log('🤖 AI Analysis:', aiAnalysis?.detectedSpecs)
 
@@ -499,8 +440,8 @@ export const searchCategoryCables = async (
     const textDetectedShielding = detectShielding(searchTerm)
     const textDetectedQuantity = detectQuantity(searchTerm)
 
-    // NORMALIZE AI ANALYSIS - AI takes priority
-    const detectedJacket = normalizeJacketRating(
+    // NORMALIZE AI ANALYSIS - Convert to jacket codes
+    const detectedJacketCode = normalizeJacketRating(
       aiAnalysis?.detectedSpecs?.jacketRating,
       textDetectedJacket
     )
@@ -517,7 +458,7 @@ export const searchCategoryCables = async (
     const detectedProductLine = textDetectedProductLine
 
     console.log('🎯 FINAL DETECTION RESULTS (AI + Text):', {
-      jacket: `${detectedJacket} (AI: ${aiAnalysis?.detectedSpecs?.jacketRating}, Text: ${textDetectedJacket})`,
+      jacketCode: `${detectedJacketCode} (AI: ${aiAnalysis?.detectedSpecs?.jacketRating}, Text: ${textDetectedJacket})`,
       category: `${detectedCategory} (AI: ${aiAnalysis?.detectedSpecs?.categoryRating}, Text: ${textDetectedCategory})`,
       color: `${detectedColor} (AI: ${aiAnalysis?.detectedSpecs?.color}, Text: ${textDetectedColor})`,
       quantity: `${detectedQuantity} (AI: ${aiAnalysis?.detectedSpecs?.requestedQuantity}, Text: ${textDetectedQuantity})`,
@@ -531,10 +472,10 @@ export const searchCategoryCables = async (
     // STRATEGY 1: Product Line Search
     if (detectedProductLine) {
       console.log(`🚀 STRATEGY 1: Product Line Search for "${detectedProductLine}"`)
-      products = await searchByProductLine(detectedProductLine, detectedColor, detectedJacket)
+      products = await searchByProductLine(detectedProductLine, detectedColor, detectedJacketCode)
       if (products.length > 0) {
         searchStrategy = 'product_line_match'
-        products = applyIntelligentFiltering(products, detectedCategory, detectedShielding, detectedJacket, aiAnalysis)
+        products = applyIntelligentFiltering(products, detectedCategory, detectedShielding, detectedJacketCode, aiAnalysis)
         const endTime = performance.now()
         return {
           products: products.slice(0, limit),
@@ -552,19 +493,19 @@ export const searchCategoryCables = async (
       aiAnalysis,
       detectedProductLine,
       detectedColor,
-      detectedJacket,
+      detectedJacketCode,
       detectedCategory
     )
 
     if (products.length > 0) {
       searchStrategy = 'targeted_search'
-      products = applyIntelligentFiltering(products, detectedCategory, detectedShielding, detectedJacket, aiAnalysis)
+      products = applyIntelligentFiltering(products, detectedCategory, detectedShielding, detectedJacketCode, aiAnalysis)
     } else {
       // STRATEGY 3: Fallback Search
       console.log(`🚀 STRATEGY 3: AI-Enhanced Fallback Search`)
-      products = await searchByFallback(searchTerm, aiAnalysis, detectedJacket)
+      products = await searchByFallback(searchTerm, aiAnalysis, detectedJacketCode)
       searchStrategy = 'fallback_search'
-      products = applyIntelligentFiltering(products, detectedCategory, detectedShielding, detectedJacket, aiAnalysis)
+      products = applyIntelligentFiltering(products, detectedCategory, detectedShielding, detectedJacketCode, aiAnalysis)
     }
 
     const endTime = performance.now()
@@ -609,11 +550,9 @@ const formatCableResults = (data: any[], searchType: string): Product[] => {
     leadTime: 'Ships Today',
     category: 'Category Cable',
     categoryRating: item.category_rating?.trim() || undefined,
-    jacketRating: item.jacket_material?.includes('Plenum') ? 'CMP' :
-                 item.jacket_material?.includes('Non-Plenum') ? 'CMR' :
-                 item.jacket_material?.includes('CMR') ? 'CMR' :
-                 item.jacket_material?.includes('CMP') ? 'CMP' :
-                 item.jacket_material?.trim() || undefined,
+    // NEW: Include both for display and the code for future use
+    jacketRating: item.jacket_code || item.jacket_material?.trim() || undefined,
+    jacketCode: item.jacket_code || undefined,  // NEW field
     color: item.jacket_color?.trim() || undefined,
     packagingType: item.packaging_type?.trim() || undefined,
     shielding: item.Shielding_Type?.trim() || undefined,
