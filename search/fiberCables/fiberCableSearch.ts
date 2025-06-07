@@ -1,6 +1,6 @@
 // src/search/fiberCables/fiberCableSearch.ts
-// Fiber Cable Search Implementation - Extracted from working code
-// Date created: December 19, 2024
+// Fiber Cable Search Implementation - Fixed multimode/single-mode filtering
+// Date created: June 6, 2025
 
 import { supabase } from '@/lib/supabase'
 import type { Product, AISearchAnalysis } from '@/services/searchService'
@@ -74,12 +74,26 @@ export const searchFiberCables = async (
     // Enhanced fiber type detection
     const specificFiberTypes = ['om1', 'om2', 'om3', 'om4', 'om5', 'os1', 'os2']
     let detectedSpecificType: string | undefined = specificFiberTypes.find(type => queryLower.includes(type))
+    let detectedModeType: 'multimode' | 'singlemode' | undefined
 
-    // If not found and AI detected a fiber type, use it
-    if (!detectedSpecificType && aiAnalysis?.detectedSpecs?.fiberType) {
+    // Check for multimode or single-mode
+    if (queryLower.includes('multimode') || queryLower.includes('multi-mode') || queryLower.includes('multi mode')) {
+      detectedModeType = 'multimode'
+      console.log('🎯 MULTIMODE DETECTED - will exclude single-mode cables')
+    } else if (queryLower.includes('singlemode') || queryLower.includes('single-mode') || queryLower.includes('single mode')) {
+      detectedModeType = 'singlemode'
+      console.log('🎯 SINGLE-MODE DETECTED - will exclude multimode cables')
+    }
+
+    // If AI detected a fiber type, use it
+    if (!detectedSpecificType && !detectedModeType && aiAnalysis?.detectedSpecs?.fiberType) {
       const aiFiberType = aiAnalysis.detectedSpecs.fiberType.toLowerCase()
       if (specificFiberTypes.includes(aiFiberType)) {
         detectedSpecificType = aiFiberType
+      } else if (aiFiberType === 'multimode') {
+        detectedModeType = 'multimode'
+      } else if (aiFiberType === 'singlemode' || aiFiberType === 'single-mode') {
+        detectedModeType = 'singlemode'
       }
     }
 
@@ -88,6 +102,15 @@ export const searchFiberCables = async (
       const specificType = detectedSpecificType.toUpperCase()
       console.log(`🎯 SPECIFIC FIBER TYPE DETECTED: ${specificType}`)
       query = query.or(`short_description.ilike.%${specificType}%,fiber_type_standard.ilike.%${specificType}%`)
+    } else if (detectedModeType) {
+      // For multimode/single-mode, search broadly for fiber cables
+      const cableConditions = cableTerms.map(term =>
+        `short_description.ilike.%${term}%`
+      ).join(',')
+      const fiberConditions = specificFiberTypes.map(type =>
+        `short_description.ilike.%${type}%`
+      ).join(',')
+      query = query.or(`${cableConditions},${fiberConditions},short_description.ilike.%fiber%`)
     } else {
       // General fiber cable search
       const cableConditions = cableTerms.map(term =>
@@ -100,10 +123,21 @@ export const searchFiberCables = async (
     }
 
     const result = await query
+    
+    if (result.error) {
+      console.error('❌ Fiber cable search error:', result.error)
+      const endTime = performance.now()
+      return {
+        products: [],
+        searchStrategy: 'error',
+        totalFound: 0,
+        searchTime: Math.round(endTime - startTime)
+      }
+    }
 
     if (result.data && result.data.length > 0) {
       // Filter results to ensure they are actually cables
-      const cableProducts = result.data.filter(item => {
+      const cableProducts = result.data.filter((item: any) => {
         const description = item.short_description?.toLowerCase() || ''
 
         // Exclude non-cable items
@@ -119,6 +153,31 @@ export const searchFiberCables = async (
         const isCable = hasCableTerms || hasFiberCount || hasCableWords || hasFiberTypes
 
         if (!isCable) return false
+
+        // CRITICAL: Filter by mode type (multimode vs single-mode)
+        if (detectedModeType) {
+          if (detectedModeType === 'multimode') {
+            // For multimode, exclude OS1/OS2 (single-mode types)
+            const hasSingleMode = description.includes('os1') || description.includes('os2') ||
+                                 description.includes('single-mode') || description.includes('singlemode') ||
+                                 description.includes('single mode')
+            if (hasSingleMode) {
+              console.log(`❌ Excluding single-mode cable: ${description.substring(0, 50)}...`)
+              return false
+            }
+          } else if (detectedModeType === 'singlemode') {
+            // For single-mode, exclude OM1/OM2/OM3/OM4 (multimode types)
+            const hasMultiMode = description.includes('om1') || description.includes('om2') ||
+                                description.includes('om3') || description.includes('om4') ||
+                                description.includes('om5') ||
+                                description.includes('multi-mode') || description.includes('multimode') ||
+                                description.includes('multi mode')
+            if (hasMultiMode) {
+              console.log(`❌ Excluding multimode cable: ${description.substring(0, 50)}...`)
+              return false
+            }
+          }
+        }
 
         // Filter by specific fiber type if detected
         if (detectedSpecificType) {

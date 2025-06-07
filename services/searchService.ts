@@ -38,6 +38,10 @@ import {
   type FiberEnclosureSearchResult
 } from '@/search/fiberenclosure/rack_mount_fiber_enclosure_Search'
 
+import {
+  searchWallMountFiberEnclosures as searchWallMountFiberEnclosuresImpl
+} from '@/search/fiberenclosure/wall_mount_fiber_enclosure_Search'
+
 // Import shared industry knowledge
 import {
   validateElectricalQuery,
@@ -674,8 +678,9 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
   // PRIORITY 2: Check for fiber enclosure keywords
   const enclosureTerms = [
     'enclosure', 'housing', 'rack mount', 'cabinet',
-    'cch-', 'fap-', 'splice tray',
-    'fiber enclosure', 'fiber optic enclosure', 'patch panel enclosure'
+    'cch-', 'fap-', 'splice tray', 'wall mount',
+    'fiber enclosure', 'fiber optic enclosure', 'patch panel enclosure',
+    'wall-mount', 'wallmount'
   ]
   const hasEnclosureTerms = enclosureTerms.some(term => query.includes(term))
 
@@ -914,10 +919,25 @@ const searchAllTablesByBrand = async (brand: string, limit: number): Promise<Pro
 
 export const searchProducts = async (options: SearchOptions): Promise<SearchResult> => {
   const startTime = performance.now()
+  
+  console.log('🔍 searchProducts called with options:', options)
+  
+  // Fix: Ensure we're destructuring correctly
+  if (!options || typeof options.query !== 'string') {
+    console.error('Invalid options passed to searchProducts:', options)
+    return {
+      products: [],
+      searchTime: Math.round(performance.now() - startTime),
+      searchType: 'error',
+      redirectMessage: 'Invalid search parameters'
+    }
+  }
+  
   const { query, limit = 50, includeAI = true } = options
 
   try {
     console.log('🎯 SEARCH SERVICE - Enhanced search for:', query)
+    console.log('Query type:', typeof query)
 
     // Step 1: Validate query
     const validation = validateElectricalQuery(query)
@@ -1031,13 +1051,70 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
 
       case 'fiber_enclosures':
         console.log('🏗️ Executing REAL fiber enclosures search')
-        const enclosureResult = await searchRackMountFiberEnclosuresImpl({
-          searchTerm: processedQuery.processedTerm,
-          aiAnalysis,
-          limit
-        })
-        products = enclosureResult.products
-        searchStrategy = `fiber_enclosures_${enclosureResult.searchStrategy}`
+        
+        // Determine if it's wall mount, rack mount, or generic
+        const enclosureQuery = processedQuery.processedTerm.toLowerCase()
+        const isWallMount = enclosureQuery.includes('wall mount') || 
+                           enclosureQuery.includes('wall-mount') || 
+                           enclosureQuery.includes('wallmount')
+        
+        const isRackMount = enclosureQuery.includes('rack mount') || 
+                           enclosureQuery.includes('rack-mount') || 
+                           enclosureQuery.includes('rackmount') ||
+                           /\d+\s*ru\b/i.test(enclosureQuery) || // e.g., "4RU"
+                           /\d+u\b/i.test(enclosureQuery) // e.g., "4U"
+        
+        if (isWallMount) {
+          // User specifically wants wall mount
+          console.log('🏗️ Detected WALL MOUNT enclosure request')
+          const wallEnclosureResult = await searchWallMountFiberEnclosuresImpl({
+            searchTerm: processedQuery.processedTerm,
+            aiAnalysis,
+            limit
+          })
+          products = wallEnclosureResult.products
+          searchStrategy = `wall_mount_enclosures_${wallEnclosureResult.searchStrategy}`
+        } else if (isRackMount) {
+          // User specifically wants rack mount
+          console.log('🏗️ Detected RACK MOUNT enclosure request')
+          const enclosureResult = await searchRackMountFiberEnclosuresImpl({
+            searchTerm: processedQuery.processedTerm,
+            aiAnalysis,
+            limit
+          })
+          products = enclosureResult.products
+          searchStrategy = `rack_mount_enclosures_${enclosureResult.searchStrategy}`
+        } else {
+          // Generic "fiber enclosure" search - show BOTH types
+          console.log('🏗️ Generic fiber enclosure search - showing BOTH wall and rack mount')
+          
+          // Get wall mount enclosures
+          const wallResult = await searchWallMountFiberEnclosuresImpl({
+            searchTerm: processedQuery.processedTerm,
+            aiAnalysis,
+            limit: Math.floor(limit / 2) // Split the limit
+          })
+          
+          // Get rack mount enclosures
+          const rackResult = await searchRackMountFiberEnclosuresImpl({
+            searchTerm: processedQuery.processedTerm,
+            aiAnalysis,
+            limit: Math.floor(limit / 2)
+          })
+          
+          // Combine results
+          products = [...wallResult.products, ...rackResult.products]
+          
+          // Sort by relevance if available, otherwise mix them
+          products.sort((a, b) => {
+            const aRelevance = a.searchRelevance || 0.5
+            const bRelevance = b.searchRelevance || 0.5
+            return bRelevance - aRelevance
+          })
+          
+          searchStrategy = 'mixed_fiber_enclosures'
+          console.log(`✅ Found ${wallResult.products.length} wall mount and ${rackResult.products.length} rack mount enclosures`)
+        }
         break
 
       case 'multi_table':
