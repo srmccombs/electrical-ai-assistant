@@ -342,7 +342,7 @@ export const searchRackMountFiberEnclosures = async (
       console.log(`📊 Brand search result:`, {
         error: result.error,
         count: result.data?.length,
-        brands: result.data?.map(item => item.brand).filter(Boolean).slice(0, 5)
+        brands: result.data?.map((item: any) => item.brand).filter(Boolean).slice(0, 5)
       })
 
       if (!result.error && result.data && result.data.length > 0) {
@@ -401,7 +401,7 @@ export const searchRackMountFiberEnclosures = async (
         let sortedResults = [...query.data]
 
         if (detectedRackUnits || detectedBrand || detectedPanelType) {
-          sortedResults.sort((a, b) => {
+          sortedResults.sort((a: any, b: any) => {
             let scoreA = 0
             let scoreB = 0
 

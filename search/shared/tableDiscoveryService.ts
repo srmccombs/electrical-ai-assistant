@@ -1,15 +1,18 @@
-// src/services/tableDiscoveryService.ts
-// Dynamic Table Discovery for Supabase
-// Created: December 20, 2024
+// search/shared/tableDiscoveryService.ts
+// Dynamic Table Discovery for Supabase - With Full TypeScript Support
+// Created: June 6, 2025
 
-import { supabase } from '@/lib/supabase'
+import { supabase, type Database } from '@/lib/supabase'
 
 // ===================================================================
 // TYPE DEFINITIONS
 // ===================================================================
 
+// Get all table names from the Database type
+type TableName = keyof Database['public']['Tables']
+
 export interface TableInfo {
-  name: string
+  name: TableName | string  // Allow string for dynamic tables not in types yet
   prefix: string
   hasPartNumber: boolean
   hasIsActive: boolean
@@ -21,6 +24,13 @@ export interface TableDiscoveryResult {
   lastUpdated: Date
   totalTables: number
   searchableTables: number
+}
+
+// Generic type for any table row with part_number
+interface BaseTableRow {
+  part_number?: string
+  is_active?: boolean
+  [key: string]: any
 }
 
 // ===================================================================
@@ -37,7 +47,7 @@ const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
 /**
  * Discovers all tables in Supabase that have a part_number column
- * Uses PostgreSQL information schema
+ * Uses PostgreSQL information schema via RPC functions
  */
 export const discoverSearchableTables = async (): Promise<TableDiscoveryResult> => {
   console.log('🔍 Starting dynamic table discovery...')
@@ -59,22 +69,37 @@ export const discoverSearchableTables = async (): Promise<TableDiscoveryResult> 
       return getFallbackTableList()
     }
 
+    if (!tablesWithPartNumber || tablesWithPartNumber.length === 0) {
+      console.warn('⚠️ No tables found with part_number column')
+      return getFallbackTableList()
+    }
+
     // Query 2: Get column information for each table
-    const tableInfoPromises = tablesWithPartNumber.map(async (tableName: string) => {
-      const { data: columns, error: columnError } = await supabase
-        .rpc('get_table_columns', { table_name: tableName })
+    const tableInfoPromises = tablesWithPartNumber.map(async (tableRow: any) => {
+      const tableName = typeof tableRow === 'string' ? tableRow : tableRow.table_name
 
-      if (columnError) {
-        console.warn(`⚠️ Could not get columns for ${tableName}`)
+      try {
+        const { data: columns, error: columnError } = await supabase
+          .rpc('get_table_columns', { table_name: tableName })
+
+        if (columnError) {
+          console.warn(`⚠️ Could not get columns for ${tableName}:`, columnError)
+          return null
+        }
+
+        // Extract column names from the result
+        const columnNames = columns?.map((col: { column_name: string }) => col.column_name) || []
+
+        return {
+          name: tableName,
+          prefix: generateTablePrefix(tableName),
+          hasPartNumber: true,
+          hasIsActive: columnNames.includes('is_active'),
+          columns: columnNames
+        }
+      } catch (error) {
+        console.error(`❌ Error processing table ${tableName}:`, error)
         return null
-      }
-
-      return {
-        name: tableName,
-        prefix: generateTablePrefix(tableName),
-        hasPartNumber: true,
-        hasIsActive: columns.includes('is_active'),
-        columns: columns
       }
     })
 
@@ -128,66 +153,80 @@ const generateTablePrefix = (tableName: string): string => {
 
 /**
  * Fallback table list if dynamic discovery fails
+ * Now with proper types!
  */
 const getFallbackTableList = (): TableDiscoveryResult => {
   console.log('⚠️ Using fallback table list')
 
+  const knownTables: TableInfo[] = [
+    { name: 'category_cables' as TableName, prefix: 'cat', hasPartNumber: true, hasIsActive: true, columns: [] },
+    { name: 'fiber_connectors' as TableName, prefix: 'con', hasPartNumber: true, hasIsActive: true, columns: [] },
+    { name: 'adapter_panels' as TableName, prefix: 'pan', hasPartNumber: true, hasIsActive: true, columns: [] },
+    { name: 'rack_mount_fiber_enclosures' as TableName, prefix: 'enc', hasPartNumber: true, hasIsActive: true, columns: [] },
+    { name: 'fiber_optic_cable' as TableName, prefix: 'fib', hasPartNumber: true, hasIsActive: true, columns: [] },
+  ]
+
   return {
-    tables: [
-      { name: 'category_cables', prefix: 'cat', hasPartNumber: true, hasIsActive: true, columns: [] },
-      { name: 'fiber_connectors', prefix: 'con', hasPartNumber: true, hasIsActive: true, columns: [] },
-      { name: 'adapter_panels', prefix: 'pan', hasPartNumber: true, hasIsActive: true, columns: [] },
-      { name: 'rack_mount_fiber_enclosures', prefix: 'enc', hasPartNumber: true, hasIsActive: true, columns: [] },
-      { name: 'products', prefix: 'pro', hasPartNumber: true, hasIsActive: true, columns: [] }
-    ],
+    tables: knownTables,
     lastUpdated: new Date(),
-    totalTables: 5,
-    searchableTables: 5
+    totalTables: knownTables.length,
+    searchableTables: knownTables.length
   }
 }
 
 // ===================================================================
-// SEARCH IMPLEMENTATION
+// SEARCH IMPLEMENTATION - WITH TYPESCRIPT SUPPORT
 // ===================================================================
 
 /**
  * Search all discovered tables for part numbers
+ * Now with better type safety!
  */
 export const searchAllTablesForPartNumber = async (
   partNumbers: string[],
   limit: number = 50
-): Promise<any[]> => {
+): Promise<BaseTableRow[]> => {
   console.log('🔎 Searching all tables for part numbers:', partNumbers)
 
   // Get the current table list
   const { tables } = await discoverSearchableTables()
+
+  if (!tables || tables.length === 0) {
+    console.warn('⚠️ No tables available for search')
+    return []
+  }
 
   // Search each table in parallel
   const searchPromises = tables.map(async (table) => {
     try {
       console.log(`🔍 Searching ${table.name}...`)
 
-      // Build search query
-      let query = supabase
-        .from(table.name)
+      // Build search query - we still need 'as any' for dynamic table names
+      // but now we have better type safety elsewhere
+      const query = supabase
+        .from(table.name as any)
         .select('*')
-        .limit(Math.floor(limit / tables.length)) // Distribute limit across tables
+        .limit(Math.floor(limit / tables.length))
 
       // Add is_active filter if table has it
       if (table.hasIsActive) {
-        query = query.eq('is_active', true)
+        query.eq('is_active', true)
       }
 
       // Build OR conditions for part numbers
       const searchConditions: string[] = []
       partNumbers.forEach(partNum => {
-        searchConditions.push(`part_number.eq.${partNum}`)
-        searchConditions.push(`part_number.ilike.${partNum}%`)
-        searchConditions.push(`part_number.ilike.%${partNum}%`)
+        // Ensure partNum is a string and trim it
+        const cleanPartNum = String(partNum).trim()
+        if (cleanPartNum) {
+          searchConditions.push(`part_number.eq.${cleanPartNum}`)
+          searchConditions.push(`part_number.ilike.${cleanPartNum}%`)
+          searchConditions.push(`part_number.ilike.%${cleanPartNum}%`)
+        }
       })
 
       if (searchConditions.length > 0) {
-        query = query.or(searchConditions.join(','))
+        query.or(searchConditions.join(','))
       }
 
       const { data, error } = await query
@@ -198,7 +237,7 @@ export const searchAllTablesForPartNumber = async (
       }
 
       // Add table metadata to each result
-      return (data || []).map(item => ({
+      return (data || []).map((item: BaseTableRow) => ({
         ...item,
         _tableName: table.name,
         _tablePrefix: table.prefix
@@ -218,6 +257,59 @@ export const searchAllTablesForPartNumber = async (
   console.log(`✅ Found ${allResults.length} total matches across ${tables.length} tables`)
 
   return allResults
+}
+
+/**
+ * Type-safe search for specific known tables
+ * Use this when you know the table name at compile time
+ */
+export const searchKnownTable = async <T extends TableName>(
+  tableName: T,
+  partNumbers: string[],
+  limit: number = 50
+): Promise<(Database['public']['Tables'][T]['Row'] & { _tableName: string; _tablePrefix: string })[]> => {
+  try {
+    console.log(`🔍 Searching ${tableName} for part numbers:`, partNumbers)
+
+    // Build the query with full type safety!
+    const query = supabase
+      .from(tableName)
+      .select('*')
+      .limit(limit)
+
+    // Build OR conditions
+    const searchConditions: string[] = []
+    partNumbers.forEach(partNum => {
+      const cleanPartNum = String(partNum).trim()
+      if (cleanPartNum) {
+        searchConditions.push(`part_number.eq.${cleanPartNum}`)
+        searchConditions.push(`part_number.ilike.${cleanPartNum}%`)
+        searchConditions.push(`part_number.ilike.%${cleanPartNum}%`)
+      }
+    })
+
+    if (searchConditions.length > 0) {
+      query.or(searchConditions.join(','))
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error(`❌ Error searching ${tableName}:`, error)
+      return []
+    }
+
+    // Add metadata and return with full type safety
+    return (data || []).map((item: any) => ({
+      ...item,
+      _tableName: tableName,
+      _tablePrefix: generateTablePrefix(tableName)
+    }))
+
+  } catch (error) {
+    console.error(`❌ Failed to search ${tableName}:`, error)
+    return []
+  }
 }
 
 // ===================================================================
@@ -244,42 +336,35 @@ export const getCacheStatus = (): { isCached: boolean; age: number | null } => {
   return { isCached: true, age }
 }
 
-// ===================================================================
-// RPC FUNCTION DEFINITIONS (Add these to Supabase)
-// ===================================================================
+/**
+ * Test the RPC functions to ensure they're working
+ */
+export const testRPCFunctions = async (): Promise<{ success: boolean; message: string }> => {
+  try {
+    // Test get_tables_with_column
+    const { data: tables, error: tableError } = await supabase
+      .rpc('get_tables_with_column', { column_name: 'part_number' })
 
-/*
--- Add these functions to your Supabase SQL editor:
+    if (tableError) {
+      return { success: false, message: `get_tables_with_column failed: ${tableError.message}` }
+    }
 
--- Function 1: Get all tables with a specific column
-CREATE OR REPLACE FUNCTION get_tables_with_column(column_name text)
-RETURNS TABLE(table_name text) AS $$
-BEGIN
-  RETURN QUERY
-  SELECT DISTINCT c.table_name::text
-  FROM information_schema.columns c
-  WHERE c.table_schema = 'public'
-    AND c.column_name = column_name
-    AND c.table_name NOT LIKE 'pg_%'
-    AND c.table_name NOT LIKE '%_view'
-  ORDER BY c.table_name;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+    // Test get_table_columns if we have at least one table
+    if (tables && tables.length > 0) {
+      const firstTableObj = tables[0]
+      const firstTable = typeof firstTableObj === 'string' ? firstTableObj : firstTableObj.table_name
+      const { data: columns, error: columnError } = await supabase
+        .rpc('get_table_columns', { table_name: firstTable })
 
--- Function 2: Get all columns for a specific table
-CREATE OR REPLACE FUNCTION get_table_columns(table_name text)
-RETURNS TABLE(column_name text) AS $$
-BEGIN
-  RETURN QUERY
-  SELECT c.column_name::text
-  FROM information_schema.columns c
-  WHERE c.table_schema = 'public'
-    AND c.table_name = get_table_columns.table_name
-  ORDER BY c.ordinal_position;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+      if (columnError) {
+        return { success: false, message: `get_table_columns failed: ${columnError.message}` }
+      }
 
--- Grant execute permissions
-GRANT EXECUTE ON FUNCTION get_tables_with_column(text) TO authenticated;
-GRANT EXECUTE ON FUNCTION get_table_columns(text) TO authenticated;
-*/
+      return { success: true, message: `✅ Both RPC functions working! Found ${tables.length} tables.` }
+    }
+
+    return { success: true, message: '✅ RPC functions working but no tables found with part_number column.' }
+  } catch (error: any) {
+    return { success: false, message: `Test failed: ${error?.message || error}` }
+  }
+}

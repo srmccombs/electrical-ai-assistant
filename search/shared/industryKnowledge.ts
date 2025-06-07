@@ -1,6 +1,7 @@
 // src/search/shared/industryKnowledge.ts
 // Your 35 years of electrical industry knowledge - centralized and reusable
 // FIXED: Detection order for jacket types - check "non-plenum" BEFORE "plenum"
+// UPDATE: Added detectBrand and detectEnvironment functions for consistency
 
 // ===================================================================
 // TYPE DEFINITIONS
@@ -145,7 +146,7 @@ export const APPLICATION_PATTERNS = {
 
 // Available in your actual database (from analysis)
 export const DATABASE_COLORS = ["Black", "Blue", "Brown", "Gray", "Green", "Orange", "Pink", "Red", "Violet", "White", "Yellow"]
-export const DATABASE_BRANDS = ["Leviton/BerkTek","Panduit","Prysmian","Superior Essex","GenSPEED 10 MTP Category 6A Cable","GenSPEED 5000 Cable","GenSPEED 6 Cable","GenSPEED 6500 Premium Cable","10Gain","Cobra","DataGain","Marathon LAN","Series 77","XP+"]
+export const DATABASE_BRANDS = ["Leviton/BerkTek","Panduit","Prysmian","Superior Essex","GenSPEED 10 MTP Category 6A Cable","GenSPEED 5000 Cable","GenSPEED 6 Cable","GenSPEED 6500 Premium Cable","10Gain","Cobra","DataGain","Marathon LAN","Series 77","XP+","Corning","Siecor","DMSI","Legrand"]
 export const DATABASE_PRODUCT_LINES = ["Hyper Plus 5e", "LANMARK 6", "LANMARK-1000", "LANMARK-2000", "LanMArk-SST"]
 export const DATABASE_AWG_VALUES = [23, 24]
 export const DATABASE_PAIR_COUNTS = ["4-Pair"]
@@ -295,6 +296,50 @@ export const detectColor = (searchTerm: string): string | null => {
   return null
 }
 
+// NEW: Brand detection function - centralized for reuse
+export const detectBrand = (searchTerm: string): string | undefined => {
+  const term = searchTerm.toLowerCase()
+
+  // Define brand mappings with synonyms
+  const brandMappings = [
+    { keywords: ['corning', 'siecor'], brand: 'Corning' }, // Siecor is Corning synonym
+    { keywords: ['panduit'], brand: 'Panduit' },
+    { keywords: ['leviton', 'berktek'], brand: 'Leviton' }, // BerkTek is Leviton brand
+    { keywords: ['dmsi'], brand: 'DMSI' },
+    { keywords: ['legrand'], brand: 'Legrand' },
+    { keywords: ['superior essex', 'superior', 'essex'], brand: 'Superior Essex' },
+    { keywords: ['prysmian'], brand: 'Prysmian' }
+  ]
+
+  for (const mapping of brandMappings) {
+    for (const keyword of mapping.keywords) {
+      if (term.includes(keyword)) {
+        console.log(`🏢 Detected brand: ${mapping.brand}`)
+        return mapping.brand
+      }
+    }
+  }
+
+  return undefined
+}
+
+// NEW: Environment detection function - centralized for reuse
+export const detectEnvironment = (searchTerm: string): string | undefined => {
+  const term = searchTerm.toLowerCase()
+
+  if (term.includes('outdoor') || term.includes('outside') || term.includes('external')) {
+    console.log(`🌧️ Detected environment: Outdoor`)
+    return 'Outdoor'
+  }
+
+  if (term.includes('indoor') || term.includes('inside') || term.includes('internal')) {
+    console.log(`🏢 Detected environment: Indoor`)
+    return 'Indoor'
+  }
+
+  return undefined
+}
+
 // Enhanced product line detection with actual CSV values
 export const detectProductLine = (searchTerm: string): string | null => {
   const productLines = [
@@ -340,7 +385,7 @@ export const detectPartNumbers = (searchTerm: string): DetectedParts => {
     'single', 'multimode', 'singlemode', 'corning', 'panduit', 'leviton',
     'superior', 'essex', 'enclosure', 'housing', 'patch', 'pigtail',
     'jumper', 'coupler', 'splice', 'terminal', 'termination',
-    'non-plenum', 'nonplenum', 'cmr', 'cmp', 'pvc'  // Added jacket terms
+    'non-plenum', 'nonplenum', 'cmr', 'cmp', 'pvc', 'wall', 'mount', 'rack'
   ]
 
   // Enhanced part number patterns - more restrictive to avoid false positives
@@ -410,6 +455,15 @@ export const detectPartNumbers = (searchTerm: string): DetectedParts => {
 
 // 1. QUERY VALIDATION SYSTEM
 export const validateElectricalQuery = (query: string): ValidationResult => {
+  // Type guard to ensure query is a string
+  if (typeof query !== 'string') {
+    console.error('validateElectricalQuery received non-string:', query)
+    return {
+      isValid: false,
+      message: 'Invalid search query format'
+    }
+  }
+
   const blockedTerms = [
     // Medical
     'cancer', 'medicine', 'doctor', 'prescription', 'surgery', 'treatment',
@@ -435,11 +489,14 @@ export const validateElectricalQuery = (query: string): ValidationResult => {
 
     // Components
     'connector', 'panel', 'switch', 'outlet', 'receptacle',
-    'breaker', 'fuse', 'conduit', 'raceway',
+    'breaker', 'fuse', 'conduit', 'raceway', 'enclosure',
 
     // Specifications
     'awg', 'volt', 'amp', 'watt', 'ohm', 'impedance',
-    'gauge', 'strand', 'solid', 'stranded'
+    'gauge', 'strand', 'solid', 'stranded',
+
+    // Mounting
+    'wall', 'mount', 'rack', 'surface'
   ]
 
   const queryLower = query.toLowerCase()

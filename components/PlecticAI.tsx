@@ -1,6 +1,6 @@
-// PlecticAI.tsx - Complete working file with Fiber Enclosure support
-// Updated: December 19, 2024
-// Date created: June 5, 2025
+// PlecticAI.tsx - SIMPLIFIED VERSION WITH FIBER TYPE REFERENCE
+// Updated: June 6, 2025
+// Date created: June 6, 2025
 
 // ⚠️ IMPORTANT: DO NOT REMOVE OR MODIFY THE FOLLOWING FEATURES ⚠️
 // 1. Smart Filters with colored backgrounds for cable colors
@@ -9,14 +9,16 @@
 // 4. The getColorButtonStyle function that shows actual cable colors
 // 5. The new AI loading animation (keep this from current version)
 // 6. The comprehensive filter UI in the Smart Filters section
+// 7. NEW: Simple Fiber Type Reference that shows when needed
 // ⚠️ These features are critical to the user experience - DO NOT SIMPLIFY ⚠️
 
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
 import { Search, Plus, Minus, X, Send, Zap, Package, AlertCircle, CheckCircle, Clock, Menu, Settings, HelpCircle, Sparkles, Filter, Brain, Shield, Database, Cpu, Activity, Copy } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
-// FIXED IMPORTS - Make sure the path matches your project structure
+// Search service imports
 import {
   searchProducts,
   type Product,
@@ -70,6 +72,40 @@ interface SmartFilters {
   rackUnits?: string[]
   environments?: string[]
   mountTypes?: string[]
+}
+
+// ===================================================================
+// FIBER TYPE REFERENCE COMPONENT
+// ===================================================================
+
+const FiberTypeReference: React.FC = () => {
+  return (
+    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+      <h3 className="text-md font-semibold text-gray-900 mb-3">Fiber Type Quick Reference</h3>
+      <div className="space-y-2 text-sm">
+        <div className="flex">
+          <span className="font-semibold text-gray-700 w-32">OM1 (62.5/125):</span>
+          <span className="text-gray-600">Obsolete, only for matching existing installations</span>
+        </div>
+        <div className="flex">
+          <span className="font-semibold text-gray-700 w-32">OM2 (50/125):</span>
+          <span className="text-gray-600">Obsolete, not recommended for new installations</span>
+        </div>
+        <div className="flex">
+          <span className="font-semibold text-gray-700 w-32">OM3 (50/125):</span>
+          <span className="text-gray-600">Good multimode choice, 300m at 10Gb/850nm</span>
+        </div>
+        <div className="flex">
+          <span className="font-semibold text-gray-700 w-32">OM4 (50/125):</span>
+          <span className="text-gray-600">Best multimode choice, 550m at 10Gb/850nm</span>
+        </div>
+        <div className="flex">
+          <span className="font-semibold text-gray-700 w-32">OS2 Single-mode:</span>
+          <span className="text-gray-600">Best overall choice, 5000m+ at 10Gb/1310nm</span>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ===================================================================
@@ -194,12 +230,12 @@ const PlecticAI: React.FC = () => {
   const [aiAnalysis, setAiAnalysis] = useState<AISearchAnalysis | null>(null)
   const [recentSearches, setRecentSearches] = useState<string[]>([])
   const [popularSearches] = useState<string[]>([
-    "GenSPEED 5000",
-    "GenSPEED 6",
+    "Category 5e Cable",
+    "Category 6 Cable",
+    "Fiber Optic Cable",
+    "Fiber Optic Enclosures",
+    "Fiber Optic Adapter Panels",
     "Fiber Optic Connectors",
-    "LC Connectors",
-    "Corning",
-    "OM4 Connectors",
     "CCH-02U",
     "4RU fiber enclosure"
   ])
@@ -506,7 +542,8 @@ const PlecticAI: React.FC = () => {
 
   const performSearch = async (searchTerm: string): Promise<void> => {
     setInput(searchTerm)
-    await handleSubmit()
+    // Wait a tick for state to update
+    setTimeout(() => handleSubmit(), 0)
   }
 
   useEffect(() => {
@@ -1110,6 +1147,25 @@ const PlecticAI: React.FC = () => {
                                   </div>
                                 </div>
                               </div>
+
+                               {/* FIBER TYPE REFERENCE - Shows when conditions are met */}
+                                {(() => {
+                                  // Check if we're showing fiber optic cables
+                                    const showingFiberCables = message.products.some(p =>
+                                  p.category === 'Fiber Optic Cable'
+                                  )
+
+                                // Count unique fiber types in smart filters
+                                const uniqueFiberTypes = extractUniqueFiberTypes(message.products || [])
+                                const hasTwoOrMoreFiberTypes = uniqueFiberTypes.length >= 2
+
+                                // Show reference if both conditions are met
+                                if (showingFiberCables && hasTwoOrMoreFiberTypes) {
+                                  return <FiberTypeReference />
+                                }
+
+                                return null
+                              })()}
                             </div>
                           )}
                         </div>

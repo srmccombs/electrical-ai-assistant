@@ -311,6 +311,18 @@ export const searchAdapterPanels = async (
     }
 
     const result = await query
+    
+    if (result.error) {
+      console.error('❌ Adapter panel search error:', result.error)
+      const endTime = performance.now()
+      return {
+        products: [],
+        searchStrategy: 'error',
+        totalFound: 0,
+        searchTime: Math.round(endTime - startTime)
+      }
+    }
+    
     console.log(`📊 Adapter panel search result: ${result.data?.length || 0} products found`)
 
     if (result.data && result.data.length > 0) {
@@ -319,7 +331,7 @@ export const searchAdapterPanels = async (
 
       // Filter by specific attributes if detected
       if (detectedFiberType === 'SINGLEMODE') {
-        processedResults = processedResults.filter(item => {
+        processedResults = processedResults.filter((item: any) => {
           const fiberCat = item.fiber_category?.toLowerCase() || ''
           const desc = item.short_description?.toLowerCase() || ''
           return fiberCat.includes('os') || fiberCat.includes('sm') ||
