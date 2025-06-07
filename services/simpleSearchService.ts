@@ -75,15 +75,15 @@ export async function testSearch() {
   console.log('🧪 Testing search...')
 
   // Test 1: Cat6
-  const test1 = await searchProducts('cat6')
+  const test1 = await simpleSearchProducts('cat6')
   console.log('Cat6 results:', test1.products.length)
 
   // Test 2: Panduit
-  const test2 = await searchProducts('panduit')
+  const test2 = await simpleSearchProducts('panduit')
   console.log('Panduit results:', test2.products.length)
 
   // Test 3: Non-plenum
-  const test3 = await searchProducts('non-plenum')
+  const test3 = await simpleSearchProducts('non-plenum')
   console.log('Non-plenum results:', test3.products.length)
 
   console.log('✅ Tests complete!')
