@@ -16,14 +16,14 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { Search, Plus, Minus, X, Send, Zap, Package, AlertCircle, CheckCircle, Clock, Menu, Settings, HelpCircle, Sparkles, Filter, Brain, Shield, Database, Cpu, Activity, Copy } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
-import { trackResultClick } from '@/services/analytics'
+import { supabase } from '../lib/supabase'
+import { trackResultClick } from '../services/analytics'
 // Search service imports
 import {
   searchProducts,
   type Product,
   type AISearchAnalysis,
-} from '@/services/searchService'
+} from '../services/searchService'
 
 // ===================================================================
 // TYPE DEFINITIONS
