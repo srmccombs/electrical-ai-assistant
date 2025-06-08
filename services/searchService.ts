@@ -12,6 +12,26 @@ import { supabase } from '@/lib/supabase'
 import { searchAllTablesForPartNumber } from '@/search/shared/tableDiscoveryService'
 import { getCachedAIAnalysis } from '@/services/aiCache'
 import { trackSearch } from '@/services/analytics'
+import { logger, LogCategory } from '@/utils/logger'
+
+// Import types from the new types package
+import type {
+  Product,
+  SmartFilters,
+  AISearchAnalysis,
+  SearchResult,
+  SearchOptions,
+  ValidationResult,
+  BusinessRuleResult,
+  DetectedParts,
+  CategoryCableSearchResult,
+  FiberConnectorSearchResult,
+  FiberCableSearchResult,
+  AdapterPanelSearchResult,
+  FiberEnclosureSearchResult,
+  ProductTable,
+  TableInfo
+} from '@/types'
 
 // Add this import at the top with the other imports
 import { PRODUCT_TYPES, getProductTypeByTable, getProductTypeByKeywords } from '@/config/productTypes'
@@ -19,29 +39,24 @@ import { PRODUCT_TYPES, getProductTypeByTable, getProductTypeByKeywords } from '
 // Import the actual search implementations
 import {
   searchCategoryCables as searchCategoryCablesImpl,
-  type CategoryCableSearchResult
 } from '@/search/categoryCables/categoryCableSearch'
 
 import {
   searchFiberConnectors as searchFiberConnectorsImpl,
-  type FiberConnectorSearchResult
 } from '@/search/fiberConnectors/fiberConnectorSearch'
 
 import {
   searchFiberCables as searchFiberCablesImpl,
-  type FiberCableSearchResult
 } from '@/search/fiberCables/fiberCableSearch'
 
 import {
   searchAdapterPanels as searchAdapterPanelsImpl,
   generateAdapterPanelFilters,
-  type AdapterPanelSearchResult
 } from '@/search/fiberadapterPanels/fiberadapterPanelSearch'
 
 import {
   searchRackMountFiberEnclosures as searchRackMountFiberEnclosuresImpl,
   generateFiberEnclosureFilters,
-  type FiberEnclosureSearchResult
 } from '@/search/fiberenclosure/rack_mount_fiber_enclosure_Search'
 
 import {
@@ -54,154 +69,7 @@ import {
   applyBusinessRules,
   detectPartNumbers,
   normalizePartNumber,
-  type ValidationResult,
-  type BusinessRuleResult,
-  type DetectedParts
 } from '@/search/shared/industryKnowledge'
-
-// ===================================================================
-// TYPE DEFINITIONS - Complete and Self-Contained
-// ===================================================================
-
-export interface Product {
-  id: string
-  partNumber: string
-  brand: string
-  description: string
-  price?: number
-  stockLocal: number
-  stockDistribution: number
-  leadTime?: string
-  category: string
-  imageUrl?: string
-  fiberType?: string
-  jacketRating?: string        // Keep this for display (e.g., "Non-Plenum Rated CMR")
-  jacketCode?: string         // NEW: Add this for filtering (e.g., "CMR")
-  fiberCount?: number
-  connectorType?: string
-  categoryRating?: string
-  shielding?: string
-  searchRelevance?: number
-  tableName?: string
-  packagingType?: string
-  color?: string
-  stockStatus?: string
-  stockColor?: string
-  stockMessage?: string
-  productLine?: string
-  pairCount?: string
-  conductorAwg?: number
-  jacketColor?: string
-  cableDiameter?: number
-  application?: string
-  possibleCross?: string
-  commonTerms?: string
-  compatibleConnectors?: string
-  goWithItems?: string
-  productType?: string
-  technology?: string
-  polish?: string
-  housingColor?: string
-  bootColor?: string
-  ferruleMaterial?: string
-  // Adapter Panel specific fields
-  panelType?: string
-  adaptersPerPanel?: number
-  adapterColor?: string
-  terminationType?: string
-  possibleEquivalent?: string
-  compatibleEnclosures?: string
-  supportsAPC?: boolean
-  // NEW: Fiber Enclosure specific fields
-  mountType?: string
-  rackUnits?: number
-  panelCapacity?: number
-  material?: string
-  supportsSpliceTrays?: boolean
-  environment?: string
-  spliceTrayModel?: string
-  upcCode?: string
-}
-
-export interface SmartFilters {
-  brands: string[]
-  packagingTypes: string[]
-  jacketRatings: string[]
-  fiberTypes: string[]
-  connectorTypes: string[]
-  categoryRatings: string[]
-  colors: string[]
-  shieldingTypes: string[]
-  productLines: string[]
-  pairCounts: string[]
-  conductorGauges: string[]
-  applications: string[]
-  productType: string
-  productTypes: string[]
-  technologies: string[]
-  polishTypes: string[]
-  housingColors: string[]
-  bootColors: string[]
-  // Adapter Panel filters
-  panelTypes?: string[]
-  terminationTypes?: string[]
-  adapterColors?: string[]
-  // NEW: Fiber Enclosure filters
-  rackUnits?: string[]
-  environments?: string[]
-  mountTypes?: string[]
-}
-
-export interface AISearchAnalysis {
-  searchStrategy: string
-  productType: string
-  confidence: number
-  detectedSpecs: {
-    fiberType?: string
-    categoryRating?: string
-    connectorType?: string
-    jacketRating?: string
-    fiberCount?: number
-    requestedQuantity?: number
-    shielding?: string
-    manufacturer?: string
-    productType?: string
-    color?: string
-    application?: string
-    productLine?: string
-    pairCount?: string
-    conductorAwg?: number
-    rackUnits?: number
-    panelType?: string
-    environment?: string
-  }
-  searchTerms: string[]
-  reasoning: string
-  suggestedFilters: string[]
-  alternativeQueries: string[]
-  originalQuery: string
-  timestamp: string
-  aiModel: string
-}
-
-export interface SearchResult {
-  products: Product[]
-  searchTime: number
-  searchType: string
-  aiAnalysis?: AISearchAnalysis
-  redirectMessage?: string
-  totalFound?: number
-  smartFilters?: SmartFilters
-}
-
-export interface SearchOptions {
-  query: string
-  limit?: number
-  includeAI?: boolean
-}
-
-// Re-export types from industry knowledge
-export type { ValidationResult, BusinessRuleResult, DetectedParts }
 
 // ===================================================================
 // AI INTEGRATION - ENHANCED WITH RACK UNIT DETECTION
@@ -229,7 +97,7 @@ const enhanceAIAnalysis = (aiAnalysis: AISearchAnalysis | null, searchTerm: stri
       if (match && match[1]) {
         const units = parseInt(match[1], 10)
         if (units >= 1 && units <= 48) {
-          console.log(`🔧 Enhanced AI: Detected rack units: ${units}RU`)
+          logger.debug(`Enhanced AI: Detected rack units: ${units}RU`, {}, LogCategory.AI)
           aiAnalysis.detectedSpecs.rackUnits = units
           wasEnhanced = true
           break
@@ -240,20 +108,20 @@ const enhanceAIAnalysis = (aiAnalysis: AISearchAnalysis | null, searchTerm: stri
 
   // Fix product type if it says MIXED/PANEL but query has enclosure
   if (term.includes('enclosure') && (aiAnalysis.productType === 'MIXED' || aiAnalysis.productType === 'PANEL')) {
-    console.log(`🔧 Enhanced AI: Correcting productType from ${aiAnalysis.productType} to ENCLOSURE`)
+    logger.debug(`Enhanced AI: Correcting productType from ${aiAnalysis.productType} to ENCLOSURE`, {}, LogCategory.AI)
     aiAnalysis.productType = 'ENCLOSURE'
     wasEnhanced = true
   }
 
   // Force enclosure type if we have RU units
   if (aiAnalysis.detectedSpecs.rackUnits && aiAnalysis.productType !== 'ENCLOSURE') {
-    console.log(`🔧 Enhanced AI: Forcing productType to ENCLOSURE due to rack units`)
+    logger.debug(`Enhanced AI: Forcing productType to ENCLOSURE due to rack units`, {}, LogCategory.AI)
     aiAnalysis.productType = 'ENCLOSURE'
     wasEnhanced = true
   }
 
   if (wasEnhanced) {
-    console.log('✅ ENHANCED AI Analysis:', aiAnalysis)
+    logger.info('Enhanced AI Analysis complete', { aiAnalysis }, LogCategory.AI)
   }
 
   return aiAnalysis
@@ -266,7 +134,7 @@ const getAIAnalysis = async (query: string): Promise<AISearchAnalysis | null> =>
   // Use the cache wrapper
   return getCachedAIAnalysis(query, async (q) => {
     try {
-      console.log('🤖 Getting FRESH AI analysis for:', q)
+      logger.debug('Getting FRESH AI analysis', { query: q }, LogCategory.AI)
 
       const response = await fetch('/api/ai-search', {
         method: 'POST',
@@ -284,16 +152,16 @@ const getAIAnalysis = async (query: string): Promise<AISearchAnalysis | null> =>
       const data = await response.json()
 
       if (data.success && data.analysis) {
-        console.log('✅ AI analysis received:', data.analysis)
+        logger.aiAnalysis(q, data.analysis)
         // Enhance the AI analysis with additional detection
         const enhanced = enhanceAIAnalysis(data.analysis, q)
         return enhanced
       } else {
-        console.warn('⚠️ AI analysis failed, using fallback')
+        logger.warn('AI analysis failed, using fallback', { query: q }, LogCategory.AI)
         return data.fallback || null
       }
     } catch (error) {
-      console.error('❌ AI analysis error:', error)
+      logger.error('AI analysis error', error, LogCategory.AI)
       return null
     }
   })
@@ -304,14 +172,13 @@ const getAIAnalysis = async (query: string): Promise<AISearchAnalysis | null> =>
 // ===================================================================
 
 const searchByPartNumber = async (partNumbers: string[], quantity?: number): Promise<Product[]> => {
-  console.log('🔢 PART NUMBER SEARCH (Dynamic)')
-  console.log('🔍 Searching for part numbers:', partNumbers)
+  logger.info('Part number search started', { partNumbers, quantity }, LogCategory.SEARCH)
 
   try {
     // Use the dynamic table discovery service
     const searchResults = await searchAllTablesForPartNumber(partNumbers, 200)
 
-    console.log(`🔍 Dynamic search found ${searchResults.length} raw results`)
+    logger.info(`Dynamic search found ${searchResults.length} raw results`, {}, LogCategory.DATABASE)
 
     // Convert to standard Product format
     const products: Product[] = searchResults.map((item: any) => {
@@ -413,14 +280,14 @@ const searchByPartNumber = async (partNumbers: string[], quantity?: number): Pro
       return 0
     })
 
-    console.log(`🔢 Part number search completed: ${products.length} formatted products`)
+    logger.info(`Part number search completed`, { resultCount: products.length }, LogCategory.SEARCH)
     return products
 
   } catch (error) {
-    console.error('❌ Error in dynamic part number search:', error)
+    logger.error('Error in dynamic part number search', error, LogCategory.DATABASE)
 
     // Fallback to hardcoded search if dynamic fails
-    console.log('⚠️ Falling back to hardcoded table search')
+    logger.warn('Falling back to hardcoded table search', {}, LogCategory.DATABASE)
     return searchByPartNumberHardcoded(partNumbers, quantity)
   }
 }
@@ -430,13 +297,12 @@ const searchByPartNumber = async (partNumbers: string[], quantity?: number): Pro
 // ===================================================================
 
 const searchByPartNumberHardcoded = async (partNumbers: string[], quantity?: number): Promise<Product[]> => {
-  console.log('🔢 PART NUMBER SEARCH (Hardcoded Fallback)')
-  console.log('🔍 Searching for part numbers:', partNumbers)
+  logger.info('Part number search (Hardcoded Fallback)', { partNumbers }, LogCategory.SEARCH)
 
   let allResults: Product[] = []
 
   // Define all tables to search - INCLUDING rack_mount_fiber_enclosure
-  const tables: Array<{ name: string; prefix: string }> = [
+  const tables: TableInfo[] = [
     { name: 'category_cables', prefix: 'cat' },
     { name: 'fiber_connectors', prefix: 'conn' },
     { name: 'adapter_panels', prefix: 'panel' },
@@ -447,7 +313,7 @@ const searchByPartNumberHardcoded = async (partNumbers: string[], quantity?: num
   // Search each table
   for (const table of tables) {
     try {
-      console.log(`🔍 Searching ${table.name} for part numbers...`)
+      logger.tableOperation('search', table.name, { partNumbers })
 
       // Build search conditions for each part number variation
       const searchConditions: string[] = []
@@ -479,7 +345,7 @@ const searchByPartNumberHardcoded = async (partNumbers: string[], quantity?: num
       const result = await query
 
       if (result.data && result.data.length > 0) {
-        console.log(`✅ Found ${result.data.length} matches in ${table.name}`)
+        logger.info(`Found ${result.data.length} matches in ${table.name}`, {}, LogCategory.DATABASE)
 
         // Convert to standard product format
         const products: Product[] = result.data.map((item: any) => ({
@@ -548,7 +414,7 @@ const searchByPartNumberHardcoded = async (partNumbers: string[], quantity?: num
         allResults = [...allResults, ...products]
       }
     } catch (error) {
-      console.error(`❌ Error searching ${table.name}:`, error)
+      logger.error(`Error searching ${table.name}`, error, LogCategory.DATABASE)
     }
   }
 
@@ -572,7 +438,7 @@ const searchByPartNumberHardcoded = async (partNumbers: string[], quantity?: num
     return 0
   })
 
-  console.log(`🔢 Part number search completed: ${allResults.length} total matches`)
+  logger.info(`Part number search completed`, { totalMatches: allResults.length }, LogCategory.SEARCH)
   return allResults
 }
 
@@ -673,17 +539,14 @@ const generateSmartFilters = (products: Product[]): SmartFilters => {
 // TABLE DETERMINATION LOGIC - ENHANCED FOR BETTER ENCLOSURE DETECTION
 // ===================================================================
 
-type ProductTable = 'category_cables' | 'fiber_connectors' | 'adapter_panels' | 'fiber_cables' | 'fiber_enclosures' | 'multi_table'
-
 const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: string): ProductTable => {
   const query = searchTerm.toLowerCase()
 
-  // ADD THIS LINE TO TEST THE IMPORT
-  console.log('Available product types:', Object.keys(PRODUCT_TYPES))
+  logger.debug('Available product types', { types: Object.keys(PRODUCT_TYPES) }, LogCategory.SEARCH)
 
   // PRIORITY 1: Check if AI says ENCLOSURE
   if (aiAnalysis?.productType === 'ENCLOSURE') {
-    console.log('🏗️ AI productType is ENCLOSURE - routing to fiber_enclosures')
+    logger.info('AI productType is ENCLOSURE - routing to fiber_enclosures', {}, LogCategory.AI)
     return 'fiber_enclosures'
   }
 
@@ -703,19 +566,19 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
   const hasDetectedRackUnits = aiAnalysis?.detectedSpecs?.rackUnits !== undefined && aiAnalysis?.detectedSpecs?.rackUnits !== null
 
   if (hasEnclosureTerms || hasRUPattern || hasDetectedRackUnits) {
-    console.log('🏗️ Enclosure indicators detected - routing to fiber_enclosures', {
+    logger.info('Enclosure indicators detected - routing to fiber_enclosures', {
       hasEnclosureTerms,
       hasRUPattern,
       hasDetectedRackUnits,
       rackUnits: aiAnalysis?.detectedSpecs?.rackUnits
-    })
+    }, LogCategory.SEARCH)
     return 'fiber_enclosures'
   }
 
   // Check for strand patterns
   const strandMatch = query.match(/\b(\d+)\s*strand/i)
   if (strandMatch) {
-    console.log(`🧶 STRAND PATTERN DETECTED: ${strandMatch[1]} strand - routing to fiber_cables`)
+    logger.info(`STRAND PATTERN DETECTED: ${strandMatch[1]} strand - routing to fiber_cables`, {}, LogCategory.SEARCH)
     return 'fiber_cables'
   }
 
@@ -724,7 +587,7 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
   const queryWords = query.trim().split(/\s+/)
 
   if (queryWords.length === 1 && brandKeywords.includes(queryWords[0])) {
-    console.log(`🏢 BRAND-ONLY SEARCH DETECTED: "${queryWords[0]}" - routing to multi_table`)
+    logger.info(`BRAND-ONLY SEARCH DETECTED: "${queryWords[0]}" - routing to multi_table`, {}, LogCategory.SEARCH)
     return 'multi_table'
   }
 
@@ -733,13 +596,13 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
   const hasConnectorTerms = connectorTerms.some(term => query.includes(term))
 
   if (hasConnectorTerms && !query.includes('panel') && !query.includes('adapter')) {
-    console.log('🔌 Keyword routing to fiber_connectors')
+    logger.info('Keyword routing to fiber_connectors', {}, LogCategory.SEARCH)
     return 'fiber_connectors'
   }
 
   // Panel detection (but not enclosure panels)
   if ((query.includes('panel') || query.includes('adapter panel') || query.includes('coupling')) && !hasEnclosureTerms) {
-    console.log('🏠 Keyword routing to adapter_panels')
+    logger.info('Keyword routing to adapter_panels', {}, LogCategory.SEARCH)
     return 'adapter_panels'
   }
 
@@ -748,12 +611,12 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
   const hasFiberTerms = fiberTerms.some(term => query.includes(term))
 
   if (hasFiberTerms && !hasConnectorTerms && !query.includes('panel') && !hasEnclosureTerms) {
-    console.log('🔺 Keyword routing to fiber_cables')
+    logger.info('Keyword routing to fiber_cables', {}, LogCategory.SEARCH)
     return 'fiber_cables'
   }
 
   // Default to category cables for typical electrical searches
-  console.log('📊 Default routing to category_cables')
+  logger.info('Default routing to category_cables', {}, LogCategory.SEARCH)
   return 'category_cables'
 }
 
@@ -762,12 +625,12 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
 // ===================================================================
 
 const searchAllTablesByBrand = async (brand: string, limit: number): Promise<Product[]> => {
-  console.log(`🏢 MULTI-TABLE BRAND SEARCH FOR: ${brand}`)
+  logger.info(`MULTI-TABLE BRAND SEARCH FOR: ${brand}`, {}, LogCategory.SEARCH)
   let allProducts: Product[] = []
 
   // Search fiber enclosures FIRST for brand
   try {
-    console.log(`🏗️ Searching fiber enclosures for brand: ${brand}`)
+    logger.debug(`Searching fiber enclosures for brand: ${brand}`, {}, LogCategory.SEARCH)
     const enclosureResult = await searchRackMountFiberEnclosuresImpl({
       searchTerm: brand,
       aiAnalysis: {
@@ -786,16 +649,16 @@ const searchAllTablesByBrand = async (brand: string, limit: number): Promise<Pro
       limit: Math.floor(limit / 5)
     })
     if (enclosureResult.products.length > 0) {
-      console.log(`✅ Found ${enclosureResult.products.length} ${brand} enclosures`)
+      logger.info(`Found ${enclosureResult.products.length} ${brand} enclosures`, {}, LogCategory.SEARCH)
       allProducts = [...allProducts, ...enclosureResult.products]
     }
   } catch (error) {
-    console.error('Error searching enclosures:', error)
+    logger.error('Error searching enclosures', error, LogCategory.SEARCH)
   }
 
   // Search category cables
   try {
-    console.log(`📊 Searching category cables for brand: ${brand}`)
+    logger.debug(`Searching category cables for brand: ${brand}`, {}, LogCategory.SEARCH)
     const cableResult = await searchCategoryCablesImpl({
       searchTerm: brand,
       aiAnalysis: {
@@ -818,16 +681,16 @@ const searchAllTablesByBrand = async (brand: string, limit: number): Promise<Pro
       p.brand.toLowerCase().includes(brand.toLowerCase())
     )
     if (brandProducts.length > 0) {
-      console.log(`✅ Found ${brandProducts.length} ${brand} cables`)
+      logger.info(`Found ${brandProducts.length} ${brand} cables`, {}, LogCategory.SEARCH)
       allProducts = [...allProducts, ...brandProducts]
     }
   } catch (error) {
-    console.error('Error searching cables:', error)
+    logger.error('Error searching cables', error, LogCategory.SEARCH)
   }
 
   // Search fiber connectors
   try {
-    console.log(`🔌 Searching fiber connectors for brand: ${brand}`)
+    logger.debug(`Searching fiber connectors for brand: ${brand}`, {}, LogCategory.SEARCH)
     const connectorResult = await searchFiberConnectorsImpl({
       searchTerm: brand,
       aiAnalysis: {
@@ -850,16 +713,16 @@ const searchAllTablesByBrand = async (brand: string, limit: number): Promise<Pro
       p.brand.toLowerCase().includes(brand.toLowerCase())
     )
     if (brandProducts.length > 0) {
-      console.log(`✅ Found ${brandProducts.length} ${brand} connectors`)
+      logger.info(`Found ${brandProducts.length} ${brand} connectors`, {}, LogCategory.SEARCH)
       allProducts = [...allProducts, ...brandProducts]
     }
   } catch (error) {
-    console.error('Error searching connectors:', error)
+    logger.error('Error searching connectors', error, LogCategory.SEARCH)
   }
 
   // Search adapter panels
   try {
-    console.log(`🏠 Searching adapter panels for brand: ${brand}`)
+    logger.debug(`Searching adapter panels for brand: ${brand}`, {}, LogCategory.SEARCH)
     const panelResult = await searchAdapterPanelsImpl({
       searchTerm: brand,
       aiAnalysis: {
@@ -882,16 +745,16 @@ const searchAllTablesByBrand = async (brand: string, limit: number): Promise<Pro
       p.brand.toLowerCase().includes(brand.toLowerCase())
     )
     if (brandProducts.length > 0) {
-      console.log(`✅ Found ${brandProducts.length} ${brand} panels`)
+      logger.info(`Found ${brandProducts.length} ${brand} panels`, {}, LogCategory.SEARCH)
       allProducts = [...allProducts, ...brandProducts]
     }
   } catch (error) {
-    console.error('Error searching panels:', error)
+    logger.error('Error searching panels', error, LogCategory.SEARCH)
   }
 
   // Search fiber cables
   try {
-    console.log(`🔺 Searching fiber cables for brand: ${brand}`)
+    logger.debug(`Searching fiber cables for brand: ${brand}`, {}, LogCategory.SEARCH)
     const fiberResult = await searchFiberCablesImpl({
       searchTerm: brand,
       aiAnalysis: {
@@ -914,14 +777,14 @@ const searchAllTablesByBrand = async (brand: string, limit: number): Promise<Pro
       p.brand.toLowerCase().includes(brand.toLowerCase())
     )
     if (brandProducts.length > 0) {
-      console.log(`✅ Found ${brandProducts.length} ${brand} fiber cables`)
+      logger.info(`Found ${brandProducts.length} ${brand} fiber cables`, {}, LogCategory.SEARCH)
       allProducts = [...allProducts, ...brandProducts]
     }
   } catch (error) {
-    console.error('Error searching fiber cables:', error)
+    logger.error('Error searching fiber cables', error, LogCategory.SEARCH)
   }
 
-  console.log(`🎯 TOTAL BRAND SEARCH RESULTS: ${allProducts.length} products for ${brand}`)
+  logger.info(`TOTAL BRAND SEARCH RESULTS: ${allProducts.length} products for ${brand}`, {}, LogCategory.SEARCH)
   return allProducts
 }
 
@@ -931,16 +794,17 @@ const searchAllTablesByBrand = async (brand: string, limit: number): Promise<Pro
 
 export const searchProducts = async (options: SearchOptions): Promise<SearchResult> => {
   const startTime = performance.now()
+  const endTimer = logger.startTimer('Total search execution')
 
   // Initialize tracking variables
   let searchType: 'direct' | 'ai' | 'part_number' | 'brand' = 'direct'
   let aiProductType: string | undefined
 
-  console.log('🔍 searchProducts called with options:', options)
+  logger.searchStart(options.query, options)
 
   // Fix: Ensure we're destructuring correctly
   if (!options || typeof options.query !== 'string') {
-    console.error('Invalid options passed to searchProducts:', options)
+    logger.error('Invalid options passed to searchProducts', { options }, LogCategory.SEARCH)
 
     // Track failed search
     const searchTimeMs = Math.round(performance.now() - startTime)
@@ -950,7 +814,7 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
       searchTimeMs,
       searchType: 'direct',
       aiProductType: undefined
-    }).catch(console.error)
+    }).catch(error => logger.error('Analytics tracking failed', error, LogCategory.ANALYTICS))
 
     return {
       products: [],
@@ -963,8 +827,7 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
   const { query, limit = 50, includeAI = true } = options
 
   try {
-    console.log('🎯 SEARCH SERVICE - Enhanced search for:', query)
-    console.log('Query type:', typeof query)
+    logger.info('SEARCH SERVICE - Enhanced search started', { query }, LogCategory.SEARCH)
 
     // Step 1: Validate query
     const validation = validateElectricalQuery(query)
@@ -978,7 +841,7 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
         searchTimeMs,
         searchType: 'direct',
         aiProductType: undefined
-      }).catch(console.error)
+      }).catch(error => logger.error('Analytics tracking failed', error, LogCategory.ANALYTICS))
 
       return {
         products: [],
@@ -990,13 +853,13 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
 
     // Step 2: Apply business rules (Cat5 → Cat5e)
     const processedQuery = applyBusinessRules(query)
-    console.log('🔄 Query after business rules:', processedQuery.processedTerm)
+    logger.debug('Query after business rules', { original: query, processed: processedQuery.processedTerm }, LogCategory.BUSINESS)
 
     // Step 3: Check for part numbers first
     const partNumberDetection = detectPartNumbers(processedQuery.processedTerm)
 
     if (partNumberDetection.hasParts) {
-      console.log('🔢 PART NUMBER DETECTED - Using part number search')
+      logger.info('PART NUMBER DETECTED - Using part number search', { partNumbers: partNumberDetection.partNumbers }, LogCategory.SEARCH)
       searchType = 'part_number'
 
       const partResults = await searchByPartNumber(partNumberDetection.partNumbers, partNumberDetection.quantity)
@@ -1012,7 +875,10 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
           searchTimeMs,
           searchType: 'part_number',
           aiProductType: undefined
-        }).catch(console.error)
+        }).catch(error => logger.error('Analytics tracking failed', error, LogCategory.ANALYTICS))
+
+        endTimer()
+        logger.searchComplete(query, partResults.length, searchTimeMs)
 
         return {
           products: partResults.slice(0, limit),
@@ -1031,11 +897,10 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
       searchType = 'ai'
       aiAnalysis = await getAIAnalysis(processedQuery.processedTerm)
 
-      // Add debug code AFTER getting the AI analysis
-      console.log('🔍 BEFORE enhancement:', {
+      logger.debug('BEFORE enhancement', {
         productType: aiAnalysis?.productType,
         rackUnits: aiAnalysis?.detectedSpecs?.rackUnits
-      })
+      }, LogCategory.AI)
 
       // Now enhance the AI analysis
       aiAnalysis = enhanceAIAnalysis(aiAnalysis, processedQuery.processedTerm)
@@ -1043,16 +908,15 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
       // Store AI product type for analytics
       aiProductType = aiAnalysis?.productType
 
-      // Add debug code AFTER enhancement
-      console.log('🔍 AFTER enhancement:', {
+      logger.debug('AFTER enhancement', {
         productType: aiAnalysis?.productType,
         rackUnits: aiAnalysis?.detectedSpecs?.rackUnits
-      })
+      }, LogCategory.AI)
     }
 
     // Step 5: Determine Target Table
     const targetTable = determineTargetTable(aiAnalysis, processedQuery.processedTerm)
-    console.log(`🎯 Target table: ${targetTable}`)
+    logger.info(`Target table determined: ${targetTable}`, {}, LogCategory.SEARCH)
 
     // Check if it's a brand search
     const brandKeywords = ['corning', 'panduit', 'leviton', 'superior', 'essex', 'berktek', 'prysmian', 'dmsi', 'siecor']
@@ -1067,7 +931,7 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
     // Step 6: Execute Table-Specific Search
     switch (targetTable) {
       case 'category_cables':
-        console.log('📊 Executing REAL category cables search')
+        logger.info('Executing category cables search', {}, LogCategory.SEARCH)
         const cableResult = await searchCategoryCablesImpl({
           searchTerm: processedQuery.processedTerm,
           aiAnalysis,
@@ -1078,7 +942,7 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
         break
 
       case 'fiber_connectors':
-        console.log('🔌 Executing REAL fiber connectors search')
+        logger.info('Executing fiber connectors search', {}, LogCategory.SEARCH)
         const connectorResult = await searchFiberConnectorsImpl({
           searchTerm: processedQuery.processedTerm,
           aiAnalysis,
@@ -1089,7 +953,7 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
         break
 
       case 'adapter_panels':
-        console.log('🏠 Executing REAL adapter panels search')
+        logger.info('Executing adapter panels search', {}, LogCategory.SEARCH)
         const panelResult = await searchAdapterPanelsImpl({
           searchTerm: processedQuery.processedTerm,
           aiAnalysis,
@@ -1100,7 +964,7 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
         break
 
       case 'fiber_cables':
-        console.log('🔺 Executing REAL fiber cables search')
+        logger.info('Executing fiber cables search', {}, LogCategory.SEARCH)
         const fiberResult = await searchFiberCablesImpl({
           searchTerm: processedQuery.processedTerm,
           aiAnalysis,
@@ -1111,7 +975,7 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
         break
 
       case 'fiber_enclosures':
-        console.log('🏗️ Executing REAL fiber enclosures search')
+        logger.info('Executing fiber enclosures search', {}, LogCategory.SEARCH)
 
         // Determine if it's wall mount, rack mount, or generic
         const enclosureQuery = processedQuery.processedTerm.toLowerCase()
@@ -1127,7 +991,7 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
 
         if (isWallMount) {
           // User specifically wants wall mount
-          console.log('🏗️ Detected WALL MOUNT enclosure request')
+          logger.info('Detected WALL MOUNT enclosure request', {}, LogCategory.SEARCH)
           const wallEnclosureResult = await searchWallMountFiberEnclosuresImpl({
             searchTerm: processedQuery.processedTerm,
             aiAnalysis,
@@ -1137,7 +1001,7 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
           searchStrategy = `wall_mount_enclosures_${wallEnclosureResult.searchStrategy}`
         } else if (isRackMount) {
           // User specifically wants rack mount
-          console.log('🏗️ Detected RACK MOUNT enclosure request')
+          logger.info('Detected RACK MOUNT enclosure request', {}, LogCategory.SEARCH)
           const enclosureResult = await searchRackMountFiberEnclosuresImpl({
             searchTerm: processedQuery.processedTerm,
             aiAnalysis,
@@ -1147,7 +1011,7 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
           searchStrategy = `rack_mount_enclosures_${enclosureResult.searchStrategy}`
         } else {
           // Generic "fiber enclosure" search - show BOTH types
-          console.log('🏗️ Generic fiber enclosure search - showing BOTH wall and rack mount')
+          logger.info('Generic fiber enclosure search - showing BOTH wall and rack mount', {}, LogCategory.SEARCH)
 
           // Get wall mount enclosures
           const wallResult = await searchWallMountFiberEnclosuresImpl({
@@ -1174,14 +1038,13 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
           })
 
           searchStrategy = 'mixed_fiber_enclosures'
-          console.log(`✅ Found ${wallResult.products.length} wall mount and ${rackResult.products.length} rack mount enclosures`)
+          logger.info(`Found ${wallResult.products.length} wall mount and ${rackResult.products.length} rack mount enclosures`, {}, LogCategory.SEARCH)
         }
         break
 
       case 'multi_table':
-        console.log('🚀 Executing enhanced multi-table brand search')
+        logger.info('Executing enhanced multi-table brand search', {}, LogCategory.SEARCH)
         // For brand-only searches, use the dedicated brand search function
-        const brandKeywords = ['corning', 'panduit', 'leviton', 'superior', 'essex', 'berktek', 'prysmian', 'dmsi', 'siecor']
         const queryLower = processedQuery.processedTerm.toLowerCase().trim()
 
         if (brandKeywords.includes(queryLower)) {
@@ -1237,7 +1100,7 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
         break
 
       default:
-        console.log('📊 Default category cables search')
+        logger.info('Default category cables search', {}, LogCategory.SEARCH)
         const defaultResult = await searchCategoryCablesImpl({
           searchTerm: processedQuery.processedTerm,
           aiAnalysis,
@@ -1253,7 +1116,8 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
     const endTime = performance.now()
     const searchTime = Math.round(endTime - startTime)
 
-    console.log(`✅ Search service completed: ${products.length} products found in ${searchTime}ms`)
+    endTimer()
+    logger.searchComplete(query, products.length, searchTime)
 
     // Track successful search
     trackSearch({
@@ -1263,7 +1127,7 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
       searchType,
       aiProductType
     }).catch(error => {
-      console.error('Analytics tracking failed:', error)
+      logger.error('Analytics tracking failed', error, LogCategory.ANALYTICS)
     })
 
     return {
@@ -1277,9 +1141,11 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
     }
 
   } catch (error: unknown) {
-    console.error('❌ Search service error:', error)
+    logger.error('Search service error', error, LogCategory.SEARCH)
     const endTime = performance.now()
     const searchTimeMs = Math.round(endTime - startTime)
+
+    endTimer()
 
     // Track failed search
     trackSearch({
@@ -1288,7 +1154,7 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
       searchTimeMs,
       searchType,
       aiProductType
-    }).catch(console.error)
+    }).catch(trackError => logger.error('Analytics tracking failed', trackError, LogCategory.ANALYTICS))
 
     return {
       products: [],
@@ -1303,4 +1169,4 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
 // EXPORTS
 // ===================================================================
 
-// Types are already exported at their definitions above
+export default searchProducts

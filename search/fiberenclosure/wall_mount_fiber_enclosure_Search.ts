@@ -3,7 +3,8 @@
 // Created: June 6, 2025
 
 import { supabase } from '@/lib/supabase'
-import type { Product, AISearchAnalysis } from '@/services/searchService'
+import type { Product } from '@/types/product'
+import type { AISearchAnalysis } from '@/types/search'
 
 // Import shared detection functions from industryKnowledge
 import {

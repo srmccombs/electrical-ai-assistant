@@ -18,61 +18,20 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Search, Plus, Minus, X, Send, Zap, Package, AlertCircle, CheckCircle, Clock, Menu, Settings, HelpCircle, Sparkles, Filter, Brain, Shield, Database, Cpu, Activity, Copy } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { trackResultClick } from '../services/analytics'
-// Search service imports
-import {
-  searchProducts,
-  type Product,
-  type AISearchAnalysis,
-} from '../services/searchService'
+import { searchProducts } from '../services/searchService'
+import { logger, LogCategory } from '@/utils/logger'
 
-// ===================================================================
-// TYPE DEFINITIONS
-// ===================================================================
-
-interface ListItem extends Product {
-  quantity: number
-  addedAt: Date
-}
-
-interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  products?: Product[]
-  timestamp: Date
-  searchType?: string
-  searchTime?: number
-  aiAnalysis?: AISearchAnalysis | null
-  smartFilters?: SmartFilters | null
-}
-
-// ⚠️ DO NOT SIMPLIFY - All these filter types are needed for electrical products
-interface SmartFilters {
-  brands: string[]
-  packagingTypes: string[]
-  jacketRatings: string[]
-  fiberTypes: string[]
-  connectorTypes: string[]
-  categoryRatings: string[]
-  colors: string[]
-  shieldingTypes: string[]
-  productLines: string[]
-  pairCounts: string[]
-  conductorGauges: string[]
-  applications: string[]
-  productType: string
-  productTypes: string[]
-  technologies: string[]
-  polishTypes: string[]
-  housingColors: string[]
-  bootColors: string[]
-  panelTypes?: string[]
-  terminationTypes?: string[]
-  adapterColors?: string[]
-  rackUnits?: string[]
-  environments?: string[]
-  mountTypes?: string[]
-}
+// Import all types from the new types package
+import type {
+  Product,
+  ListItem,
+  Message,
+  SmartFilters,
+  ActiveFilters,
+  AISearchAnalysis,
+  StockStatus,
+  DebugInfo
+} from '@/types'
 
 // ===================================================================
 // FIBER TYPE REFERENCE COMPONENT
@@ -240,14 +199,14 @@ const PlecticAI: React.FC = () => {
     "4RU fiber enclosure"
   ])
   const [currentSearchTerm, setCurrentSearchTerm] = useState<string>('')
-  const [activeFilters, setActiveFilters] = useState<Record<string, string>>({})
+  const [activeFilters, setActiveFilters] = useState<ActiveFilters>({})
   const [currentProducts, setCurrentProducts] = useState<Product[]>([])
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
   const [smartFilters, setSmartFilters] = useState<SmartFilters | null>(null)
 
   // DEBUG MODE STATES - NEW
   const [debugMode, setDebugMode] = useState<boolean>(false)
-  const [lastSearchDebug, setLastSearchDebug] = useState<any>(null)
+  const [lastSearchDebug, setLastSearchDebug] = useState<DebugInfo | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -325,9 +284,15 @@ const PlecticAI: React.FC = () => {
   const handleAddToList = (product: Product) => {
     // Track the click (fire and forget)
     trackResultClick({
-      searchTerm: currentSearchTerm, // Fixed: use currentSearchTerm instead of searchTerm
+      searchTerm: currentSearchTerm,
       clickedPartNumber: product.partNumber
-    }).catch(console.error)
+    }).catch(error => logger.error('Failed to track click', error, LogCategory.ANALYTICS))
+
+    // Log the action
+    logger.info('Product added to list', {
+      partNumber: product.partNumber,
+      brand: product.brand
+    }, LogCategory.UI)
 
     // Your existing add to list logic
     const existingIndex = productList.findIndex(
@@ -361,10 +326,9 @@ const PlecticAI: React.FC = () => {
     trackResultClick({
       searchTerm: currentSearchTerm,
       clickedPartNumber: product.partNumber
-    }).catch(console.error)
+    }).catch(error => logger.error('Failed to track click', error, LogCategory.ANALYTICS))
 
-    // Your existing logic for showing product details
-    // For now, this just tracks the click
+    logger.debug('Product clicked', { partNumber: product.partNumber }, LogCategory.UI)
   }
 
   const updateQuantity = (id: string, delta: number): void => {
@@ -381,10 +345,15 @@ const PlecticAI: React.FC = () => {
 
   const removeFromList = (id: string): void => {
     setProductList(prev => prev.filter(item => item.id !== id))
+    logger.debug('Product removed from list', { id }, LogCategory.UI)
   }
 
   const sendList = (): void => {
     alert('List sent! (This would email/text the list in production)')
+    logger.track('list_sent', {
+      itemCount: productList.length,
+      totalQuantity: totalItems
+    })
   }
 
   const scrollToBottom = (): void => {
@@ -398,6 +367,7 @@ const PlecticAI: React.FC = () => {
     setActiveFilters({})
     setCurrentProducts([])
     setFilteredProducts([])
+    logger.info('Conversation cleared', {}, LogCategory.UI)
   }
 
   // ⚠️ DO NOT SIMPLIFY - This comprehensive filter function handles all product types
@@ -409,6 +379,8 @@ const PlecticAI: React.FC = () => {
       newFilters[filterType] = value
     }
     setActiveFilters(newFilters)
+
+    logger.debug('Filter applied', { filterType, value }, LogCategory.UI)
 
     let filtered = safeCurrentProducts
     Object.entries(newFilters).forEach(([type, filterValue]) => {
@@ -455,6 +427,7 @@ const PlecticAI: React.FC = () => {
   const clearAllFilters = (): void => {
     setActiveFilters({})
     setFilteredProducts(safeCurrentProducts)
+    logger.debug('All filters cleared', {}, LogCategory.UI)
   }
 
   // ⚠️ DO NOT REMOVE - Clears a specific filter type
@@ -508,6 +481,8 @@ const PlecticAI: React.FC = () => {
   const handleSubmit = async (): Promise<void> => {
     if (!input.trim() || isLoading) return
 
+    logger.searchStart(input)
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
@@ -522,17 +497,23 @@ const PlecticAI: React.FC = () => {
     setIsLoading(true)
 
     try {
+      const endTimer = logger.startTimer('Search execution')
+
       const searchResult = await searchProducts({
         query: originalInput,
         limit: 50,
         includeAI: true
       })
 
+      const searchDuration = endTimer()
+
       const { products, searchTime, searchType, aiAnalysis: searchAiAnalysis, redirectMessage, smartFilters: resultFilters } = searchResult
+
+      logger.searchComplete(originalInput, products.length, searchDuration)
 
       // CAPTURE DEBUG INFO
       if (debugMode) {
-        setLastSearchDebug({
+        const debugInfo: DebugInfo = {
           query: originalInput,
           timestamp: new Date().toISOString(),
           searchType: searchType,
@@ -541,12 +522,12 @@ const PlecticAI: React.FC = () => {
           aiAnalysis: searchAiAnalysis,
           redirectMessage: redirectMessage,
           smartFilters: resultFilters,
-          // Add table info if available
           tablesSearched: searchType,
           productTypes: products.length > 0 ?
             [...new Set(products.map(p => p.tableName || 'unknown'))].join(', ') :
             'none'
-        })
+        }
+        setLastSearchDebug(debugInfo)
       }
 
       setLastSearchTime(searchTime)
@@ -579,7 +560,7 @@ const PlecticAI: React.FC = () => {
       setMessages(prev => [...prev, assistantMessage])
 
     } catch (error) {
-      console.error('Search error:', error)
+      logger.error('Search failed', error, LogCategory.SEARCH)
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',

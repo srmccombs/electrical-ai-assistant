@@ -3,7 +3,8 @@
 // Fixed: December 20, 2024 - Corrected table name to rack_mount_fiber_enclosures
 
 import { supabase } from '@/lib/supabase'
-import type { Product, AISearchAnalysis } from '@/services/searchService'
+import type { Product } from '@/types/product'
+import type { AISearchAnalysis } from '@/types/search'
 
 // ===================================================================
 // TYPE DEFINITIONS - Fiber Enclosure Specific

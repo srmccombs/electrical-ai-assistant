@@ -1,7 +1,8 @@
 // utils/typeGuards.ts
 // Type guards and validation utilities
 
-import { Product, AISearchAnalysis } from '@/services/searchService'
+import { Product } from '@/types/product'
+import { AISearchAnalysis } from '@/types/search'
 
 /**
  * Type guard to check if a value is defined (not null or undefined)

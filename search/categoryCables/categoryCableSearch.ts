@@ -12,8 +12,9 @@ import {
   DATABASE_JACKET_FORMATS
 } from '../shared/industryKnowledge'
 
-// Import Product and AISearchAnalysis types from searchService
-import type { Product, AISearchAnalysis } from '@/services/searchService'
+// Import Product and AISearchAnalysis types
+import type { Product } from '@/types/product'
+import type { AISearchAnalysis } from '@/types/search'
 
 // ===================================================================
 // TYPE DEFINITIONS - Category Cable Specific

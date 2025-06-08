@@ -1,7 +1,7 @@
 // services/optimizedBrandSearch.ts
 // Optimized parallel brand search implementation
 
-import { Product } from './searchService'
+import { Product } from '@/types/product'
 import { searchCategoryCables as searchCategoryCablesImpl } from '@/search/categoryCables/categoryCableSearch'
 import { searchFiberConnectors as searchFiberConnectorsImpl } from '@/search/fiberConnectors/fiberConnectorSearch'
 import { searchFiberCables as searchFiberCablesImpl } from '@/search/fiberCables/fiberCableSearch'
