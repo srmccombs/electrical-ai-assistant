@@ -79,7 +79,7 @@ export const trackResultClick = async (data: ClickAnalytics): Promise<void> => {
     const { error: updateError } = await supabase
       .from('search_analytics')
       .update({ clicked_result: data.clickedPartNumber })
-      .eq('id', recentSearch.id)
+      .eq('id', (recentSearch as any).id)
 
     if (updateError) {
       console.error('Error updating click analytics:', updateError)
