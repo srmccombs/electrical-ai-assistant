@@ -19,7 +19,7 @@ import { Search, Plus, Minus, X, Send, Zap, Package, AlertCircle, CheckCircle, C
 import { supabase } from '../lib/supabase'
 import { trackResultClick } from '../services/analytics'
 import { searchProducts } from '../services/searchService'
-import { logger, LogCategory } from '@/utils/logger'
+import { logger, LogCategory } from '../utils/logger'
 
 // Import all types from the new types package
 import type {
@@ -31,7 +31,7 @@ import type {
   AISearchAnalysis,
   StockStatus,
   DebugInfo
-} from '@/types'
+} from '../types'
 
 // ===================================================================
 // FIBER TYPE REFERENCE COMPONENT
