@@ -1,4 +1,4 @@
-// PlecticAI.tsx - SIMPLIFIED VERSION WITH FIBER TYPE REFERENCE
+// PlecticAI.tsx - SIMPLIFIED VERSION WITH FIBER TYPE REFERENCE AND DEBUG MODE
 // Updated: June 6, 2025
 // Date created: June 6, 2025
 
@@ -17,7 +17,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Search, Plus, Minus, X, Send, Zap, Package, AlertCircle, CheckCircle, Clock, Menu, Settings, HelpCircle, Sparkles, Filter, Brain, Shield, Database, Cpu, Activity, Copy } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-
+import { trackResultClick } from '@/services/analytics'
 // Search service imports
 import {
   searchProducts,
@@ -210,7 +210,7 @@ const AISearchLoading: React.FC<AISearchLoadingProps> = ({ searchTerm }) => {
             <Brain className="w-8 h-8 text-white" />
           </div>
           <h2 className="text-xl font-bold text-gray-900">Plectic AI Working</h2>
-          <p className="text-sm text-gray-600 mt-1">Searching for: &quot;{searchTerm}&quot;</p>
+          <p className="text-sm text-gray-600 mt-1">Searching for: "{searchTerm}"</p>
         </div>
       </div>
     </div>
@@ -244,6 +244,10 @@ const PlecticAI: React.FC = () => {
   const [currentProducts, setCurrentProducts] = useState<Product[]>([])
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
   const [smartFilters, setSmartFilters] = useState<SmartFilters | null>(null)
+
+  // DEBUG MODE STATES - NEW
+  const [debugMode, setDebugMode] = useState<boolean>(false)
+  const [lastSearchDebug, setLastSearchDebug] = useState<any>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -318,19 +322,49 @@ const PlecticAI: React.FC = () => {
   }
 
   // Helper functions
-  const addToList = (product: Product, customQuantity?: number): void => {
-    const quantityToAdd = customQuantity || aiAnalysis?.detectedSpecs?.requestedQuantity || 1
-    setProductList(prev => {
-      const existing = prev.find(item => item.id === product.id)
-      if (existing) {
-        return prev.map(item =>
-          item.id === product.id
-            ? { ...item, quantity: item.quantity + quantityToAdd }
-            : item
-        )
-      }
-      return [...prev, { ...product, quantity: quantityToAdd, addedAt: new Date() }]
-    })
+  const handleAddToList = (product: Product) => {
+    // Track the click (fire and forget)
+    trackResultClick({
+      searchTerm: currentSearchTerm, // Fixed: use currentSearchTerm instead of searchTerm
+      clickedPartNumber: product.partNumber
+    }).catch(console.error)
+
+    // Your existing add to list logic
+    const existingIndex = productList.findIndex(
+      item => item.partNumber === product.partNumber
+    )
+
+    if (existingIndex !== -1) {
+      setProductList(prev => {
+        const newList = [...prev]
+        newList[existingIndex] = {
+          ...newList[existingIndex],
+          quantity: newList[existingIndex].quantity + 1
+        }
+        return newList
+      })
+    } else {
+      setProductList(prev => [
+        ...prev,
+        {
+          ...product,
+          quantity: 1,
+          addedAt: new Date()
+        }
+      ])
+    }
+  }
+
+  // Also track clicks when users click on a product for details
+  const handleProductClick = (product: Product) => {
+    // Track the click
+    trackResultClick({
+      searchTerm: currentSearchTerm,
+      clickedPartNumber: product.partNumber
+    }).catch(console.error)
+
+    // Your existing logic for showing product details
+    // For now, this just tracks the click
   }
 
   const updateQuantity = (id: string, delta: number): void => {
@@ -496,6 +530,25 @@ const PlecticAI: React.FC = () => {
 
       const { products, searchTime, searchType, aiAnalysis: searchAiAnalysis, redirectMessage, smartFilters: resultFilters } = searchResult
 
+      // CAPTURE DEBUG INFO
+      if (debugMode) {
+        setLastSearchDebug({
+          query: originalInput,
+          timestamp: new Date().toISOString(),
+          searchType: searchType,
+          searchTime: searchTime,
+          totalFound: products.length,
+          aiAnalysis: searchAiAnalysis,
+          redirectMessage: redirectMessage,
+          smartFilters: resultFilters,
+          // Add table info if available
+          tablesSearched: searchType,
+          productTypes: products.length > 0 ?
+            [...new Set(products.map(p => p.tableName || 'unknown'))].join(', ') :
+            'none'
+        })
+      }
+
       setLastSearchTime(searchTime)
       setAiAnalysis(searchAiAnalysis || null)
 
@@ -583,6 +636,87 @@ const PlecticAI: React.FC = () => {
           )}
         </div>
       </header>
+
+      {/* DEBUG MODE TOGGLE - Only show in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <button
+          onClick={() => setDebugMode(!debugMode)}
+          className={`fixed bottom-4 right-4 z-40 px-4 py-2 rounded-lg font-medium text-sm shadow-lg transition-all ${
+            debugMode 
+              ? 'bg-green-600 text-white hover:bg-green-700' 
+              : 'bg-gray-800 text-white hover:bg-gray-900'
+          }`}
+        >
+          🐛 Debug: {debugMode ? 'ON' : 'OFF'}
+        </button>
+      )}
+
+      {/* DEBUG PANEL - Shows search internals when debug mode is on */}
+      {debugMode && lastSearchDebug && (
+        <div className="fixed bottom-20 right-4 z-40 w-96 max-h-96 overflow-auto bg-black text-green-400 p-4 rounded-lg shadow-2xl font-mono text-xs">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-sm font-bold">🔍 Search Debug Info</h3>
+            <button
+              onClick={() => setLastSearchDebug(null)}
+              className="text-red-400 hover:text-red-300"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <div>
+              <span className="text-yellow-400">Query:</span> "{lastSearchDebug.query}"
+            </div>
+
+            <div>
+              <span className="text-yellow-400">Search Type:</span> {lastSearchDebug.searchType}
+            </div>
+
+            <div>
+              <span className="text-yellow-400">Time:</span> {lastSearchDebug.searchTime}ms
+            </div>
+
+            <div>
+              <span className="text-yellow-400">Results:</span> {lastSearchDebug.totalFound} products
+            </div>
+
+            <div>
+              <span className="text-yellow-400">Tables:</span> {lastSearchDebug.productTypes}
+            </div>
+
+            {lastSearchDebug.redirectMessage && (
+              <div>
+                <span className="text-yellow-400">Redirect:</span> {lastSearchDebug.redirectMessage}
+              </div>
+            )}
+
+            {lastSearchDebug.aiAnalysis && (
+              <div className="mt-3 pt-3 border-t border-green-600">
+                <div className="text-yellow-400 mb-1">AI Analysis:</div>
+                <div className="pl-2 space-y-1">
+                  <div><span className="text-blue-400">Product Type:</span> {lastSearchDebug.aiAnalysis.productType}</div>
+                  <div><span className="text-blue-400">Confidence:</span> {(lastSearchDebug.aiAnalysis.confidence * 100).toFixed(0)}%</div>
+                  <div><span className="text-blue-400">Strategy:</span> {lastSearchDebug.aiAnalysis.searchStrategy}</div>
+
+                  {lastSearchDebug.aiAnalysis.detectedSpecs && Object.keys(lastSearchDebug.aiAnalysis.detectedSpecs).length > 0 && (
+                    <div className="mt-2">
+                      <div className="text-blue-400">Detected Specs:</div>
+                      <div className="pl-2">
+                        {Object.entries(lastSearchDebug.aiAnalysis.detectedSpecs).map(([key, value]) => (
+                          <div key={key} className="text-xs">
+                            {key}: {JSON.stringify(value)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
@@ -1025,7 +1159,7 @@ const PlecticAI: React.FC = () => {
                                       <th className="px-2 py-2 text-left font-medium w-24">Part #</th>
                                       <th className="px-2 py-2 text-left font-medium w-20">Brand</th>
                                       <th className="px-3 py-2 text-left font-medium min-w-96">Description</th>
-                                      {productsToDisplay.some(p => p.tableName === 'rack_mount_fiber_enclosure') ? (
+                                      {productsToDisplay.some(p => p.tableName === 'rack_mount_fiber_enclosures') ? (
                                         <>
                                           <th className="px-2 py-2 text-center font-medium w-20">Panel Type</th>
                                           <th className="px-2 py-2 text-center font-medium w-20">Rack Units</th>
@@ -1046,14 +1180,16 @@ const PlecticAI: React.FC = () => {
                                   <tbody>
                                     {(productsToDisplay.length > 0 ? productsToDisplay : message.products).map((product, index) => (
                                       <tr
-                                        key={product.id}
-                                        className={`border-b border-gray-100 hover:bg-blue-50 transition-colors ${
-                                          index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
-                                        }`}
+                                        key={`${product.partNumber}_${index}`}
+                                        className="hover:bg-gray-50 cursor-pointer"
+                                        onClick={() => handleProductClick(product)}
                                       >
                                         <td className="px-2 py-2 text-center">
                                           <button
-                                            onClick={() => addToList(product)}
+                                            onClick={(e) => {
+                                              e.stopPropagation() // Prevent row click
+                                              handleAddToList(product)
+                                            }}
                                             className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition-colors"
                                           >
                                             Add
@@ -1071,7 +1207,7 @@ const PlecticAI: React.FC = () => {
                                             {product.description}
                                           </div>
                                         </td>
-                                        {product.tableName === 'rack_mount_fiber_enclosure' ? (
+                                        {product.tableName === 'rack_mount_fiber_enclosures' ? (
                                           <>
                                             <td className="px-2 py-2 text-center">
                                               <span className="bg-blue-100 text-blue-700 px-1 py-1 rounded text-xs">
