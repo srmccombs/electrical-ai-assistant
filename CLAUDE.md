@@ -6,6 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is an AI-powered electrical distribution assistant built with Next.js 14 and TypeScript. The application helps users search for electrical components (cables, fiber connectors, adapter panels, enclosures) using natural language queries powered by OpenAI GPT-4o-mini.
 
+### Current Status (Jan 2025)
+- ✅ Core search functionality complete
+- ✅ AI integration with GPT-4o-mini
+- ✅ Shopping list management
+- ✅ Analytics tracking foundation
+- ✅ Error handling and debug mode
+- ✅ AI response caching
+- 🚧 User authentication not implemented
+- 🚧 Quote generation not implemented
+- 🚧 Email integration not implemented
+
 ## Common Development Commands
 
 ```bash
@@ -40,21 +51,35 @@ Located in `/search/` directory:
 - `fiberCables/` - Searches for fiber optic cables
 - `fiberConnectors/` - Searches for fiber connectors (LC, SC, ST, etc.)
 - `fiberadapterPanels/` - Searches for adapter panels
-- `fiberenclosure/` - Searches for rack mount fiber enclosures
+- `fiberenclosure/` - Searches for both rack mount and wall mount fiber enclosures
 - `shared/industryKnowledge.ts` - Contains business rules and electrical industry patterns
+- `shared/tableDiscoveryService.ts` - Dynamic table discovery for new product types
 
 ### Database Integration
 Uses Supabase (PostgreSQL) with tables:
-- `category_cables`
-- `fiber_connectors`
-- `adapter_panels`
-- `rack_mount_fiber_enclosures`
+- `category_cables` - Ethernet cables (Cat5e, Cat6, Cat6a)
+- `fiber_connectors` - LC, SC, ST, FC connectors
+- `adapter_panels` - Fiber adapter panels
+- `rack_mount_fiber_enclosures` - Rack mount enclosures
+- `wall_mount_fiber_enclosures` - Wall mount enclosures
+- `fiber_cables` - Single mode and multimode fiber cables
 - Dynamic table discovery via `tableDiscoveryService.ts`
 
+Analytics tables:
+- `search_analytics` - Tracks all searches and performance
+- `search_analytics_summary` - Daily aggregated statistics
+- `popular_searches` - Most searched terms
+
 ### UI Components
-- `PlecticAI.tsx` - Main chat interface component with shopping list functionality
-- Supports real-time streaming responses
-- Manages conversation history and shopping lists
+- `PlecticAI.tsx` - Main chat interface component with:
+  - Real-time streaming responses
+  - Shopping list with quantity management
+  - Smart filter generation
+  - Debug mode toggle
+  - Fiber type reference guide
+  - Stock status indicators
+- `ErrorBoundary.tsx` - Graceful error handling wrapper
+- `app/analytics/page.tsx` - Analytics dashboard page (component pending)
 
 ## Environment Variables Required
 
@@ -94,3 +119,27 @@ Strict mode is enabled. Key compiler options:
 3. Each product type has its own filter generation logic - check the respective search implementation files
 
 4. Shopping list functionality stores items in browser localStorage with quantity tracking
+
+## Recent Updates (January 2025)
+
+### Completed Features
+- ✅ Error boundary for graceful error handling
+- ✅ Debug mode for development troubleshooting
+- ✅ Product types configuration centralized
+- ✅ AI response caching (1-hour TTL)
+- ✅ Search analytics tracking system
+- ✅ Performance metrics collection
+- ✅ Popular searches tracking
+
+### Services Added
+- `services/aiCache.ts` - Reduces API costs with intelligent caching
+- `services/analytics.ts` - Comprehensive analytics tracking
+- `config/productTypes.ts` - Centralized product configuration
+
+### Known Limitations
+- No user authentication system
+- No quote generation or saving
+- No email integration
+- No admin panel for product management
+- Analytics dashboard component not yet implemented
+- Limited to ~368 products (goal: 5,000+)
