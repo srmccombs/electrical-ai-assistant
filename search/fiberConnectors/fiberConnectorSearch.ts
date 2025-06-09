@@ -1,5 +1,5 @@
 // src/search/fiberConnectors/fiberConnectorSearch.ts
-// Fiber Connector Search Implementation - Extracted from working code
+// PROPERLY FIXED VERSION - Shows all connectors, uses table structure
 // Date created: December 19, 2024
 
 import { supabase } from '@/lib/supabase'
@@ -33,243 +33,190 @@ export const searchFiberConnectors = async (
   const startTime = performance.now()
   const { searchTerm, aiAnalysis, limit = 100 } = options
 
-  console.log('🔌 ENHANCED FIBER CONNECTORS SEARCH')
+  console.log('🔌 FIBER CONNECTORS TABLE SEARCH')
   console.log('🔍 Original search term:', searchTerm)
   console.log('🤖 AI Analysis:', aiAnalysis?.detectedSpecs)
 
   try {
-    // Enhanced detection using both AI and manual parsing
-    const detectedFiberType = aiAnalysis?.detectedSpecs?.fiberType
-    const detectedConnectorType = aiAnalysis?.detectedSpecs?.connectorType
-    const detectedQuantity = aiAnalysis?.detectedSpecs?.requestedQuantity
-    const detectedBrand = aiAnalysis?.detectedSpecs?.manufacturer
+    const searchTermLower = searchTerm.toLowerCase()
 
-    console.log('🎯 ENHANCED DETECTION RESULTS:', {
-      fiberType: detectedFiberType,
-      connectorType: detectedConnectorType,
-      quantity: detectedQuantity,
-      brand: detectedBrand
+    // Parse search term by common delimiters
+    const searchParts = searchTermLower.split(/[\/\s,]+/).filter(part => part.length > 0)
+    console.log('📝 Parsed search parts:', searchParts)
+
+    // Keyword lists for detection
+    const brandKeywords = ['corning', 'panduit', 'leviton', 'superior', 'essex', 'afl', '3m', 'commscope']
+    const productLineKeywords = [
+      'unicam', 'optitap', 'cleartrak', 'fibertight',
+      'opticam', 'optisplice', 'opticore', 'pretium'
+    ]
+    const connectorTypes = ['lc', 'sc', 'st', 'fc', 'mtp', 'mpo', 'e2000', 'mu']
+    const fiberCategories = ['om1', 'om2', 'om3', 'om4', 'om5', 'os1', 'os2', 'singlemode', 'multimode']
+
+    // Detect what the user is searching for
+    let detectedBrand: string | undefined
+    let detectedProductLine: string | undefined
+    let detectedConnectorType: string | undefined
+    let detectedFiberCategory: string | undefined
+
+    // Check each search part against our keyword lists
+    searchParts.forEach(part => {
+      if (brandKeywords.includes(part)) detectedBrand = part
+      if (productLineKeywords.includes(part)) detectedProductLine = part
+      if (connectorTypes.includes(part)) detectedConnectorType = part
+      if (fiberCategories.includes(part)) detectedFiberCategory = part
     })
 
-    // STRATEGY 1: Brand-focused search (e.g., "Corning", "Corning fiber connectors")
-    const queryLower = searchTerm.toLowerCase()
-    const brandKeywords = ['corning', 'panduit', 'leviton', 'superior', 'essex']
-    const detectedBrandKeyword = brandKeywords.find(brand => queryLower.includes(brand))
+    // Also use AI detection if available
+    detectedBrand = detectedBrand || aiAnalysis?.detectedSpecs?.manufacturer
+    detectedConnectorType = detectedConnectorType || aiAnalysis?.detectedSpecs?.connectorType
+    detectedFiberCategory = detectedFiberCategory || aiAnalysis?.detectedSpecs?.fiberType
 
-    if (detectedBrandKeyword) {
-      console.log(`🏢 STRATEGY 1: Brand-focused search for: "${detectedBrandKeyword}"`)
+    console.log('🎯 DETECTED CRITERIA:', {
+      brand: detectedBrand,
+      productLine: detectedProductLine,
+      connectorType: detectedConnectorType,
+      fiberCategory: detectedFiberCategory
+    })
 
-      let query = supabase
-        .from('fiber_connectors')
-        .select('*')
-        .eq('is_active', true)
-        .ilike('brand', `%${detectedBrandKeyword}%`)
-        .limit(100)
-
-      const result = await query
-      console.log(`📊 Brand search result: ${result.data?.length || 0} products found`)
-
-      if (result.data && result.data.length > 0) {
-        const endTime = performance.now()
-        return {
-          products: formatConnectorResults(result.data, 'brand_match'),
-          searchStrategy: 'brand_match',
-          totalFound: result.data.length,
-          searchTime: Math.round(endTime - startTime)
-        }
-      }
-    }
-
-    // STRATEGY 2: Product line search (e.g., "Unicam")
-    const productLineKeywords = ['unicam', 'optitap', 'cleartrak', 'fibertight']
-    const detectedProductLine = productLineKeywords.find(line => queryLower.includes(line))
-
-    if (detectedProductLine) {
-      console.log(`📋 STRATEGY 2: Product line search for: "${detectedProductLine}"`)
-
-      let query = supabase
-        .from('fiber_connectors')
-        .select('*')
-        .eq('is_active', true)
-        .ilike('product_line', `%${detectedProductLine}%`)
-        .limit(100)
-
-      const result = await query
-      console.log(`📊 Product line search result: ${result.data?.length || 0} products found`)
-
-      if (result.data && result.data.length > 0) {
-        const endTime = performance.now()
-        return {
-          products: formatConnectorResults(result.data, 'product_line_match'),
-          searchStrategy: 'product_line_match',
-          totalFound: result.data.length,
-          searchTime: Math.round(endTime - startTime)
-        }
-      }
-    }
-
-    // STRATEGY 3: Connector type specific search (e.g., "LC", "SC", "ST")
-    const connectorTypes = ['lc', 'sc', 'st', 'fc', 'mtp', 'mpo', 'e2000', 'mu']
-    const detectedConnType = connectorTypes.find(type => queryLower.includes(type))
-
-    if (detectedConnType || detectedConnectorType) {
-      const searchConnType = detectedConnType || detectedConnectorType
-      console.log(`🔌 STRATEGY 3: Connector type search for: "${searchConnType}"`)
-
-      let query = supabase
-        .from('fiber_connectors')
-        .select('*')
-        .eq('is_active', true)
-        .ilike('connector_type', `%${searchConnType}%`)
-        .limit(100)
-
-      // Add fiber type filter if detected
-      if (detectedFiberType) {
-        console.log(`🌈 Adding fiber type filter: ${detectedFiberType}`)
-        query = query.or(`fiber_category.ilike.%${detectedFiberType}%,short_description.ilike.%${detectedFiberType}%`)
-      }
-
-      const result = await query
-      console.log(`📊 Connector type search result: ${result.data?.length || 0} products found`)
-
-      if (result.data && result.data.length > 0) {
-        const endTime = performance.now()
-        return {
-          products: formatConnectorResults(result.data, 'connector_type_match'),
-          searchStrategy: 'connector_type_match',
-          totalFound: result.data.length,
-          searchTime: Math.round(endTime - startTime)
-        }
-      }
-    }
-
-    // STRATEGY 4: Fiber category search (e.g., "OM1", "OM2", "OM3", "OM4", "OS1", "OS2")
-    const fiberCategories = ['om1', 'om2', 'om3', 'om4', 'om5', 'os1', 'os2', 'singlemode', 'multimode']
-    const detectedFiberCat = fiberCategories.find(cat => queryLower.includes(cat))
-
-    if (detectedFiberCat || detectedFiberType) {
-      const searchFiberCat = detectedFiberCat || detectedFiberType?.toLowerCase()
-      console.log(`🌈 STRATEGY 4: Fiber category search for: "${searchFiberCat}"`)
-
-      let query = supabase
-        .from('fiber_connectors')
-        .select('*')
-        .eq('is_active', true)
-        .or(`fiber_category.ilike.%${searchFiberCat}%,short_description.ilike.%${searchFiberCat}%`)
-        .limit(100)
-
-      const result = await query
-      console.log(`📊 Fiber category search result: ${result.data?.length || 0} products found`)
-
-      if (result.data && result.data.length > 0) {
-        const endTime = performance.now()
-        return {
-          products: formatConnectorResults(result.data, 'fiber_category_match'),
-          searchStrategy: 'fiber_category_match',
-          totalFound: result.data.length,
-          searchTime: Math.round(endTime - startTime)
-        }
-      }
-    }
-
-    // STRATEGY 5: Part number prefix search
-    const partNumberPrefixMatch = searchTerm.match(/^([A-Za-z0-9]{3,8})\b/)
-    if (partNumberPrefixMatch && partNumberPrefixMatch[1]) {
-      const prefix = partNumberPrefixMatch[1]
-      console.log(`🔢 STRATEGY 5: Part number prefix search for: "${prefix}"`)
-
-      let query = supabase
-        .from('fiber_connectors')
-        .select('*')
-        .eq('is_active', true)
-        .ilike('part_number', `${prefix}%`)
-        .limit(50)
-
-      const result = await query
-      console.log(`📊 Part number prefix search result: ${result.data?.length || 0} products found`)
-
-      if (result.data && result.data.length > 0) {
-        const endTime = performance.now()
-        return {
-          products: formatConnectorResults(result.data, 'part_prefix_match'),
-          searchStrategy: 'part_prefix_match',
-          totalFound: result.data.length,
-          searchTime: Math.round(endTime - startTime)
-        }
-      }
-    }
-
-    // STRATEGY 6: Comprehensive multi-field search
-    console.log(`🎯 STRATEGY 6: Comprehensive search with multiple criteria`)
+    // ========== MAIN SEARCH STRATEGY ==========
+    // Start with ALL active fiber connectors, then filter based on what was detected
 
     let query = supabase
       .from('fiber_connectors')
       .select('*')
       .eq('is_active', true)
-      .limit(150)
+      .limit(limit)
 
-    // Build focused search conditions
-    const searchConditions: string[] = []
+    // Build conditions array for OR search
+    const orConditions: string[] = []
 
-    // Direct term searches across key fields
-    searchConditions.push(`part_number.ilike.%${searchTerm}%`)
-    searchConditions.push(`short_description.ilike.%${searchTerm}%`)
-    searchConditions.push(`brand.ilike.%${searchTerm}%`)
-    searchConditions.push(`product_line.ilike.%${searchTerm}%`)
-    searchConditions.push(`product_type.ilike.%${searchTerm}%`)
-    searchConditions.push(`technology.ilike.%${searchTerm}%`)
-    searchConditions.push(`connector_type.ilike.%${searchTerm}%`)
-    searchConditions.push(`common_terms.ilike.%${searchTerm}%`)
+    // STRATEGY 1: If NOTHING specific was detected, search generally
+    if (!detectedBrand && !detectedProductLine && !detectedConnectorType && !detectedFiberCategory) {
+      console.log('📊 GENERAL SEARCH: Looking for all fiber connectors or matching description')
 
-    // Apply search conditions
-    if (searchConditions.length > 0) {
-      query = query.or(searchConditions.join(','))
-      console.log(`🚀 Applying ${searchConditions.length} comprehensive search conditions`)
+      // For generic searches like "fiber connectors", "connectors", etc.
+      if (searchTermLower.includes('connector') || searchTermLower.includes('fiber')) {
+        // Return all fiber connectors
+        console.log('✅ Returning ALL fiber connectors')
+      } else {
+        // Otherwise search across all text fields
+        orConditions.push(`part_number.ilike.%${searchTerm}%`)
+        orConditions.push(`short_description.ilike.%${searchTerm}%`)
+        orConditions.push(`brand.ilike.%${searchTerm}%`)
+        orConditions.push(`product_line.ilike.%${searchTerm}%`)
+        orConditions.push(`common_terms.ilike.%${searchTerm}%`)
+      }
     }
 
+    // STRATEGY 2: If specific criteria detected, use structured search
+    else {
+      console.log('🎯 STRUCTURED SEARCH: Using detected criteria')
+
+      // For each detected criterion, add it to the search
+      if (detectedBrand) {
+        orConditions.push(`brand.ilike.%${detectedBrand}%`)
+      }
+
+      if (detectedProductLine) {
+        orConditions.push(`product_line.ilike.%${detectedProductLine}%`)
+      }
+
+      if (detectedConnectorType) {
+        orConditions.push(`connector_type.ilike.%${detectedConnectorType}%`)
+      }
+
+      if (detectedFiberCategory) {
+        orConditions.push(`fiber_category.ilike.%${detectedFiberCategory}%`)
+      }
+
+      // Also include the full search term for part numbers
+      orConditions.push(`part_number.ilike.%${searchTerm}%`)
+    }
+
+    // Apply OR conditions if any exist
+    if (orConditions.length > 0) {
+      query = query.or(orConditions.join(','))
+      console.log(`🔍 Applying ${orConditions.length} search conditions`)
+    }
+
+    // Execute the search
     const result = await query
-    console.log(`📊 Comprehensive search result: ${result.data?.length || 0} products found`)
+    console.log(`📊 Search result: ${result.data?.length || 0} products found`)
 
-    if (!result.data || result.data.length === 0) {
-      console.log('❌ No results found with comprehensive search')
+    // If we have results, check if we need to apply AND logic for multi-criteria searches
+    if (result.data && result.data.length > 0) {
+      let filteredResults: any[] = result.data
 
-      // STRATEGY 7: Fallback broad search
-      console.log('🔍 STRATEGY 7: Fallback broad search')
+      // Only apply AND filtering if user specified multiple specific criteria
+      const criteriaCount = [detectedBrand, detectedProductLine, detectedConnectorType, detectedFiberCategory]
+        .filter(Boolean).length
 
-      const fallbackQuery = supabase
-        .from('fiber_connectors')
-        .select('*')
-        .eq('is_active', true)
-        .or(`short_description.ilike.%connector%,short_description.ilike.%fiber%,category.ilike.%connector%`)
-        .limit(25)
+      if (criteriaCount >= 2) {
+        console.log('🔧 Applying AND logic for multi-criteria search')
 
-      const fallbackResult = await fallbackQuery
-      console.log(`📊 Fallback search result: ${fallbackResult.data?.length || 0} products found`)
-
-      if (fallbackResult.data && fallbackResult.data.length > 0) {
-        const endTime = performance.now()
-        return {
-          products: formatConnectorResults(fallbackResult.data, 'fallback_search'),
-          searchStrategy: 'fallback_search',
-          totalFound: fallbackResult.data.length,
-          searchTime: Math.round(endTime - startTime)
+        // Filter to only products matching ALL specified criteria
+        if (detectedBrand) {
+          filteredResults = filteredResults.filter(item =>
+            item.brand?.toLowerCase().includes(detectedBrand)
+          )
         }
+        if (detectedProductLine) {
+          filteredResults = filteredResults.filter(item =>
+            item.product_line?.toLowerCase().includes(detectedProductLine)
+          )
+        }
+        if (detectedConnectorType) {
+          filteredResults = filteredResults.filter(item =>
+            item.connector_type?.toLowerCase().includes(detectedConnectorType)
+          )
+        }
+        if (detectedFiberCategory) {
+          filteredResults = filteredResults.filter(item => {
+            const fiberCat = item.fiber_category?.toLowerCase() || ''
+            return fiberCat.includes(detectedFiberCategory)
+          })
+        }
+
+        console.log(`📊 After AND filtering: ${filteredResults.length} products match ALL criteria`)
       }
 
       const endTime = performance.now()
       return {
-        products: [],
-        searchStrategy: 'no_results',
-        totalFound: 0,
+        products: formatConnectorResults(filteredResults, 'structured_search'),
+        searchStrategy: criteriaCount >= 2 ? 'multi_criteria_match' : 'structured_search',
+        totalFound: filteredResults.length,
         searchTime: Math.round(endTime - startTime)
       }
     }
 
+    // FALLBACK: If no results, try a broader search
+    console.log('🔍 FALLBACK: Trying broader search')
+
+    const fallbackQuery = supabase
+      .from('fiber_connectors')
+      .select('*')
+      .eq('is_active', true)
+      .limit(50)
+
+    const fallbackResult = await fallbackQuery
+    console.log(`📊 Fallback search result: ${fallbackResult.data?.length || 0} products found`)
+
     const endTime = performance.now()
+
+    if (fallbackResult.data && fallbackResult.data.length > 0) {
+      return {
+        products: formatConnectorResults(fallbackResult.data, 'fallback_search'),
+        searchStrategy: 'fallback_search',
+        totalFound: fallbackResult.data.length,
+        searchTime: Math.round(endTime - startTime)
+      }
+    }
+
     return {
-      products: formatConnectorResults(result.data, 'comprehensive_search'),
-      searchStrategy: 'comprehensive_search',
-      totalFound: result.data.length,
+      products: [],
+      searchStrategy: 'no_results',
+      totalFound: 0,
       searchTime: Math.round(endTime - startTime)
     }
 

@@ -16,7 +16,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { Search, Plus, Minus, X, Send, Zap, Package, AlertCircle, CheckCircle, Clock, Menu, Settings, HelpCircle, Sparkles, Filter, Brain, Shield, Database, Cpu, Activity, Copy } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+
 import { trackResultClick } from '../services/analytics'
 import { searchProducts } from '../services/searchService'
 import { logger, LogCategory } from '../utils/logger'
@@ -294,6 +294,16 @@ const PlecticAI: React.FC = () => {
       brand: product.brand
     }, LogCategory.UI)
 
+    // Determine quantity to add - use AI detected quantity if available
+    let quantityToAdd = 1
+    if (aiAnalysis?.detectedSpecs?.requestedQuantity) {
+      quantityToAdd = aiAnalysis.detectedSpecs.requestedQuantity
+      logger.info('Using AI detected quantity', { 
+        quantity: quantityToAdd,
+        partNumber: product.partNumber 
+      }, LogCategory.UI)
+    }
+
     // Your existing add to list logic
     const existingIndex = productList.findIndex(
       item => item.partNumber === product.partNumber
@@ -304,7 +314,7 @@ const PlecticAI: React.FC = () => {
         const newList = [...prev]
         newList[existingIndex] = {
           ...newList[existingIndex],
-          quantity: newList[existingIndex].quantity + 1
+          quantity: newList[existingIndex].quantity + quantityToAdd
         }
         return newList
       })
@@ -313,7 +323,7 @@ const PlecticAI: React.FC = () => {
         ...prev,
         {
           ...product,
-          quantity: 1,
+          quantity: quantityToAdd,
           addedAt: new Date()
         }
       ])
@@ -612,7 +622,7 @@ const PlecticAI: React.FC = () => {
           </div>
           {hasListItems && (
             <div className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">
-              {totalItems} items in list
+              {totalItems.toLocaleString()} items in list
             </div>
           )}
         </div>
@@ -1345,7 +1355,7 @@ const PlecticAI: React.FC = () => {
           <div className="w-2/5 border-l border-gray-200 bg-white flex flex-col">
             <div className="bg-gray-50 border-b border-gray-200 p-4">
               <h2 className="text-lg font-semibold text-gray-900">Product List</h2>
-              <p className="text-sm text-gray-600">{productList.length} items • {totalItems} total qty</p>
+              <p className="text-sm text-gray-600">{productList.length} items • {totalItems.toLocaleString()} total qty</p>
             </div>
 
             <div className="flex-1 overflow-y-auto">
@@ -1382,7 +1392,7 @@ const PlecticAI: React.FC = () => {
                           >
                             <Minus size={12} />
                           </button>
-                          <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
+                          <span className="w-16 text-center text-sm font-medium">{item.quantity.toLocaleString()}</span>
                           <button
                             onClick={() => updateQuantity(item.id, 1)}
                             className="w-6 h-6 bg-gray-200 hover:bg-gray-300 rounded flex items-center justify-center transition-colors"

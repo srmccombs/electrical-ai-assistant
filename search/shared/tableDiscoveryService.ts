@@ -155,6 +155,8 @@ const generateTablePrefix = (tableName: string): string => {
  * Fallback table list if dynamic discovery fails
  * Now with proper types!
  */
+// In tableDiscoveryService.ts, update the getFallbackTableList function:
+
 const getFallbackTableList = (): TableDiscoveryResult => {
   console.log('⚠️ Using fallback table list')
 
@@ -164,6 +166,7 @@ const getFallbackTableList = (): TableDiscoveryResult => {
     { name: 'adapter_panels' as TableName, prefix: 'pan', hasPartNumber: true, hasIsActive: true, columns: [] },
     { name: 'rack_mount_fiber_enclosures' as TableName, prefix: 'enc', hasPartNumber: true, hasIsActive: true, columns: [] },
     { name: 'fiber_optic_cable' as TableName, prefix: 'fib', hasPartNumber: true, hasIsActive: true, columns: [] },
+    { name: 'jack_modules' as TableName, prefix: 'jac', hasPartNumber: true, hasIsActive: true, columns: [] },  // ADD THIS LINE
   ]
 
   return {

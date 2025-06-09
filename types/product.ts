@@ -61,6 +61,11 @@ export interface Product {
   environment?: string
   spliceTrayModel?: string
   upcCode?: string
+
+  // Jack Module specific fields
+  installationToolsRequired?: string
+  compatibleFaceplates?: string
+  upcNumber?: string  // Note: You have upcCode above, but jack modules use upcNumber
 }
 
 export interface ListItem extends Product {
@@ -77,17 +82,4 @@ export interface StockInfo {
   message: string
 }
 
-export type ProductTable =
-  | 'category_cables'
-  | 'fiber_connectors'
-  | 'adapter_panels'
-  | 'fiber_cables'
-  | 'fiber_enclosures'
-  | 'rack_mount_fiber_enclosures'
-  | 'wall_mount_fiber_enclosures'
-  | 'multi_table'
-
-export interface TableInfo {
-  name: string
-  prefix: string
-}
+// Note: ProductTable is also defined in search.ts, so we'll remove it from here to avoid conflicts

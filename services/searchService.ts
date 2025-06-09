@@ -63,6 +63,10 @@ import {
   searchWallMountFiberEnclosures as searchWallMountFiberEnclosuresImpl
 } from '@/search/fiberenclosure/wall_mount_fiber_enclosure_Search'
 
+import {
+  searchJackModules as searchJackModulesImpl,
+} from '@/search/jackModules/jackModuleSearch'
+
 // Import shared industry knowledge
 import {
   validateElectricalQuery,
@@ -500,6 +504,7 @@ const generateSmartFilters = (products: Product[]): SmartFilters => {
   // Check what types of products we have
   const hasAdapterPanels = products.some(p => p.tableName === 'adapter_panels')
   const hasFiberEnclosures = products.some(p => p.tableName === 'rack_mount_fiber_enclosures')
+  const hasJackModules = products.some(p => p.tableName === 'jack_modules')
 
   return {
     brands: brands.slice(0, 8),
@@ -532,6 +537,13 @@ const generateSmartFilters = (products: Product[]): SmartFilters => {
       environments: environments.slice(0, 3),
       mountTypes: mountTypes.slice(0, 3)
     })
+  ,
+    // Add jack module filters only if we have jack modules
+    ...(hasJackModules && {
+      installationTools: filterString(products.map(p => p.installationToolsRequired)).slice(0, 4),
+      compatibleFaceplates: filterString(products.map(p => p.compatibleFaceplates)).slice(0, 6)
+    })
+
   }
 }
 
@@ -581,6 +593,27 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
     logger.info(`STRAND PATTERN DETECTED: ${strandMatch[1]} strand - routing to fiber_cables`, {}, LogCategory.SEARCH)
     return 'fiber_cables'
   }
+
+// PRIORITY 3: Check for jack module keywords
+  const jackTerms = [
+    'jack', 'jack module', 'keystone', 'keystone jack',
+    'rj45 jack', 'ethernet jack', 'network jack', 'data jack',
+    'mini-com', 'minicom', 'cj688', 'cj5e88', 'cj6x88'
+  ]
+
+  // Check if it's a jack module search
+  const hasJackTerms = jackTerms.some(term => query.includes(term))
+  const hasJackPattern = /\b(cat|category)\s*\d+[ae]?\s*(utp|stp|shielded)?\s*jack/i.test(query)
+
+  if (hasJackTerms || hasJackPattern) {
+    // Make sure it's not a patch panel or faceplate
+    if (!query.includes('panel') && !query.includes('faceplate') && !query.includes('plate')) {
+      logger.info('Keyword routing to jack_modules', {}, LogCategory.SEARCH)
+      return 'jack_modules'
+    }
+  }
+
+
 
   // Check for brand-only searches
   const brandKeywords = ['corning', 'panduit', 'leviton', 'superior', 'essex', 'berktek', 'prysmian', 'dmsi', 'siecor']
@@ -880,13 +913,29 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
         endTimer()
         logger.searchComplete(query, partResults.length, searchTimeMs)
 
+        // Create a minimal AI analysis with detected quantity for part number searches
+        const partNumberAiAnalysis: AISearchAnalysis = {
+          searchStrategy: 'part_number',
+          productType: 'MIXED',
+          confidence: 1.0,
+          detectedSpecs: {
+            requestedQuantity: partNumberDetection.quantity
+          },
+          searchTerms: partNumberDetection.partNumbers,
+          reasoning: 'Direct part number match',
+          originalQuery: query,
+          timestamp: new Date().toISOString(),
+          aiModel: 'none'
+        }
+
         return {
           products: partResults.slice(0, limit),
           searchTime: searchTimeMs,
           searchType: 'part_number_match',
           redirectMessage: processedQuery.redirectMessage || undefined,
           totalFound: partResults.length,
-          smartFilters
+          smartFilters,
+          aiAnalysis: partNumberAiAnalysis
         }
       }
     }
@@ -973,6 +1022,19 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
         products = fiberResult.products
         searchStrategy = `fiber_cables_${fiberResult.searchStrategy}`
         break
+
+  case 'jack_modules':
+        logger.info('Executing jack modules search', {}, LogCategory.SEARCH)
+        const jackResult = await searchJackModulesImpl({
+          searchTerm: processedQuery.processedTerm,
+          aiAnalysis,
+          limit
+        })
+        products = jackResult.products
+        searchStrategy = `jack_modules_${jackResult.searchStrategy}`
+        break
+
+
 
       case 'fiber_enclosures':
         logger.info('Executing fiber enclosures search', {}, LogCategory.SEARCH)

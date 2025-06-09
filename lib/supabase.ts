@@ -5,9 +5,15 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '../src/types/supabase'
 
-// Get environment variables with fallbacks
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dnmugslmheoxbsubhzci.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRubXVnc2xtaGVveGJzdWJoemNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc3NjQzNDMsImV4cCI6MjA2MzM0MDM0M30.7ccrbEVka0K8HsRzwUSkpH0j30m1z8aEhDRXrtx_mPo'
+// Get environment variables - no fallbacks for security
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    'Missing required environment variables. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your .env.local file'
+  )
+}
 
 // Create typed Supabase client
 export const supabase = createClient<Database>(

@@ -24,22 +24,50 @@ export async function POST(request) {
       console.error('❌ OpenAI not initialized - check your API key')
       return Response.json({
         success: false,
-        error: 'OpenAI not configured',
+        error: 'Service temporarily unavailable',
         fallback: {
           searchStrategy: "standard",
           productType: "MIXED",
           confidence: 0.3,
           detectedSpecs: {},
           searchTerms: [""],
-          reasoning: "OpenAI API not available - using fallback",
+          reasoning: "Service temporarily unavailable",
           suggestedFilters: [],
           alternativeQueries: []
         }
-      }, { status: 200 })
+      }, { status: 503 })
     }
 
-    const { query, userContext } = await request.json()
-    console.log('🔍 Analyzing query:', query)
+    // Validate request body
+    let query, userContext
+    try {
+      const body = await request.json()
+      query = body.query
+      userContext = body.userContext
+    } catch (e) {
+      return Response.json({
+        success: false,
+        error: 'Invalid request format'
+      }, { status: 400 })
+    }
+
+    // Validate query parameter
+    if (!query || typeof query !== 'string') {
+      return Response.json({
+        success: false,
+        error: 'Query parameter is required and must be a string'
+      }, { status: 400 })
+    }
+
+    // Limit query length to prevent abuse
+    if (query.length > 500) {
+      return Response.json({
+        success: false,
+        error: 'Query too long. Maximum 500 characters allowed.'
+      }, { status: 400 })
+    }
+
+    console.log('🔍 Analyzing query:', query.substring(0, 100) + (query.length > 100 ? '...' : ''))
 
     const aiPrompt = `You are an expert electrical distributor AI assistant with 35+ years of experience.
 Your job is to analyze customer requests and provide the MOST SPECIFIC search strategy.
@@ -48,36 +76,51 @@ CUSTOMER QUERY: "${query}"
 
 CRITICAL ROUTING RULES (follow these exactly):
 
-1. If query mentions "connectors" + fiber type (LC, SC, ST, FC, MTP, MPO, OM1-5, OS1-2):
+1. If query mentions "jack", "keystone", "RJ45 jack", "ethernet jack", "mini-com", or jack part numbers (CJ688, CJ5e88, CJ6X88):
+   → searchStrategy: "jack_modules", productType: "JACK_MODULE"
+
+2. If query mentions "connectors" + fiber type (LC, SC, ST, FC, MTP, MPO, OM1-5, OS1-2):
    → searchStrategy: "connectors", productType: "CONNECTOR"
 
-2. If query mentions cable length (ft, feet, meters) + fiber type:
+3. If query mentions cable length (ft, feet, meters) + fiber type:
    → searchStrategy: "cables", productType: "CABLE"
 
-3. If query mentions "panel" or "patch panel":
+4. If query mentions "panel" or "patch panel" (but NOT jack):
    → searchStrategy: "panels", productType: "PANEL"
 
-4. If query mentions category cable (Cat5, Cat6, ethernet):
+5. If query mentions category cable (Cat5, Cat6, ethernet) WITHOUT "jack":
    → searchStrategy: "cables", productType: "CABLE"
 
-5. ONLY use "mixed" for very general queries with no specific product type
+6. If query mentions "enclosure", "housing", "rack mount", or rack units (RU, 1U, 2U, 4U):
+   → searchStrategy: "enclosures", productType: "ENCLOSURE"
 
-EXAMPLES:
+7. ONLY use "mixed" for very general queries with no specific product type
+
+JACK MODULE EXAMPLES (VERY IMPORTANT):
+- "cat6a jack" → productType: "JACK_MODULE", searchStrategy: "jack_modules"
+- "panduit keystone" → productType: "JACK_MODULE", searchStrategy: "jack_modules"
+- "CJ688TGBU" → productType: "JACK_MODULE", searchStrategy: "jack_modules"
+- "mini-com cat6 utp" → productType: "JACK_MODULE", searchStrategy: "jack_modules"
+- "100 cat5e jacks" → productType: "JACK_MODULE", searchStrategy: "jack_modules", requestedQuantity: 100
+- "shielded cat6a jack blue" → productType: "JACK_MODULE", searchStrategy: "jack_modules"
+
+OTHER EXAMPLES:
 - "lc connectors om4" → productType: "CONNECTOR", searchStrategy: "connectors" 
 - "sc adapters multimode" → productType: "CONNECTOR", searchStrategy: "connectors"
 - "1000 ft om3 cable" → productType: "CABLE", searchStrategy: "cables"
 - "cat6 plenum blue" → productType: "CABLE", searchStrategy: "cables"
 - "fiber patch panel" → productType: "PANEL", searchStrategy: "panels"
+- "4RU enclosure" → productType: "ENCLOSURE", searchStrategy: "enclosures"
 - "fiber optic" (general) → productType: "MIXED", searchStrategy: "mixed"
 
 QUANTITY DETECTION (VERY IMPORTANT):
-- Extract any quantities: "10000 ft", "24 connectors", "12 LC", "48 adapters"
+- Extract any quantities: "10000 ft", "24 connectors", "12 LC", "48 adapters", "100 jacks"
 - Convert to numbers: "10,000 ft" → 10000, "24 LC" → 24
 
 RESPOND WITH ONLY JSON:
 {
-  "searchStrategy": "connectors|cables|panels|mixed",
-  "productType": "CONNECTOR|CABLE|PANEL|MIXED",
+  "searchStrategy": "jack_modules|connectors|cables|panels|enclosures|mixed",
+  "productType": "JACK_MODULE|CONNECTOR|CABLE|PANEL|ENCLOSURE|MIXED",
   "confidence": 0.0-1.0,
   "detectedSpecs": {
     "fiberType": "OM3|OM4|OS1|OS2|singlemode|multimode or null",
@@ -88,7 +131,9 @@ RESPOND WITH ONLY JSON:
     "requestedQuantity": number or null,
     "shielding": "UTP|STP|etc or null",
     "manufacturer": "CORNING|PANDUIT|etc or null",
-    "color": "BLUE|WHITE|GRAY|RED|GREEN|YELLOW|ORANGE|BLACK or null"
+    "color": "BLUE|WHITE|GRAY|RED|GREEN|YELLOW|ORANGE|BLACK or null",
+    "productLine": "Mini-Com|etc or null",
+    "rackUnits": number or null
   },
   "searchTerms": ["primary_term"],
   "reasoning": "Brief explanation",
@@ -103,7 +148,7 @@ RESPOND WITH ONLY JSON:
       messages: [
         {
           role: "system",
-          content: "You are an expert electrical distributor. Respond ONLY with valid JSON. Be SPECIFIC - if query mentions 'connectors', use productType: 'CONNECTOR' and searchStrategy: 'connectors'."
+          content: "You are an expert electrical distributor. Respond ONLY with valid JSON. Be SPECIFIC - if query mentions 'jack' or 'keystone', use productType: 'JACK_MODULE' and searchStrategy: 'jack_modules'."
         },
         { role: "user", content: aiPrompt }
       ],
@@ -118,8 +163,20 @@ RESPOND WITH ONLY JSON:
     try {
       searchAnalysis = JSON.parse(aiResponse)
 
-      // FORCE FIX: If query contains "connectors" but AI said "MIXED", fix it
+      // FORCE FIX: If query contains jack-related terms but AI said "MIXED", fix it
       const queryLower = query.toLowerCase()
+      if ((queryLower.includes('jack') || queryLower.includes('keystone') ||
+           queryLower.includes('rj45') || queryLower.includes('mini-com') ||
+           queryLower.includes('cj688') || queryLower.includes('cj5e88')) &&
+          searchAnalysis.productType === 'MIXED') {
+        console.log('🔧 FORCE FIX: Correcting MIXED to JACK_MODULE')
+        searchAnalysis.productType = 'JACK_MODULE'
+        searchAnalysis.searchStrategy = 'jack_modules'
+        searchAnalysis.confidence = 0.95
+        searchAnalysis.reasoning = 'Force corrected to jack modules based on keyword detection'
+      }
+
+      // FORCE FIX: If query contains "connectors" but AI said "MIXED", fix it
       if (queryLower.includes('connector') && searchAnalysis.productType === 'MIXED') {
         console.log('🔧 FORCE FIX: Correcting MIXED to CONNECTOR')
         searchAnalysis.productType = 'CONNECTOR'
@@ -165,28 +222,19 @@ RESPOND WITH ONLY JSON:
   } catch (error) {
     console.error('❌ AI Search API Error:', error)
 
-    let errorType = 'unknown'
-    if (error.message?.includes('API key')) {
-      errorType = 'api_key'
-    } else if (error.message?.includes('quota')) {
-      errorType = 'quota_exceeded'
-    } else if (error.message?.includes('network') || error.code === 'ENOTFOUND') {
-      errorType = 'network'
-    }
-
+    // Don't expose internal error details to client
     return Response.json({
       success: false,
-      error: `AI analysis failed (${errorType})`,
+      error: 'AI analysis temporarily unavailable',
       fallback: {
         searchStrategy: "standard",
         productType: "MIXED",
         confidence: 0.3,
         detectedSpecs: {},
         searchTerms: [query || ""],
-        reasoning: `Fallback due to ${errorType} - using basic search`,
+        reasoning: "Using fallback search",
         suggestedFilters: [],
-        alternativeQueries: [],
-        errorType
+        alternativeQueries: []
       }
     }, { status: 200 })
   }

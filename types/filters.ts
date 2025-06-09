@@ -3,23 +3,23 @@
 
 export interface SmartFilters {
   brands: string[]
-  packagingTypes: string[]
-  jacketRatings: string[]
-  fiberTypes: string[]
-  connectorTypes: string[]
-  categoryRatings: string[]
-  colors: string[]
-  shieldingTypes: string[]
-  productLines: string[]
-  pairCounts: string[]
-  conductorGauges: string[]
-  applications: string[]
-  productType: string
-  productTypes: string[]
-  technologies: string[]
-  polishTypes: string[]
-  housingColors: string[]
-  bootColors: string[]
+  packagingTypes?: string[]
+  jacketRatings?: string[]
+  fiberTypes?: string[]
+  connectorTypes?: string[]
+  categoryRatings?: string[]
+  colors?: string[]
+  shieldingTypes?: string[]
+  productLines?: string[]
+  pairCounts?: string[]
+  conductorGauges?: string[]
+  applications?: string[]
+  productType?: string
+  productTypes?: string[]
+  technologies?: string[]
+  polishTypes?: string[]
+  housingColors?: string[]
+  bootColors?: string[]
   // Adapter Panel filters
   panelTypes?: string[]
   terminationTypes?: string[]
@@ -28,6 +28,9 @@ export interface SmartFilters {
   rackUnits?: string[]
   environments?: string[]
   mountTypes?: string[]
+  // Jack Module filters
+  installationTools?: string[]
+  compatibleFaceplates?: string[]
 }
 
 export type FilterType = keyof SmartFilters

@@ -224,6 +224,54 @@ export const PRODUCT_TYPES: Record<string, ProductTypeConfig> = {
         filterType: 'color'
       }
     }
+  },
+
+  jack_modules: {
+    tableName: 'jack_modules',
+    displayName: 'Jack Module',
+    searchModule: () => import('@/search/jackModules/jackModuleSearch'),
+    aiKeywords: [
+      'jack', 'jack module', 'keystone', 'keystone jack',
+      'rj45', 'rj45 jack', 'ethernet jack', 'network jack',
+      'data jack', 'wiring jack', 'connector module',
+      'cat6a jack', 'cat6 jack', 'cat5e jack',
+      'utp jack', 'stp jack', 'shielded jack',
+      'mini-com', 'minicom', 'cj688', 'cj5e88', 'cj6x88'
+    ],
+    requiredColumns: ['part_number', 'brand', 'short_description'],
+    tablePrefix: 'jack',
+    category: 'Jack Module',
+    specialFields: {
+      categoryRating: {
+        dbColumn: 'category_rating',
+        filterLabel: 'Categories'
+      },
+      shielding: {
+        dbColumn: 'shielding_type',
+        filterLabel: 'Shielding'
+      },
+      color: {
+        dbColumn: 'jacket_color',  // This is the jack color
+        filterLabel: 'Jack Colors',
+        filterType: 'color'
+      },
+      productLine: {
+        dbColumn: 'product_line',
+        filterLabel: 'Product Lines'
+      },
+      pairCount: {
+        dbColumn: 'pair_count',
+        filterLabel: 'Pair Counts'
+      },
+      installationTools: {
+        dbColumn: 'installation_tools_required',
+        filterLabel: 'Installation Tools'
+      },
+      compatibleFaceplates: {
+        dbColumn: 'compatible_faceplates',
+        filterLabel: 'Compatible Faceplates'
+      }
+    }
   }
 }
 
