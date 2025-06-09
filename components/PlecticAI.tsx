@@ -366,6 +366,15 @@ const PlecticAI: React.FC = () => {
     })
   }
 
+  const copyToClipboard = (text: string): void => {
+    navigator.clipboard.writeText(text).then(() => {
+      // Optional: You could show a toast notification here
+      logger.info('Copied to clipboard', { text }, LogCategory.UI)
+    }).catch(err => {
+      logger.error('Failed to copy', err, LogCategory.UI)
+    })
+  }
+
   const scrollToBottom = (): void => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
@@ -1275,6 +1284,47 @@ const PlecticAI: React.FC = () => {
                                 </div>
                               </div>
 
+                              {/* Search for More Products - Moved here and made prominent */}
+                              {messages.length > 0 && (
+                                <div className="bg-blue-50 border border-blue-200 p-4 mx-4 my-3 rounded-lg">
+                                  <h3 className="text-sm font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                                    <Search size={16} />
+                                    Search for More Products
+                                  </h3>
+                                  <div className="flex gap-2">
+                                    <div className="flex-1 relative">
+                                      <textarea
+                                        ref={inputRef}
+                                        value={input}
+                                        onChange={(e) => setInput(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault()
+                                            handleSubmit()
+                                          }
+                                        }}
+                                        placeholder="e.g., '50 ft of OM4 fiber cable' or 'panduit cat6 jacks'..."
+                                        className="w-full px-4 py-2 border border-blue-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white"
+                                        rows={1}
+                                      />
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={handleSubmit}
+                                      disabled={!input.trim() || isLoading}
+                                      className={`px-6 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2 shadow-md ${
+                                        input.trim() && !isLoading
+                                          ? 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg transform hover:scale-105' 
+                                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                      }`}
+                                    >
+                                      <Brain size={16} />
+                                      Search
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
                                {/* FIBER TYPE REFERENCE - Shows when conditions are met */}
                                 {(() => {
                                   // Check if we're showing fiber optic cables
@@ -1305,44 +1355,13 @@ const PlecticAI: React.FC = () => {
             </div>
           </div>
 
-          {/* Input Area */}
+          {/* Clear Conversation Button */}
           {messages.length > 0 && (
             <div className="border-t border-gray-200 bg-white px-4 py-3">
-              <div className="flex gap-3">
-                <div className="flex-1 relative">
-                  <textarea
-                    ref={inputRef}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault()
-                        handleSubmit()
-                      }
-                    }}
-                    placeholder="Search for more products..."
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                    rows={1}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={!input.trim() || isLoading}
-                  className={`px-6 py-2 rounded-lg font-medium text-sm transition-colors flex items-center gap-2 ${
-                    input.trim() && !isLoading
-                      ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  <Brain size={16} />
-                  Search
-                </button>
-              </div>
               <button
                 type="button"
                 onClick={clearConversation}
-                className="mt-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+                className="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors"
               >
                 Clear Conversation
               </button>
@@ -1364,6 +1383,7 @@ const PlecticAI: React.FC = () => {
                   <tr className="text-xs text-gray-700">
                     <th className="px-3 py-2 text-left">Part Number</th>
                     <th className="px-3 py-2 text-center">Qty</th>
+                    <th className="px-3 py-2 text-left">Description</th>
                     <th className="px-3 py-2 text-right">Price</th>
                     <th className="px-3 py-2 text-right">Total</th>
                     <th className="px-3 py-2"></th>
@@ -1373,15 +1393,24 @@ const PlecticAI: React.FC = () => {
                   {productList.map((item, index) => (
                     <tr key={item.id} className={`border-b border-gray-100 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                       <td className="px-3 py-2">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{item.partNumber}</p>
-                          <p className="text-xs text-gray-500">{item.brand}</p>
-                          {item.panelType && (
-                            <p className="text-xs text-blue-600">📦 {item.panelType}</p>
-                          )}
-                          {item.rackUnits && (
-                            <p className="text-xs text-slate-600">🏗️ {item.rackUnits}RU</p>
-                          )}
+                        <div className="flex items-start gap-1">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">{item.partNumber}</p>
+                            <p className="text-xs text-gray-500">{item.brand}</p>
+                            {item.panelType && (
+                              <p className="text-xs text-blue-600">📦 {item.panelType}</p>
+                            )}
+                            {item.rackUnits && (
+                              <p className="text-xs text-slate-600">🏗️ {item.rackUnits}RU</p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => copyToClipboard(item.partNumber)}
+                            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-all"
+                            title="Copy part number"
+                          >
+                            <Copy size={14} />
+                          </button>
                         </div>
                       </td>
                       <td className="px-3 py-2">
@@ -1400,6 +1429,9 @@ const PlecticAI: React.FC = () => {
                             <Plus size={12} />
                           </button>
                         </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <p className="text-xs text-gray-700 line-clamp-2">{item.description}</p>
                       </td>
                       <td className="px-3 py-2 text-right text-sm">${item.price?.toFixed(2)}</td>
                       <td className="px-3 py-2 text-right text-sm font-medium">
