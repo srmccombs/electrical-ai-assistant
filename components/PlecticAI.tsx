@@ -199,10 +199,7 @@ const PlecticAI: React.FC = () => {
     "4RU fiber enclosure"
   ])
   const [currentSearchTerm, setCurrentSearchTerm] = useState<string>('')
-  const [activeFilters, setActiveFilters] = useState<ActiveFilters>({})
-  const [currentProducts, setCurrentProducts] = useState<Product[]>([])
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
-  const [smartFilters, setSmartFilters] = useState<SmartFilters | null>(null)
+  const [messageFilters, setMessageFilters] = useState<Record<string, { activeFilters: ActiveFilters, filteredProducts: Product[] }>>({})
 
   // DEBUG MODE STATES - NEW
   const [debugMode, setDebugMode] = useState<boolean>(false)
@@ -212,9 +209,6 @@ const PlecticAI: React.FC = () => {
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   // Computed values
-  const safeCurrentProducts = currentProducts || []
-  const safeFilteredProducts = filteredProducts || []
-  const productsToDisplay = Object.keys(activeFilters).length > 0 ? safeFilteredProducts : safeCurrentProducts
   const totalItems = productList.reduce((sum, item) => sum + item.quantity, 0)
   const hasListItems = productList.length > 0
 
@@ -227,13 +221,22 @@ const PlecticAI: React.FC = () => {
       'yellow': isActive ? 'bg-yellow-600 text-black' : 'bg-yellow-400 text-black hover:bg-yellow-500',
       'orange': isActive ? 'bg-orange-600 text-white' : 'bg-orange-500 text-white hover:bg-orange-600',
       'white': isActive ? 'bg-gray-200 text-black border-2 border-gray-400' : 'bg-white text-black border border-gray-300 hover:bg-gray-100',
+      'office white': isActive ? 'bg-gray-200 text-black border-2 border-gray-400' : 'bg-white text-black border border-gray-300 hover:bg-gray-100',
       'black': isActive ? 'bg-black text-white' : 'bg-gray-800 text-white hover:bg-black',
       'gray': isActive ? 'bg-gray-600 text-white' : 'bg-gray-500 text-white hover:bg-gray-600',
       'grey': isActive ? 'bg-gray-600 text-white' : 'bg-gray-500 text-white hover:bg-gray-600',
       'purple': isActive ? 'bg-purple-600 text-white' : 'bg-purple-500 text-white hover:bg-purple-600',
       'pink': isActive ? 'bg-pink-600 text-white' : 'bg-pink-500 text-white hover:bg-pink-600',
       'violet': isActive ? 'bg-violet-600 text-white' : 'bg-violet-500 text-white hover:bg-violet-600',
-      'brown': isActive ? 'bg-amber-700 text-white' : 'bg-amber-600 text-white hover:bg-amber-700'
+      'brown': isActive ? 'bg-amber-700 text-white' : 'bg-amber-600 text-white hover:bg-amber-700',
+      'silver': isActive ? 'bg-gray-400 text-black' : 'bg-gray-300 text-black hover:bg-gray-400',
+      'gold': isActive ? 'bg-yellow-700 text-white' : 'bg-yellow-600 text-white hover:bg-yellow-700',
+      'ivory': isActive ? 'bg-yellow-100 text-gray-800 border border-yellow-300' : 'bg-yellow-50 text-gray-800 border border-yellow-200 hover:bg-yellow-100',
+      'electric ivory': isActive ? 'bg-yellow-100 text-gray-800 border border-yellow-300' : 'bg-yellow-50 text-gray-800 border border-yellow-200 hover:bg-yellow-100',
+      'light almond': isActive ? 'bg-orange-200 text-gray-800' : 'bg-orange-100 text-gray-800 hover:bg-orange-200',
+      'international white': isActive ? 'bg-gray-100 text-gray-800 border border-gray-300' : 'bg-gray-50 text-gray-800 border border-gray-200 hover:bg-gray-100',
+      'international gray': isActive ? 'bg-gray-600 text-white' : 'bg-gray-500 text-white hover:bg-gray-600',
+      'arctic white': isActive ? 'bg-gray-100 text-gray-800 border border-gray-300' : 'bg-gray-50 text-gray-800 border border-gray-200 hover:bg-gray-100'
     }
 
     return colorStyles[color.toLowerCase()] || (isActive ? 'bg-gray-600 text-white' : 'bg-gray-500 text-white hover:bg-gray-600')
@@ -382,26 +385,158 @@ const PlecticAI: React.FC = () => {
   const clearConversation = (): void => {
     setMessages([])
     setAiAnalysis(null)
-    setSmartFilters(null)
-    setActiveFilters({})
-    setCurrentProducts([])
-    setFilteredProducts([])
+    setMessageFilters({})
     logger.info('Conversation cleared', {}, LogCategory.UI)
   }
 
+  // Helper function to get available filter values based on current filtered products
+  const getDynamicFilterOptions = (products: Product[], filterType: string): string[] => {
+    const filterString = (items: (string | undefined)[]): string[] =>
+      Array.from(new Set(items.filter((item): item is string => Boolean(item))))
+
+    switch (filterType) {
+      case 'brand':
+        return filterString(products.map(p => p.brand))
+      case 'productLine':
+        return filterString(products.map(p => p.productLine))
+      case 'categoryRating':
+        return filterString(products.map(p => p.categoryRating))
+      case 'color':
+        return filterString(products.map(p => p.jacketColor || p.color))
+      case 'shielding':
+        return filterString(products.map(p => p.shielding))
+      case 'jacketRating':
+        return filterString(products.map(p => p.jacketRating))
+      case 'panelType':
+        return filterString(products.map(p => p.panelType))
+      case 'rackUnits':
+        return filterString(products.map(p => p.rackUnits?.toString()))
+      case 'environment':
+        return filterString(products.map(p => p.environment))
+      case 'connectorType':
+        return filterString(products.map(p => p.connectorType))
+      case 'fiberType':
+        const allFiberTypes = new Set<string>()
+        products.forEach(product => {
+          if (product.fiberType) {
+            const fiberTypeStr = Array.isArray(product.fiberType)
+              ? product.fiberType.join(', ')
+              : product.fiberType.toString()
+            const types = fiberTypeStr.replace(/[\[\]]/g, '').split(',').map(type => type.trim()).filter(type => type && type !== '-')
+            types.forEach(type => allFiberTypes.add(type))
+          }
+        })
+        return Array.from(allFiberTypes).sort()
+      case 'packagingType':
+        return filterString(products.map(p => p.packagingType))
+      case 'productType':
+        return filterString(products.map(p => p.productType))
+      case 'technology':
+        return filterString(products.map(p => p.technology))
+      case 'polish':
+        return filterString(products.map(p => p.polish))
+      case 'housingColor':
+        return filterString(products.map(p => p.housingColor))
+      case 'bootColor':
+        return filterString(products.map(p => p.bootColor))
+      case 'pairCount':
+        return filterString(products.map(p => p.pairCount))
+      case 'conductorGauge':
+        return filterString(products.map(p => p.conductorAwg?.toString()))
+      case 'application':
+        return filterString(products.map(p => p.application))
+      case 'terminationType':
+        return filterString(products.map(p => p.terminationType))
+      case 'adapterColor':
+        return filterString(products.map(p => p.adapterColor))
+      case 'mountType':
+        return filterString(products.map(p => p.mountType))
+      default:
+        return []
+    }
+  }
+
+  // Helper component for dynamic filter sections
+  const DynamicFilterSection = ({ 
+    messageId, 
+    filterType, 
+    label, 
+    activeColor, 
+    inactiveColor,
+    icon = '',
+    customButtonStyle
+  }: { 
+    messageId: string, 
+    filterType: string, 
+    label: string, 
+    activeColor: string, 
+    inactiveColor: string,
+    icon?: string,
+    customButtonStyle?: (value: string, isActive: boolean) => string
+  }) => {
+    const currentProducts = messageFilters[messageId]?.filteredProducts || messages.find(m => m.id === messageId)?.products || []
+    const availableOptions = getDynamicFilterOptions(currentProducts, filterType)
+    const isActive = (value: string) => messageFilters[messageId]?.activeFilters[filterType] === value
+    
+    if (availableOptions.length === 0) return null
+    
+    return (
+      <div className="mb-3">
+        <span className="text-xs font-medium text-gray-600 block mb-1">{label}:</span>
+        <div className="flex flex-wrap gap-1">
+          {availableOptions.map(option => (
+            <button
+              key={option}
+              onClick={() => {
+                const message = messages.find(m => m.id === messageId)
+                if (message && message.products) {
+                  applySmartFilter(messageId, filterType, option, message.products)
+                }
+              }}
+              className={customButtonStyle 
+                ? customButtonStyle(option, isActive(option))
+                : `px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    isActive(option)
+                      ? activeColor
+                      : inactiveColor
+                  }`
+              }
+            >
+              {icon} {option}
+            </button>
+          ))}
+          {messageFilters[messageId]?.activeFilters[filterType] && (
+            <button
+              onClick={() => {
+                const message = messages.find(m => m.id === messageId)
+                if (message && message.products) {
+                  clearFilterType(messageId, filterType, message.products)
+                }
+              }}
+              className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
+            >
+              All {label}
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   // ⚠️ DO NOT SIMPLIFY - This comprehensive filter function handles all product types
-  const applySmartFilter = (filterType: string, value: string): void => {
-    const newFilters = { ...activeFilters }
+  const applySmartFilter = (messageId: string, filterType: string, value: string, products: Product[]): void => {
+    const currentMsgFilters = messageFilters[messageId] || { activeFilters: {}, filteredProducts: products }
+    const newFilters = { ...currentMsgFilters.activeFilters }
+    
     if (newFilters[filterType] === value) {
       delete newFilters[filterType]
     } else {
       newFilters[filterType] = value
     }
-    setActiveFilters(newFilters)
 
-    logger.debug('Filter applied', { filterType, value }, LogCategory.UI)
+    logger.debug('Filter applied', { filterType, value, messageId }, LogCategory.UI)
 
-    let filtered = safeCurrentProducts
+    let filtered = products
     Object.entries(newFilters).forEach(([type, filterValue]) => {
       filtered = filtered.filter(product => {
         switch (type) {
@@ -435,28 +570,37 @@ const PlecticAI: React.FC = () => {
             const jacketColor = product.jacketColor || product.color || ''
             const desc = product.description?.toLowerCase() || ''
             return desc.includes(filterValue.toLowerCase()) || jacketColor.toLowerCase().includes(filterValue.toLowerCase())
+          case 'terminationType': return product.terminationType === filterValue
+          case 'adapterColor': return product.adapterColor === filterValue
+          case 'mountType': return product.mountType === filterValue
           default: return true
         }
       })
     })
-    setFilteredProducts(filtered)
+    
+    setMessageFilters(prev => ({
+      ...prev,
+      [messageId]: { activeFilters: newFilters, filteredProducts: filtered }
+    }))
   }
 
   // ⚠️ DO NOT REMOVE - Clears all active filters
-  const clearAllFilters = (): void => {
-    setActiveFilters({})
-    setFilteredProducts(safeCurrentProducts)
-    logger.debug('All filters cleared', {}, LogCategory.UI)
+  const clearAllFilters = (messageId: string, products: Product[]): void => {
+    setMessageFilters(prev => ({
+      ...prev,
+      [messageId]: { activeFilters: {}, filteredProducts: products }
+    }))
+    logger.debug('All filters cleared', { messageId }, LogCategory.UI)
   }
 
   // ⚠️ DO NOT REMOVE - Clears a specific filter type
-  const clearFilterType = (filterType: string): void => {
-    const newFilters = { ...activeFilters }
+  const clearFilterType = (messageId: string, filterType: string, products: Product[]): void => {
+    const currentMsgFilters = messageFilters[messageId] || { activeFilters: {}, filteredProducts: products }
+    const newFilters = { ...currentMsgFilters.activeFilters }
     delete newFilters[filterType]
-    setActiveFilters(newFilters)
 
     // Re-apply remaining filters
-    let filtered = safeCurrentProducts
+    let filtered = products
     Object.entries(newFilters).forEach(([type, filterValue]) => {
       filtered = filtered.filter(product => {
         // Same filter logic as applySmartFilter
@@ -490,11 +634,18 @@ const PlecticAI: React.FC = () => {
             const jacketColor = product.jacketColor || product.color || ''
             const desc = product.description?.toLowerCase() || ''
             return desc.includes(filterValue.toLowerCase()) || jacketColor.toLowerCase().includes(filterValue.toLowerCase())
+          case 'terminationType': return product.terminationType === filterValue
+          case 'adapterColor': return product.adapterColor === filterValue
+          case 'mountType': return product.mountType === filterValue
           default: return true
         }
       })
     })
-    setFilteredProducts(filtered)
+    
+    setMessageFilters(prev => ({
+      ...prev,
+      [messageId]: { activeFilters: newFilters, filteredProducts: filtered }
+    }))
   }
 
   const handleSubmit = async (): Promise<void> => {
@@ -520,7 +671,7 @@ const PlecticAI: React.FC = () => {
 
       const searchResult = await searchProducts({
         query: originalInput,
-        limit: 50,
+        limit: 500, // Increased to show more products - users can filter
         includeAI: true
       })
 
@@ -551,13 +702,6 @@ const PlecticAI: React.FC = () => {
 
       setLastSearchTime(searchTime)
       setAiAnalysis(searchAiAnalysis || null)
-
-      if (products.length > 0 && resultFilters) {
-        setSmartFilters(resultFilters)
-        setCurrentProducts(products || [])
-        setFilteredProducts(products || [])
-        setActiveFilters({})
-      }
 
       let assistantContent = `🤖 Found ${products.length} products in ${searchTime}ms using enhanced electrical industry search`
       if (redirectMessage) {
@@ -793,17 +937,17 @@ const PlecticAI: React.FC = () => {
                           <div className="text-sm text-gray-700 mb-3 whitespace-pre-line">{message.content}</div>
 
                           {/* ⚠️ DO NOT SIMPLIFY - This is the comprehensive Smart Filters UI */}
-                          {smartFilters && message.products && message.products.length > 0 && (
+                          {message.smartFilters && message.products && message.products.length > 0 && (
                             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                               <div className="flex items-center gap-2 mb-3">
                                 <Filter size={16} className="text-blue-600" />
                                 <span className="text-sm font-medium text-blue-700">Smart Filters</span>
                                 <span className="text-xs text-blue-600">
-                                  ({productsToDisplay.length} of {message.products.length} products)
+                                  ({(messageFilters[message.id]?.filteredProducts || message.products).length} of {message.products.length} products)
                                 </span>
-                                {Object.keys(activeFilters).length > 0 && (
+                                {Object.keys(messageFilters[message.id]?.activeFilters || {}).length > 0 && (
                                   <button
-                                    onClick={clearAllFilters}
+                                    onClick={() => clearAllFilters(message.id, message.products)}
                                     className="ml-auto text-xs text-red-600 hover:text-red-700 font-medium"
                                   >
                                     Clear All Filters
@@ -811,339 +955,318 @@ const PlecticAI: React.FC = () => {
                                 )}
                               </div>
 
-                              {/* Brand Filters */}
-                              {smartFilters.brands && smartFilters.brands.length > 0 && (
-                                <div className="mb-3">
-                                  <span className="text-xs font-medium text-gray-600 block mb-1">Brands:</span>
-                                  <div className="flex flex-wrap gap-1">
-                                    {smartFilters.brands.map(brand => (
-                                      <button
-                                        key={brand}
-                                        onClick={() => applySmartFilter('brand', brand)}
-                                        className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                          activeFilters.brand === brand
-                                            ? 'bg-blue-600 text-white'
-                                            : 'bg-white border border-blue-300 text-blue-700 hover:bg-blue-100'
-                                        }`}
-                                      >
-                                        {brand}
-                                      </button>
-                                    ))}
-                                    {activeFilters.brand && (
-                                      <button
-                                        onClick={() => clearFilterType('brand')}
-                                        className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
-                                      >
-                                        All Brands
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Product Line Filters */}
-                              {smartFilters.productLines && smartFilters.productLines.length > 0 && (
-                                <div className="mb-3">
-                                  <span className="text-xs font-medium text-gray-600 block mb-1">Product Lines:</span>
-                                  <div className="flex flex-wrap gap-1">
-                                    {smartFilters.productLines.map(productLine => (
-                                      <button
-                                        key={productLine}
-                                        onClick={() => applySmartFilter('productLine', productLine)}
-                                        className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                          activeFilters.productLine === productLine
-                                            ? 'bg-indigo-600 text-white'
-                                            : 'bg-white border border-indigo-300 text-indigo-700 hover:bg-indigo-100'
-                                        }`}
-                                      >
-                                        📋 {productLine}
-                                      </button>
-                                    ))}
-                                    {activeFilters.productLine && (
-                                      <button
-                                        onClick={() => clearFilterType('productLine')}
-                                        className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
-                                      >
-                                        All Product Lines
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Category Rating Filters */}
-                              {smartFilters.categoryRatings && smartFilters.categoryRatings.length > 0 && (
-                                <div className="mb-3">
-                                  <span className="text-xs font-medium text-gray-600 block mb-1">Categories:</span>
-                                  <div className="flex flex-wrap gap-1">
-                                    {smartFilters.categoryRatings.map(rating => (
-                                      <button
-                                        key={rating}
-                                        onClick={() => applySmartFilter('categoryRating', rating)}
-                                        className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                          activeFilters.categoryRating === rating
-                                            ? 'bg-green-600 text-white'
-                                            : 'bg-white border border-green-300 text-green-700 hover:bg-green-100'
-                                        }`}
-                                      >
-                                        📊 {rating}
-                                      </button>
-                                    ))}
-                                    {activeFilters.categoryRating && (
-                                      <button
-                                        onClick={() => clearFilterType('categoryRating')}
-                                        className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
-                                      >
-                                        All Categories
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Jacket Rating Filters */}
-                              {smartFilters.jacketRatings && smartFilters.jacketRatings.length > 0 && (
-                                <div className="mb-3">
-                                  <span className="text-xs font-medium text-gray-600 block mb-1">Jacket Ratings:</span>
-                                  <div className="flex flex-wrap gap-1">
-                                    {smartFilters.jacketRatings.map(rating => (
-                                      <button
-                                        key={rating}
-                                        onClick={() => applySmartFilter('jacketRating', rating)}
-                                        className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                          activeFilters.jacketRating === rating
-                                            ? 'bg-orange-600 text-white'
-                                            : 'bg-white border border-orange-300 text-orange-700 hover:bg-orange-100'
-                                        }`}
-                                      >
-                                        🧥 {rating}
-                                      </button>
-                                    ))}
-                                    {activeFilters.jacketRating && (
-                                      <button
-                                        onClick={() => clearFilterType('jacketRating')}
-                                        className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
-                                      >
-                                        All Jacket Ratings
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* ⚠️ DO NOT REMOVE - Color filters with actual cable colors as backgrounds */}
-                              {smartFilters.colors && smartFilters.colors.length > 0 && (
-                                <div className="mb-3">
-                                  <span className="text-xs font-medium text-gray-600 block mb-1">Colors:</span>
-                                  <div className="flex flex-wrap gap-1">
-                                    {smartFilters.colors.map(color => (
-                                      <button
-                                        key={color}
-                                        onClick={() => applySmartFilter('color', color)}
-                                        className={`px-2 py-1 rounded text-xs font-bold transition-colors ${
-                                          getColorButtonStyle(color, activeFilters.color === color)
-                                        }`}
-                                      >
-                                        {color}
-                                      </button>
-                                    ))}
-                                    {activeFilters.color && (
-                                      <button
-                                        onClick={() => clearFilterType('color')}
-                                        className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
-                                      >
-                                        All Colors
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Shielding Type Filters */}
-                              {smartFilters.shieldingTypes && smartFilters.shieldingTypes.length > 0 && (
-                                <div className="mb-3">
-                                  <span className="text-xs font-medium text-gray-600 block mb-1">Shielding:</span>
-                                  <div className="flex flex-wrap gap-1">
-                                    {smartFilters.shieldingTypes.map(shielding => (
-                                      <button
-                                        key={shielding}
-                                        onClick={() => applySmartFilter('shielding', shielding)}
-                                        className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                          activeFilters.shielding === shielding
-                                            ? 'bg-purple-600 text-white'
-                                            : 'bg-white border border-purple-300 text-purple-700 hover:bg-purple-100'
-                                        }`}
-                                      >
-                                        🛡️ {shielding}
-                                      </button>
-                                    ))}
-                                    {activeFilters.shielding && (
-                                      <button
-                                        onClick={() => clearFilterType('shielding')}
-                                        className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
-                                      >
-                                        All Shielding Types
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Panel Type Filters (for fiber enclosures) */}
-                              {smartFilters.panelTypes && smartFilters.panelTypes.length > 0 && (
-                                <div className="mb-3">
-                                  <span className="text-xs font-medium text-gray-600 block mb-1">Panel Types:</span>
-                                  <div className="flex flex-wrap gap-1">
-                                    {smartFilters.panelTypes.map(panelType => (
-                                      <button
-                                        key={panelType}
-                                        onClick={() => applySmartFilter('panelType', panelType)}
-                                        className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                          activeFilters.panelType === panelType
-                                            ? 'bg-cyan-600 text-white'
-                                            : 'bg-white border border-cyan-300 text-cyan-700 hover:bg-cyan-100'
-                                        }`}
-                                      >
-                                        📦 {panelType}
-                                      </button>
-                                    ))}
-                                    {activeFilters.panelType && (
-                                      <button
-                                        onClick={() => clearFilterType('panelType')}
-                                        className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
-                                      >
-                                        All Panel Types
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Rack Units Filters (for fiber enclosures) */}
-                              {smartFilters.rackUnits && smartFilters.rackUnits.length > 0 && (
-                                <div className="mb-3">
-                                  <span className="text-xs font-medium text-gray-600 block mb-1">Rack Units:</span>
-                                  <div className="flex flex-wrap gap-1">
-                                    {smartFilters.rackUnits.map(ru => (
-                                      <button
-                                        key={ru}
-                                        onClick={() => applySmartFilter('rackUnits', ru)}
-                                        className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                          activeFilters.rackUnits === ru
-                                            ? 'bg-slate-600 text-white'
-                                            : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
-                                        }`}
-                                      >
-                                        🏗️ {ru}RU
-                                      </button>
-                                    ))}
-                                    {activeFilters.rackUnits && (
-                                      <button
-                                        onClick={() => clearFilterType('rackUnits')}
-                                        className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
-                                      >
-                                        All Rack Units
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Environment Filters (for fiber enclosures) */}
-                              {smartFilters.environments && smartFilters.environments.length > 0 && (
-                                <div className="mb-3">
-                                  <span className="text-xs font-medium text-gray-600 block mb-1">Environment:</span>
-                                  <div className="flex flex-wrap gap-1">
-                                    {smartFilters.environments.map(env => (
-                                      <button
-                                        key={env}
-                                        onClick={() => applySmartFilter('environment', env)}
-                                        className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                          activeFilters.environment === env
-                                            ? 'bg-emerald-600 text-white'
-                                            : 'bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-100'
-                                        }`}
-                                      >
-                                        {env === 'Indoor' ? '🏢' : '🌧️'} {env}
-                                      </button>
-                                    ))}
-                                    {activeFilters.environment && (
-                                      <button
-                                        onClick={() => clearFilterType('environment')}
-                                        className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
-                                      >
-                                        All Environments
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Connector Type Filters */}
-                              {smartFilters.connectorTypes && smartFilters.connectorTypes.length > 0 && (
-                                <div className="mb-3">
-                                  <span className="text-xs font-medium text-gray-600 block mb-1">Connector Types:</span>
-                                  <div className="flex flex-wrap gap-1">
-                                    {smartFilters.connectorTypes.map(connType => (
-                                      <button
-                                        key={connType}
-                                        onClick={() => applySmartFilter('connectorType', connType)}
-                                        className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                          activeFilters.connectorType === connType
-                                            ? 'bg-blue-600 text-white'
-                                            : 'bg-white border border-blue-300 text-blue-700 hover:bg-blue-100'
-                                        }`}
-                                      >
-                                        🔌 {connType}
-                                      </button>
-                                    ))}
-                                    {activeFilters.connectorType && (
-                                      <button
-                                        onClick={() => clearFilterType('connectorType')}
-                                        className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
-                                      >
-                                        All Connector Types
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Fiber Type Filters */}
-                              {smartFilters.fiberTypes && smartFilters.fiberTypes.length > 0 && (
-                                <div className="mb-3">
-                                  <span className="text-xs font-medium text-gray-600 block mb-1">Fiber Types:</span>
-                                  <div className="flex flex-wrap gap-1">
-                                    {(() => {
-                                      // Extract individual fiber types from all products
-                                      const uniqueFiberTypes = extractUniqueFiberTypes(message.products || [])
-                                      return uniqueFiberTypes.map(fiberType => (
+                              {/* Brand Filters - Dynamic based on filtered products */}
+                              {(() => {
+                                const currentProducts = messageFilters[message.id]?.filteredProducts || message.products || []
+                                const availableBrands = getDynamicFilterOptions(currentProducts, 'brand')
+                                return availableBrands.length > 0 && (
+                                  <div className="mb-3">
+                                    <span className="text-xs font-medium text-gray-600 block mb-1">Brands:</span>
+                                    <div className="flex flex-wrap gap-1">
+                                      {availableBrands.map(brand => (
                                         <button
-                                          key={fiberType}
-                                          onClick={() => applySmartFilter('fiberType', fiberType)}
+                                          key={brand}
+                                          onClick={() => applySmartFilter(message.id, 'brand', brand, message.products)}
                                           className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                            activeFilters.fiberType === fiberType
-                                              ? 'bg-purple-600 text-white'
-                                              : 'bg-white border border-purple-300 text-purple-700 hover:bg-purple-100'
+                                            messageFilters[message.id]?.activeFilters.brand === brand
+                                              ? 'bg-blue-600 text-white'
+                                              : 'bg-white border border-blue-300 text-blue-700 hover:bg-blue-100'
                                           }`}
                                         >
-                                          {fiberType}
+                                          {brand}
                                         </button>
-                                      ))
-                                    })()}
-                                    {activeFilters.fiberType && (
-                                      <button
-                                        onClick={() => clearFilterType('fiberType')}
-                                        className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
-                                      >
-                                        All Fiber Types
-                                      </button>
-                                    )}
+                                      ))}
+                                      {messageFilters[message.id]?.activeFilters.brand && (
+                                        <button
+                                          onClick={() => clearFilterType(message.id, 'brand', message.products)}
+                                          className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
+                                        >
+                                          All Brands
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
+                                )
+                              })()}
+
+                              {/* Product Line Filters - Dynamic based on filtered products */}
+                              {(() => {
+                                const currentProducts = messageFilters[message.id]?.filteredProducts || message.products || []
+                                const availableProductLines = getDynamicFilterOptions(currentProducts, 'productLine')
+                                return availableProductLines.length > 0 && (
+                                  <div className="mb-3">
+                                    <span className="text-xs font-medium text-gray-600 block mb-1">Product Lines:</span>
+                                    <div className="flex flex-wrap gap-1">
+                                      {availableProductLines.map(productLine => (
+                                        <button
+                                          key={productLine}
+                                          onClick={() => applySmartFilter(message.id, 'productLine', productLine, message.products)}
+                                          className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                                            messageFilters[message.id]?.activeFilters.productLine === productLine
+                                              ? 'bg-indigo-600 text-white'
+                                              : 'bg-white border border-indigo-300 text-indigo-700 hover:bg-indigo-100'
+                                          }`}
+                                        >
+                                          📋 {productLine}
+                                        </button>
+                                      ))}
+                                      {messageFilters[message.id]?.activeFilters.productLine && (
+                                        <button
+                                          onClick={() => clearFilterType(message.id, 'productLine', message.products)}
+                                          className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
+                                        >
+                                          All Product Lines
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                )
+                              })()}
+
+                              {/* Category Rating Filters - Dynamic */}
+                              <DynamicFilterSection
+                                messageId={message.id}
+                                filterType="categoryRating"
+                                label="Categories"
+                                activeColor="bg-green-600 text-white"
+                                inactiveColor="bg-white border border-green-300 text-green-700 hover:bg-green-100"
+                                icon="📊"
+                              />
+
+                              {/* Jacket Rating Filters - Dynamic */}
+                              <DynamicFilterSection
+                                messageId={message.id}
+                                filterType="jacketRating"
+                                label="Jacket Ratings"
+                                activeColor="bg-orange-600 text-white"
+                                inactiveColor="bg-white border border-orange-300 text-orange-700 hover:bg-orange-100"
+                                icon="🧥"
+                              />
+
+                              {/* ⚠️ DO NOT REMOVE - Color filters with actual cable colors as backgrounds */}
+                              <DynamicFilterSection
+                                messageId={message.id}
+                                filterType="color"
+                                label="Colors"
+                                activeColor=""
+                                inactiveColor=""
+                                customButtonStyle={getColorButtonStyle}
+                              />
+
+                              {/* Shielding Type Filters - Dynamic */}
+                              <DynamicFilterSection
+                                messageId={message.id}
+                                filterType="shielding"
+                                label="Shielding Type"
+                                activeColor="bg-purple-600 text-white"
+                                inactiveColor="bg-white border border-purple-300 text-purple-700 hover:bg-purple-100"
+                                icon="🛡️"
+                              />
+
+                              {/* Panel Type Filters - Dynamic */}
+                              <DynamicFilterSection
+                                messageId={message.id}
+                                filterType="panelType"
+                                label="Panel Types"
+                                activeColor="bg-cyan-600 text-white"
+                                inactiveColor="bg-white border border-cyan-300 text-cyan-700 hover:bg-cyan-100"
+                                icon="📦"
+                              />
+
+                              {/* Rack Units Filters - Dynamic */}
+                              <DynamicFilterSection
+                                messageId={message.id}
+                                filterType="rackUnits"
+                                label="Rack Units"
+                                activeColor="bg-slate-600 text-white"
+                                inactiveColor="bg-white border border-slate-300 text-slate-700 hover:bg-slate-100"
+                                icon="🏗️"
+                              />
+
+                              {/* Environment Filters - Dynamic with custom icons */}
+                              {(() => {
+                                const currentProducts = messageFilters[message.id]?.filteredProducts || message.products || []
+                                const availableEnvironments = getDynamicFilterOptions(currentProducts, 'environment')
+                                const isActive = (value: string) => messageFilters[message.id]?.activeFilters.environment === value
+                                
+                                if (availableEnvironments.length === 0) return null
+                                
+                                return (
+                                  <div className="mb-3">
+                                    <span className="text-xs font-medium text-gray-600 block mb-1">Environment:</span>
+                                    <div className="flex flex-wrap gap-1">
+                                      {availableEnvironments.map(env => (
+                                        <button
+                                          key={env}
+                                          onClick={() => applySmartFilter(message.id, 'environment', env, message.products)}
+                                          className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                                            isActive(env)
+                                              ? 'bg-emerald-600 text-white'
+                                              : 'bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-100'
+                                          }`}
+                                        >
+                                          {env === 'Indoor' ? '🏢' : '🌧️'} {env}
+                                        </button>
+                                      ))}
+                                      {messageFilters[message.id]?.activeFilters.environment && (
+                                        <button
+                                          onClick={() => clearFilterType(message.id, 'environment', message.products)}
+                                          className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
+                                        >
+                                          All Environment
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                )
+                              })()}
+
+                              {/* Connector Type Filters - Dynamic */}
+                              <DynamicFilterSection
+                                messageId={message.id}
+                                filterType="connectorType"
+                                label="Connector Types"
+                                activeColor="bg-blue-600 text-white"
+                                inactiveColor="bg-white border border-blue-300 text-blue-700 hover:bg-blue-100"
+                                icon="🔌"
+                              />
+
+                              {/* Fiber Type Filters - Dynamic */}
+                              <DynamicFilterSection
+                                messageId={message.id}
+                                filterType="fiberType"
+                                label="Fiber Types"
+                                activeColor="bg-purple-600 text-white"
+                                inactiveColor="bg-white border border-purple-300 text-purple-700 hover:bg-purple-100"
+                              />
+
+                              {/* Additional dynamic filters for other product-specific properties */}
+                              
+                              {/* Packaging Type Filters - Dynamic */}
+                              {message.smartFilters.packagingTypes && (
+                                <DynamicFilterSection
+                                  messageId={message.id}
+                                  filterType="packagingType"
+                                  label="Packaging Types"
+                                  activeColor="bg-indigo-600 text-white"
+                                  inactiveColor="bg-white border border-indigo-300 text-indigo-700 hover:bg-indigo-100"
+                                  icon="📦"
+                                />
                               )}
 
-                              {/* Additional filters for other properties if needed */}
+                              {/* Product Type Filters - Dynamic */}
+                              {message.smartFilters.productTypes && (
+                                <DynamicFilterSection
+                                  messageId={message.id}
+                                  filterType="productType"
+                                  label="Product Types"
+                                  activeColor="bg-violet-600 text-white"
+                                  inactiveColor="bg-white border border-violet-300 text-violet-700 hover:bg-violet-100"
+                                />
+                              )}
+
+                              {/* Technology Filters - Dynamic */}
+                              {message.smartFilters.technologies && (
+                                <DynamicFilterSection
+                                  messageId={message.id}
+                                  filterType="technology"
+                                  label="Technology"
+                                  activeColor="bg-teal-600 text-white"
+                                  inactiveColor="bg-white border border-teal-300 text-teal-700 hover:bg-teal-100"
+                                />
+                              )}
+
+                              {/* Polish Type Filters - Dynamic */}
+                              {message.smartFilters.polishTypes && (
+                                <DynamicFilterSection
+                                  messageId={message.id}
+                                  filterType="polish"
+                                  label="Polish Types"
+                                  activeColor="bg-amber-600 text-white"
+                                  inactiveColor="bg-white border border-amber-300 text-amber-700 hover:bg-amber-100"
+                                />
+                              )}
+
+                              {/* Housing Color Filters - Dynamic */}
+                              {message.smartFilters.housingColors && (
+                                <DynamicFilterSection
+                                  messageId={message.id}
+                                  filterType="housingColor"
+                                  label="Housing Colors"
+                                  activeColor=""
+                                  inactiveColor=""
+                                  customButtonStyle={getColorButtonStyle}
+                                />
+                              )}
+
+                              {/* Boot Color Filters - Dynamic */}
+                              {message.smartFilters.bootColors && (
+                                <DynamicFilterSection
+                                  messageId={message.id}
+                                  filterType="bootColor"  
+                                  label="Boot Colors"
+                                  activeColor=""
+                                  inactiveColor=""
+                                  customButtonStyle={getColorButtonStyle}
+                                />
+                              )}
+
+                              {/* Pair Count Filters - Dynamic */}
+                              {message.smartFilters.pairCounts && (
+                                <DynamicFilterSection
+                                  messageId={message.id}
+                                  filterType="pairCount"
+                                  label="Pair Counts"
+                                  activeColor="bg-stone-600 text-white"
+                                  inactiveColor="bg-white border border-stone-300 text-stone-700 hover:bg-stone-100"
+                                />
+                              )}
+
+                              {/* Conductor Gauge Filters - Dynamic */}
+                              {message.smartFilters.conductorGauges && (
+                                <DynamicFilterSection
+                                  messageId={message.id}
+                                  filterType="conductorGauge"
+                                  label="Conductor AWG"
+                                  activeColor="bg-zinc-600 text-white"
+                                  inactiveColor="bg-white border border-zinc-300 text-zinc-700 hover:bg-zinc-100"
+                                />
+                              )}
+
+                              {/* Application Filters - Dynamic */}
+                              {message.smartFilters.applications && (
+                                <DynamicFilterSection
+                                  messageId={message.id}
+                                  filterType="application"
+                                  label="Applications"
+                                  activeColor="bg-sky-600 text-white"
+                                  inactiveColor="bg-white border border-sky-300 text-sky-700 hover:bg-sky-100"
+                                />
+                              )}
+
+                              {/* Termination Type Filters - Dynamic */}
+                              {message.smartFilters.terminationTypes && (
+                                <DynamicFilterSection
+                                  messageId={message.id}
+                                  filterType="terminationType"
+                                  label="Termination Types"
+                                  activeColor="bg-rose-600 text-white"
+                                  inactiveColor="bg-white border border-rose-300 text-rose-700 hover:bg-rose-100"
+                                />
+                              )}
+
+                              {/* Adapter Color Filters - Dynamic */}
+                              {message.smartFilters.adapterColors && (
+                                <DynamicFilterSection
+                                  messageId={message.id}
+                                  filterType="adapterColor"
+                                  label="Adapter Colors"
+                                  activeColor=""
+                                  inactiveColor=""
+                                  customButtonStyle={getColorButtonStyle}
+                                />
+                              )}
+
                             </div>
                           )}
 
@@ -1159,7 +1282,7 @@ const PlecticAI: React.FC = () => {
                                       <th className="px-2 py-2 text-left font-medium w-24">Part #</th>
                                       <th className="px-2 py-2 text-left font-medium w-20">Brand</th>
                                       <th className="px-3 py-2 text-left font-medium min-w-96">Description</th>
-                                      {productsToDisplay.some(p => p.tableName === 'rack_mount_fiber_enclosures') ? (
+                                      {(messageFilters[message.id]?.filteredProducts || message.products).some(p => p.tableName === 'rack_mount_fiber_enclosures') ? (
                                         <>
                                           <th className="px-2 py-2 text-center font-medium w-20">Panel Type</th>
                                           <th className="px-2 py-2 text-center font-medium w-20">Rack Units</th>
@@ -1178,7 +1301,7 @@ const PlecticAI: React.FC = () => {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {(productsToDisplay.length > 0 ? productsToDisplay : message.products).map((product, index) => (
+                                    {(messageFilters[message.id]?.filteredProducts || message.products).map((product, index) => (
                                       <tr
                                         key={`${product.partNumber}_${index}`}
                                         className="hover:bg-gray-50 cursor-pointer"

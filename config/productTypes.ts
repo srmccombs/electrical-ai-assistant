@@ -251,7 +251,7 @@ export const PRODUCT_TYPES: Record<string, ProductTypeConfig> = {
         filterLabel: 'Shielding'
       },
       color: {
-        dbColumn: 'jacket_color',  // This is the jack color
+        dbColumn: 'color',  // This is the jack color
         filterLabel: 'Jack Colors',
         filterType: 'color'
       },

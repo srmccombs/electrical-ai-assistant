@@ -507,20 +507,20 @@ const generateSmartFilters = (products: Product[]): SmartFilters => {
   const hasJackModules = products.some(p => p.tableName === 'jack_modules')
 
   return {
-    brands: brands.slice(0, 8),
+    brands: brands, // Show all brands
     packagingTypes: packagingTypes.slice(0, 6),
     jacketRatings: jacketRatings.slice(0, 4),
     fiberTypes: fiberTypes.slice(0, 6),
     connectorTypes: connectorTypes.slice(0, 6),
-    categoryRatings: categoryRatings.slice(0, 4),
-    colors: colors.slice(0, 6),
-    shieldingTypes: shieldingTypes.slice(0, 4),
-    productLines: productLines.slice(0, 6),
+    categoryRatings: categoryRatings, // Show all categories
+    colors: colors, // Show all colors
+    shieldingTypes: shieldingTypes, // Show all shielding types
+    productLines: productLines, // Show all product lines
     pairCounts: pairCounts.slice(0, 4),
     conductorGauges: conductorGauges.slice(0, 4),
     applications: applications.slice(0, 4),
     productType: products[0]?.category || 'MIXED',
-    productTypes: productTypes.slice(0, 6),
+    productTypes: productTypes, // Show all product types
     technologies: technologies.slice(0, 6),
     polishTypes: polishTypes.slice(0, 4),
     housingColors: housingColors.slice(0, 6),
@@ -598,14 +598,20 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
   const jackTerms = [
     'jack', 'jack module', 'keystone', 'keystone jack',
     'rj45 jack', 'ethernet jack', 'network jack', 'data jack',
-    'mini-com', 'minicom', 'cj688', 'cj5e88', 'cj6x88'
+    'mini-com', 'minicom', 'cj688', 'cj5e88', 'cj6x88',
+    'blank module', 'blank insert', 'blank jack',
+    'f-type', 'f type', 'coax jack', 'coaxial jack', 'catv jack',
+    'hdmi jack', 'hdmi module', 'hdmi coupler', 'hdmi coupling'
   ]
 
   // Check if it's a jack module search
   const hasJackTerms = jackTerms.some(term => query.includes(term))
   const hasJackPattern = /\b(cat|category)\s*\d+[ae]?\s*(utp|stp|shielded)?\s*jack/i.test(query)
+  const hasBlankPattern = /\bblank\s*(module|insert|jack)/i.test(query)
+  const hasCoaxPattern = /\b(f-?type|coax|catv)\s*(jack|module|coupler)/i.test(query)
+  const hasHDMIPattern = /\bhdmi\s*(jack|module|coupler|coupling)/i.test(query)
 
-  if (hasJackTerms || hasJackPattern) {
+  if (hasJackTerms || hasJackPattern || hasBlankPattern || hasCoaxPattern || hasHDMIPattern) {
     // Make sure it's not a patch panel or faceplate
     if (!query.includes('panel') && !query.includes('faceplate') && !query.includes('plate')) {
       logger.info('Keyword routing to jack_modules', {}, LogCategory.SEARCH)
@@ -616,7 +622,7 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
 
 
   // Check for brand-only searches
-  const brandKeywords = ['corning', 'panduit', 'leviton', 'superior', 'essex', 'berktek', 'prysmian', 'dmsi', 'siecor']
+  const brandKeywords = ['corning', 'panduit', 'leviton', 'superior', 'essex', 'berktek', 'prysmian', 'dmsi', 'siecor', 'hubbell']
   const queryWords = query.trim().split(/\s+/)
 
   if (queryWords.length === 1 && brandKeywords.includes(queryWords[0])) {
@@ -857,7 +863,7 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
     }
   }
 
-  const { query, limit = 50, includeAI = true } = options
+  const { query, limit = 200, includeAI = true } = options
 
   try {
     logger.info('SEARCH SERVICE - Enhanced search started', { query }, LogCategory.SEARCH)

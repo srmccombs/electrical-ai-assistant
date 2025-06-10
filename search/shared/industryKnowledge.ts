@@ -308,7 +308,8 @@ export const detectBrand = (searchTerm: string): string | undefined => {
     { keywords: ['dmsi'], brand: 'DMSI' },
     { keywords: ['legrand'], brand: 'Legrand' },
     { keywords: ['superior essex', 'superior', 'essex'], brand: 'Superior Essex' },
-    { keywords: ['prysmian'], brand: 'Prysmian' }
+    { keywords: ['prysmian'], brand: 'Prysmian' },
+    { keywords: ['hubbell', 'hubell'], brand: 'Hubbell' } // Added Hubbell for jack modules
   ]
 
   for (const mapping of brandMappings) {
