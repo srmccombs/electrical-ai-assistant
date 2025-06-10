@@ -257,8 +257,32 @@ export const detectShielding = (searchTerm: string): string | null => {
   return null
 }
 
-// Enhanced quantity detection
+// Enhanced quantity detection with box support
 export const detectQuantity = (searchTerm: string): number | null => {
+  const query = searchTerm.toLowerCase()
+  
+  // First check for box patterns (1 box = 1000ft for category cables)
+  const boxPatterns = [
+    /(\d+)\s*box(?:es)?\b/i,
+    /(\d+)\s*bx\b/i,
+  ]
+  
+  for (const pattern of boxPatterns) {
+    const match = query.match(pattern)
+    if (match && match[1]) {
+      const boxes = parseInt(match[1], 10)
+      const feet = boxes * 1000 // 1 box = 1000ft
+      console.log(`📦 DETECTED BOXES: ${boxes} boxes = ${feet} ft`)
+      return feet
+    }
+  }
+  
+  // Check for "box of" pattern (e.g., "box of Category 5e" = 1000ft)
+  if (query.includes('box of') && !query.match(/\d+\s*(?:ft|feet|foot|')/)) {
+    console.log(`📦 DETECTED: Single box = 1000 ft`)
+    return 1000
+  }
+  
   // Look for patterns like "1000ft", "500 ft", "1000 feet", etc.
   const quantityMatches = [
     /(\d+)\s*ft\b/i,
