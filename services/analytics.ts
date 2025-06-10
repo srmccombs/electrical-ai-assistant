@@ -19,7 +19,7 @@ export interface SearchAnalytics {
   searchTerm: string
   resultsCount: number
   searchTimeMs: number
-  searchType: 'direct' | 'ai' | 'part_number' | 'brand'
+  searchType: 'direct' | 'ai' | 'part_number' | 'brand' | 'cross_reference'
   aiProductType?: string
 }
 
