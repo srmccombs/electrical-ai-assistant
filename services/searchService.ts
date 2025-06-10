@@ -73,7 +73,14 @@ import {
   applyBusinessRules,
   detectPartNumbers,
   normalizePartNumber,
+  detectCrossReferenceRequest,
 } from '@/search/shared/industryKnowledge'
+
+// Import cross-reference service
+import { findCrossReferences } from '@/services/crossReferenceService'
+
+// Import datasheet service
+import { getDatasheetUrls } from '@/services/datasheetService'
 
 // ===================================================================
 // AI INTEGRATION - ENHANCED WITH RACK UNIT DETECTION
@@ -283,6 +290,21 @@ const searchByPartNumber = async (partNumbers: string[], quantity?: number): Pro
 
       return 0
     })
+
+    // Enrich with datasheet URLs
+    if (products.length > 0) {
+      try {
+        const datasheetUrls = await getDatasheetUrls(products)
+        products.forEach(product => {
+          const url = datasheetUrls.get(product.partNumber)
+          if (url) {
+            product.datasheetUrl = url
+          }
+        })
+      } catch (error) {
+        logger.error('Failed to fetch datasheet URLs for part number search', error, LogCategory.SEARCH)
+      }
+    }
 
     logger.info(`Part number search completed`, { resultCount: products.length }, LogCategory.SEARCH)
     return products
@@ -894,6 +916,72 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
     const processedQuery = applyBusinessRules(query)
     logger.debug('Query after business rules', { original: query, processed: processedQuery.processedTerm }, LogCategory.BUSINESS)
 
+    // Step 2.5: Check for cross-reference request
+    const crossRefRequest = detectCrossReferenceRequest(processedQuery.processedTerm)
+    
+    if (crossRefRequest.isCrossRequest) {
+      logger.info('Cross-reference request detected', crossRefRequest, LogCategory.SEARCH)
+      searchType = 'cross_reference'
+      
+      const crossResult = await findCrossReferences(
+        crossRefRequest.partNumber || query,
+        crossRefRequest.targetBrand
+      )
+      
+      // Create a combined result with source and crosses
+      const allProducts: Product[] = []
+      if (crossResult.sourceProduct) {
+        allProducts.push({
+          ...crossResult.sourceProduct,
+          isSourceProduct: true // Mark as source for UI
+        })
+      }
+      allProducts.push(...crossResult.crossReferences)
+      
+      // Enrich cross-reference results with datasheet URLs
+      if (allProducts.length > 0) {
+        try {
+          const datasheetUrls = await getDatasheetUrls(allProducts)
+          allProducts.forEach(product => {
+            const url = datasheetUrls.get(product.partNumber)
+            if (url) {
+              product.datasheetUrl = url
+            }
+          })
+        } catch (error) {
+          logger.error('Failed to fetch datasheet URLs for cross-reference', error, LogCategory.SEARCH)
+        }
+      }
+      
+      const searchTimeMs = Math.round(performance.now() - startTime)
+      
+      // Track the cross-reference search
+      trackSearch({
+        searchTerm: query,
+        resultsCount: allProducts.length,
+        searchTimeMs,
+        searchType: 'cross_reference',
+        aiProductType: 'CROSS_REFERENCE'
+      }).catch(error => logger.error('Analytics tracking failed', error, LogCategory.ANALYTICS))
+      
+      endTimer()
+      logger.searchComplete(query, allProducts.length, searchTimeMs)
+      
+      return {
+        products: allProducts,
+        searchTime: searchTimeMs,
+        searchType: 'cross_reference',
+        redirectMessage: crossResult.message,
+        totalFound: allProducts.length,
+        smartFilters: allProducts.length > 0 ? generateSmartFilters(allProducts) : undefined,
+        crossReferenceInfo: {
+          sourcePartNumber: crossRefRequest.partNumber,
+          targetBrand: crossRefRequest.targetBrand,
+          crossesFound: crossResult.crossReferences.length
+        }
+      }
+    }
+
     // Step 3: Check for part numbers first
     const partNumberDetection = detectPartNumbers(processedQuery.processedTerm)
 
@@ -1176,6 +1264,21 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
         })
         products = defaultResult.products
         searchStrategy = `category_cables_default_${defaultResult.searchStrategy}`
+    }
+
+    // Enrich products with datasheet URLs if available
+    if (products.length > 0) {
+      try {
+        const datasheetUrls = await getDatasheetUrls(products)
+        products.forEach(product => {
+          const url = datasheetUrls.get(product.partNumber)
+          if (url) {
+            product.datasheetUrl = url
+          }
+        })
+      } catch (error) {
+        logger.error('Failed to fetch datasheet URLs', error, LogCategory.SEARCH)
+      }
     }
 
     // Generate smart filters if we have products

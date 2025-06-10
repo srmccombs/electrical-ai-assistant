@@ -300,16 +300,25 @@ export const detectColor = (searchTerm: string): string | null => {
 export const detectBrand = (searchTerm: string): string | undefined => {
   const term = searchTerm.toLowerCase()
 
-  // Define brand mappings with synonyms
+  // Define brand mappings with synonyms and common misspellings
   const brandMappings = [
     { keywords: ['corning', 'siecor'], brand: 'Corning' }, // Siecor is Corning synonym
-    { keywords: ['panduit'], brand: 'Panduit' },
-    { keywords: ['leviton', 'berktek'], brand: 'Leviton' }, // BerkTek is Leviton brand
+    { keywords: ['panduit', 'pan duit'], brand: 'Panduit' },
+    { 
+      keywords: ['leviton', 'berktek', 'berk tek', 'berk-tek', 'bertek', 'burktek', 'birktek'], 
+      brand: 'Leviton/BerkTek' // Match exact database format
+    },
     { keywords: ['dmsi'], brand: 'DMSI' },
-    { keywords: ['legrand'], brand: 'Legrand' },
-    { keywords: ['superior essex', 'superior', 'essex'], brand: 'Superior Essex' },
-    { keywords: ['prysmian'], brand: 'Prysmian' },
-    { keywords: ['hubbell', 'hubell'], brand: 'Hubbell' } // Added Hubbell for jack modules
+    { keywords: ['legrand', 'le grand'], brand: 'Legrand' },
+    { 
+      keywords: ['superior essex', 'superior', 'essex', 'superioressex', 'sup essex', 'superio essex'],
+      brand: 'Superior Essex' 
+    },
+    { 
+      keywords: ['prysmian', 'general cable', 'generalcable', 'gen cable'], 
+      brand: 'Prysmian' // General Cable is now Prysmian
+    },
+    { keywords: ['hubbell', 'hubell', 'hubbel'], brand: 'Hubbell' }
   ]
 
   for (const mapping of brandMappings) {
@@ -322,6 +331,75 @@ export const detectBrand = (searchTerm: string): string | undefined => {
   }
 
   return undefined
+}
+
+// NEW: Detect cross-reference request
+export const detectCrossReferenceRequest = (searchTerm: string): { isCrossRequest: boolean, partNumber?: string, targetBrand?: string } => {
+  const term = searchTerm.toLowerCase()
+  
+  // Cross-reference keywords
+  const crossKeywords = ['cross', 'equal', 'equivalent', 'substitute', 'replacement', 'alternative', 'match', 'same as', 'like', 'similar to']
+  
+  // Check if it's a cross-reference request
+  const hasCrossKeyword = crossKeywords.some(keyword => term.includes(keyword))
+  
+  if (!hasCrossKeyword) {
+    return { isCrossRequest: false }
+  }
+  
+  // Try to extract part number and target brand
+  // Pattern examples: "cross 7131100 to essex", "7131100 equal in panduit", "equivalent of 7131100 in superior"
+  
+  // First, remove the cross-reference keywords to avoid them interfering with part number detection
+  let cleanedTerm = term
+  crossKeywords.forEach(keyword => {
+    cleanedTerm = cleanedTerm.replace(new RegExp(`\\b${keyword}\\b`, 'gi'), ' ')
+  })
+  
+  // Extract part number - look for alphanumeric sequences that could be part numbers
+  // Avoid capturing brand names by looking for typical part number patterns
+  const partNumberPatterns = [
+    /\b(\d{4,}\w*)\b/,  // Numbers followed by optional letters (e.g., 7131100, 10136226)
+    /\b([A-Z]{2,4}[-\s]?\d{3,})\b/i,  // Letters followed by numbers (e.g., ABC-123)
+    /\b(\d+[-\s]\d+[-\s]\d+)\b/,  // Hyphenated numbers (e.g., 123-456-789)
+  ]
+  
+  let partNumber: string | undefined
+  for (const pattern of partNumberPatterns) {
+    const match = cleanedTerm.match(pattern)
+    if (match) {
+      partNumber = match[1]
+      break
+    }
+  }
+  
+  // Extract target brand - look for brand after "to", "in", etc.
+  let targetBrand: string | undefined
+  const brandPatterns = [
+    /\bto\s+([a-z\s]+?)(?:\s*$|,|\.|!|\?)/i,
+    /\bin\s+([a-z\s]+?)(?:\s*$|,|\.|!|\?)/i,
+    /\bfor\s+([a-z\s]+?)(?:\s*$|,|\.|!|\?)/i,
+  ]
+  
+  for (const pattern of brandPatterns) {
+    const match = term.match(pattern)
+    if (match) {
+      const potentialBrand = match[1].trim()
+      const detectedBrand = detectBrand(potentialBrand)
+      if (detectedBrand) {
+        targetBrand = detectedBrand
+        break
+      }
+    }
+  }
+  
+  console.log(`🔄 Cross-reference request detected: partNumber=${partNumber}, targetBrand=${targetBrand}`)
+  
+  return {
+    isCrossRequest: true,
+    partNumber,
+    targetBrand
+  }
 }
 
 // NEW: Environment detection function - centralized for reuse

@@ -39,7 +39,7 @@ export const searchFiberCables = async (
 
   try {
     let query = supabase
-      .from('products')
+      .from('fiber_optic_cable')
       .select('*')
       .eq('is_active', true)
       .limit(50)
@@ -245,7 +245,7 @@ const formatCableResults = (data: any[], searchType: string): Product[] => {
   return data.map((item: any) => ({
     id: `fiber-${item.id}`,
     partNumber: item.part_number?.toString() || 'No Part Number',
-    brand: 'Fiber Brand',
+    brand: item.brand?.trim() || 'Unknown Brand',
     description: item.short_description?.trim() || 'No description available',
     price: parseFloat(item.unit_price) || (Math.random() * 500 + 200),
     stockLocal: item.stock_quantity || 0,

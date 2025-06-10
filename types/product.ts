@@ -66,6 +66,13 @@ export interface Product {
   installationToolsRequired?: string
   compatibleFaceplates?: string
   upcNumber?: string  // Note: You have upcCode above, but jack modules use upcNumber
+  
+  // Cross-reference UI field
+  isSourceProduct?: boolean // Mark source product in cross-reference results
+  
+  // Product datasheet fields
+  datasheetId?: string
+  datasheetUrl?: string
 }
 
 export interface ListItem extends Product {

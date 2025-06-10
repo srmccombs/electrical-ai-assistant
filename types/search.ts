@@ -22,6 +22,11 @@ export interface SearchResult {
   redirectMessage?: string
   totalFound?: number
   smartFilters?: SmartFilters
+  crossReferenceInfo?: {
+    sourcePartNumber?: string
+    targetBrand?: string
+    crossesFound: number
+  }
 }
 
 // ===================================================================

@@ -707,6 +707,13 @@ const PlecticAI: React.FC = () => {
       if (redirectMessage) {
         assistantContent += `\n\n🔄 **${redirectMessage}**`
       }
+      
+      // Add cross-reference specific message
+      if (searchType === 'cross_reference' && searchResult.crossReferenceInfo) {
+        const { sourcePartNumber, targetBrand, crossesFound } = searchResult.crossReferenceInfo
+        assistantContent = `🔄 Cross-Reference Results for ${sourcePartNumber}${targetBrand ? ` in ${targetBrand}` : ''}\n\n`
+        assistantContent += `Found ${crossesFound} equivalent products${redirectMessage ? `\n${redirectMessage}` : ''}`
+      }
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -1273,15 +1280,16 @@ const PlecticAI: React.FC = () => {
                           {/* Product Table */}
                           {message.products && message.products.length > 0 && (
                             <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                              <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                              <div className="overflow-x-auto max-h-96 overflow-y-auto relative">
                                 <table className="w-full min-w-max">
-                                  <thead className="bg-gray-100 border-b border-gray-200">
+                                  <thead className="bg-gray-100 border-b border-gray-200 sticky top-0 z-10">
                                     <tr className="text-xs text-gray-700">
                                       <th className="px-2 py-2 text-center font-medium w-16">Add</th>
                                       <th className="px-1 py-2 text-center font-medium w-8"></th>
                                       <th className="px-2 py-2 text-left font-medium w-24">Part #</th>
                                       <th className="px-2 py-2 text-left font-medium w-20">Brand</th>
                                       <th className="px-3 py-2 text-left font-medium min-w-96">Description</th>
+                                      <th className="px-2 py-2 text-center font-medium w-24">Product Sheet</th>
                                       {(messageFilters[message.id]?.filteredProducts || message.products || []).some(p => p.tableName === 'rack_mount_fiber_enclosures') ? (
                                         <>
                                           <th className="px-2 py-2 text-center font-medium w-20">Panel Type</th>
@@ -1304,7 +1312,7 @@ const PlecticAI: React.FC = () => {
                                     {(messageFilters[message.id]?.filteredProducts || message.products || []).map((product, index) => (
                                       <tr
                                         key={`${product.partNumber}_${index}`}
-                                        className="hover:bg-gray-50 cursor-pointer"
+                                        className={`hover:bg-gray-50 cursor-pointer ${product.isSourceProduct ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}
                                         onClick={() => handleProductClick(product)}
                                       >
                                         <td className="px-2 py-2 text-center">
@@ -1322,13 +1330,36 @@ const PlecticAI: React.FC = () => {
                                           <StockStatusButton product={product} />
                                         </td>
                                         <td className="px-2 py-2 text-xs font-medium text-gray-900">
-                                          {product.partNumber}
+                                          <div className="flex items-center gap-2">
+                                            {product.partNumber}
+                                            {product.isSourceProduct && (
+                                              <span className="bg-blue-600 text-white px-2 py-0.5 rounded text-xs font-medium">
+                                                SOURCE
+                                              </span>
+                                            )}
+                                          </div>
                                         </td>
                                         <td className="px-2 py-2 text-xs text-gray-700">{product.brand}</td>
                                         <td className="px-3 py-2 text-sm text-gray-700 min-w-96">
                                           <div className="whitespace-normal leading-tight">
                                             {product.description}
                                           </div>
+                                        </td>
+                                        <td className="px-2 py-2 text-center">
+                                          {product.datasheetUrl ? (
+                                            <a
+                                              href={product.datasheetUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="inline-flex items-center justify-center w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                                              title="View Product Sheet"
+                                              onClick={(e) => e.stopPropagation()}
+                                            >
+                                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                              </svg>
+                                            </a>
+                                          ) : null}
                                         </td>
                                         {product.tableName === 'rack_mount_fiber_enclosures' ? (
                                           <>
