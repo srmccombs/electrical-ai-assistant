@@ -858,7 +858,7 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
   const endTimer = logger.startTimer('Total search execution')
 
   // Initialize tracking variables
-  let searchType: 'direct' | 'ai' | 'part_number' | 'brand' = 'direct'
+  let searchType: 'direct' | 'ai' | 'part_number' | 'brand' | 'cross_reference' = 'direct'
   let aiProductType: string | undefined
 
   logger.searchStart(options.query, options)
