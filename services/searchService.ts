@@ -652,9 +652,16 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
     return 'multi_table'
   }
 
-  // Enhanced connector detection
-  const connectorTerms = ['connector', 'connectors', 'lc', 'sc', 'st', 'fc', 'mtp', 'mpo']
-  const hasConnectorTerms = connectorTerms.some(term => query.includes(term))
+  // Enhanced connector detection - use word boundaries to avoid false positives
+  const connectorTerms = ['connector', 'connectors']
+  const connectorTypes = ['lc', 'sc', 'st', 'fc', 'mtp', 'mpo']
+  
+  // Check for connector terms or standalone connector types (not part of other words like STP)
+  const hasConnectorTerms = connectorTerms.some(term => query.includes(term)) ||
+    connectorTypes.some(type => {
+      const regex = new RegExp(`\\b${type}\\b`, 'i')
+      return regex.test(query)
+    })
 
   if (hasConnectorTerms && !query.includes('panel') && !query.includes('adapter')) {
     logger.info('Keyword routing to fiber_connectors', {}, LogCategory.SEARCH)
