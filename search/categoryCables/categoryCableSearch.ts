@@ -454,7 +454,10 @@ export const searchCategoryCables = async (
       aiAnalysis?.detectedSpecs?.color,
       textDetectedColor
     )
-    const detectedQuantity = aiAnalysis?.detectedSpecs?.requestedQuantity || textDetectedQuantity
+    // For box conversions, prioritize text detection over AI
+    const detectedQuantity = textDetectedQuantity && textDetectedQuantity > (aiAnalysis?.detectedSpecs?.requestedQuantity || 0) 
+      ? textDetectedQuantity 
+      : (aiAnalysis?.detectedSpecs?.requestedQuantity || textDetectedQuantity)
     const detectedShielding = aiAnalysis?.detectedSpecs?.shielding || textDetectedShielding
     const detectedProductLine = textDetectedProductLine
 

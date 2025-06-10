@@ -74,6 +74,7 @@ import {
   detectPartNumbers,
   normalizePartNumber,
   detectCrossReferenceRequest,
+  detectQuantity,
 } from '@/search/shared/industryKnowledge'
 
 // Import cross-reference service
@@ -87,13 +88,21 @@ import { getDatasheetUrls } from '@/services/datasheetService'
 // ===================================================================
 
 /**
- * Enhanced AI specs detection with rack unit parsing
+ * Enhanced AI specs detection with rack unit parsing and box quantity conversion
  */
 const enhanceAIAnalysis = (aiAnalysis: AISearchAnalysis | null, searchTerm: string): AISearchAnalysis | null => {
   if (!aiAnalysis) return null
 
   const term = searchTerm.toLowerCase()
   let wasEnhanced = false
+  
+  // Check if text detection found box quantities that AI missed
+  const textDetectedQuantity = detectQuantity(searchTerm)
+  if (textDetectedQuantity && textDetectedQuantity > (aiAnalysis.detectedSpecs.requestedQuantity || 0)) {
+    logger.debug(`Enhanced AI: Using text-detected quantity ${textDetectedQuantity} (from boxes) instead of AI quantity ${aiAnalysis.detectedSpecs.requestedQuantity}`, {}, LogCategory.AI)
+    aiAnalysis.detectedSpecs.requestedQuantity = textDetectedQuantity
+    wasEnhanced = true
+  }
 
   // Detect rack units if AI missed it
   if (!aiAnalysis.detectedSpecs.rackUnits) {
