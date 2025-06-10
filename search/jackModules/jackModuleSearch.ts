@@ -221,8 +221,8 @@ const searchByPartNumber = async (
 
   query = query.or(searchConditions.join(','))
 
-  const result = await query
-  const products = result.data ? formatJackModuleResults(result.data, 'part_number_search') : []
+  const { data: resultData, error: resultError } = await query as { data: any[] | null, error: any }
+  const products = resultData ? formatJackModuleResults(resultData, 'part_number_search') : []
 
   console.log(`🔢 Part number search found: ${products.length} products`)
   return products
@@ -315,17 +315,17 @@ const searchByMultiCriteria = async (
     query = query.or(searchConditions.join(','))
   }
 
-  const result = await query
-  console.log(`🎯 Multi-criteria search query result:`, result.error || `${result.data?.length} items`)
+  const { data: resultData, error: resultError } = await query as { data: any[] | null, error: any }
+  console.log(`🎯 Multi-criteria search query result:`, resultError || `${resultData?.length} items`)
 
-  if (result.data && result.data.length > 0) {
+  if (!resultError && resultData && resultData.length > 0) {
     // Ensure diversity in the results
     const seenCombos = new Set<string>()
     const diverseProducts: any[] = []
     
     // Group products by brand and product_line
     const grouped = new Map<string, any[]>()
-    for (const item of result.data) {
+    for (const item of resultData) {
       const key = `${item.brand || 'Unknown'}_${item.product_line || 'None'}`
       if (!grouped.has(key)) {
         grouped.set(key, [])
@@ -351,7 +351,7 @@ const searchByMultiCriteria = async (
     }
     
     // Second pass: fill remaining slots
-    for (const item of result.data) {
+    for (const item of resultData) {
       if (diverseProducts.length >= 200) break
       if (!diverseProducts.includes(item)) {
         diverseProducts.push(item)
@@ -368,7 +368,7 @@ const searchByMultiCriteria = async (
     return products
   }
 
-  const products = result.data ? formatJackModuleResults(result.data, 'multi_criteria_search') : []
+  const products = resultData ? formatJackModuleResults(resultData, 'multi_criteria_search') : []
   console.log(`🎯 Multi-criteria search found: ${products.length} products`)
   return products
 }
@@ -389,8 +389,8 @@ const searchByCategoryRating = async (
     .ilike('category_rating', `%${categoryRating}%`)
     .limit(limit)
 
-  const result = await query
-  const products = result.data ? formatJackModuleResults(result.data, 'category_rating_search') : []
+  const { data: resultData, error: resultError } = await query as { data: any[] | null, error: any }
+  const products = resultData ? formatJackModuleResults(resultData, 'category_rating_search') : []
 
   console.log(`📂 Category rating search found: ${products.length} products`)
   return products
@@ -444,16 +444,16 @@ const searchByFallback = async (
 
   const query = diverseQuery.or(searchConditions.join(','))
 
-  const result = await query
-  console.log(`🔍 Fallback search query result:`, result.error || `${result.data?.length} items`)
+  const { data: resultData, error: resultError } = await query as { data: any[] | null, error: any }
+  console.log(`🔍 Fallback search query result:`, resultError || `${resultData?.length} items`)
 
-  if (result.data && result.data.length > 0) {
+  if (!resultError && resultData && resultData.length > 0) {
     // Get unique combinations of brand + product_line to ensure diversity
     const seenCombos = new Set<string>()
     const diverseProducts: any[] = []
     
     // First pass: get one product from each unique brand/product_line combo
-    for (const item of result.data) {
+    for (const item of resultData) {
       const combo = `${item.brand || 'Unknown'}_${item.product_line || 'None'}`
       if (!seenCombos.has(combo) && diverseProducts.length < limit) {
         seenCombos.add(combo)
@@ -462,7 +462,7 @@ const searchByFallback = async (
     }
     
     // Second pass: fill remaining slots with other products
-    for (const item of result.data) {
+    for (const item of resultData) {
       if (diverseProducts.length >= limit) break
       if (!diverseProducts.includes(item)) {
         diverseProducts.push(item)
@@ -475,7 +475,7 @@ const searchByFallback = async (
     return products
   }
 
-  const products = result.data ? formatJackModuleResults(result.data, 'fallback_search') : []
+  const products = resultData ? formatJackModuleResults(resultData, 'fallback_search') : []
   console.log(`🔍 Fallback search found: ${products.length} products`)
   return products
 }

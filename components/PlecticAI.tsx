@@ -489,8 +489,8 @@ const PlecticAI: React.FC = () => {
               key={option}
               onClick={() => {
                 const message = messages.find(m => m.id === messageId)
-                if (message && message.products) {
-                  applySmartFilter(messageId, filterType, option, message.products)
+                if (message) {
+                  applySmartFilter(messageId, filterType, option, message.products || [])
                 }
               }}
               className={customButtonStyle 
@@ -509,8 +509,8 @@ const PlecticAI: React.FC = () => {
             <button
               onClick={() => {
                 const message = messages.find(m => m.id === messageId)
-                if (message && message.products) {
-                  clearFilterType(messageId, filterType, message.products)
+                if (message) {
+                  clearFilterType(messageId, filterType, message.products || [])
                 }
               }}
               className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
@@ -943,11 +943,11 @@ const PlecticAI: React.FC = () => {
                                 <Filter size={16} className="text-blue-600" />
                                 <span className="text-sm font-medium text-blue-700">Smart Filters</span>
                                 <span className="text-xs text-blue-600">
-                                  ({(messageFilters[message.id]?.filteredProducts || message.products).length} of {message.products.length} products)
+                                  ({(messageFilters[message.id]?.filteredProducts || message.products || []).length} of {(message.products || []).length} products)
                                 </span>
                                 {Object.keys(messageFilters[message.id]?.activeFilters || {}).length > 0 && (
                                   <button
-                                    onClick={() => clearAllFilters(message.id, message.products)}
+                                    onClick={() => clearAllFilters(message.id, message.products || [])}
                                     className="ml-auto text-xs text-red-600 hover:text-red-700 font-medium"
                                   >
                                     Clear All Filters
@@ -966,7 +966,7 @@ const PlecticAI: React.FC = () => {
                                       {availableBrands.map(brand => (
                                         <button
                                           key={brand}
-                                          onClick={() => applySmartFilter(message.id, 'brand', brand, message.products)}
+                                          onClick={() => applySmartFilter(message.id, 'brand', brand, message.products || [])}
                                           className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
                                             messageFilters[message.id]?.activeFilters.brand === brand
                                               ? 'bg-blue-600 text-white'
@@ -978,7 +978,7 @@ const PlecticAI: React.FC = () => {
                                       ))}
                                       {messageFilters[message.id]?.activeFilters.brand && (
                                         <button
-                                          onClick={() => clearFilterType(message.id, 'brand', message.products)}
+                                          onClick={() => clearFilterType(message.id, 'brand', message.products || [])}
                                           className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
                                         >
                                           All Brands
@@ -1000,7 +1000,7 @@ const PlecticAI: React.FC = () => {
                                       {availableProductLines.map(productLine => (
                                         <button
                                           key={productLine}
-                                          onClick={() => applySmartFilter(message.id, 'productLine', productLine, message.products)}
+                                          onClick={() => applySmartFilter(message.id, 'productLine', productLine, message.products || [])}
                                           className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
                                             messageFilters[message.id]?.activeFilters.productLine === productLine
                                               ? 'bg-indigo-600 text-white'
@@ -1012,7 +1012,7 @@ const PlecticAI: React.FC = () => {
                                       ))}
                                       {messageFilters[message.id]?.activeFilters.productLine && (
                                         <button
-                                          onClick={() => clearFilterType(message.id, 'productLine', message.products)}
+                                          onClick={() => clearFilterType(message.id, 'productLine', message.products || [])}
                                           className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
                                         >
                                           All Product Lines
@@ -1098,7 +1098,7 @@ const PlecticAI: React.FC = () => {
                                       {availableEnvironments.map(env => (
                                         <button
                                           key={env}
-                                          onClick={() => applySmartFilter(message.id, 'environment', env, message.products)}
+                                          onClick={() => applySmartFilter(message.id, 'environment', env, message.products || [])}
                                           className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
                                             isActive(env)
                                               ? 'bg-emerald-600 text-white'
@@ -1110,7 +1110,7 @@ const PlecticAI: React.FC = () => {
                                       ))}
                                       {messageFilters[message.id]?.activeFilters.environment && (
                                         <button
-                                          onClick={() => clearFilterType(message.id, 'environment', message.products)}
+                                          onClick={() => clearFilterType(message.id, 'environment', message.products || [])}
                                           className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
                                         >
                                           All Environment
@@ -1282,7 +1282,7 @@ const PlecticAI: React.FC = () => {
                                       <th className="px-2 py-2 text-left font-medium w-24">Part #</th>
                                       <th className="px-2 py-2 text-left font-medium w-20">Brand</th>
                                       <th className="px-3 py-2 text-left font-medium min-w-96">Description</th>
-                                      {(messageFilters[message.id]?.filteredProducts || message.products).some(p => p.tableName === 'rack_mount_fiber_enclosures') ? (
+                                      {(messageFilters[message.id]?.filteredProducts || message.products || []).some(p => p.tableName === 'rack_mount_fiber_enclosures') ? (
                                         <>
                                           <th className="px-2 py-2 text-center font-medium w-20">Panel Type</th>
                                           <th className="px-2 py-2 text-center font-medium w-20">Rack Units</th>
@@ -1301,7 +1301,7 @@ const PlecticAI: React.FC = () => {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {(messageFilters[message.id]?.filteredProducts || message.products).map((product, index) => (
+                                    {(messageFilters[message.id]?.filteredProducts || message.products || []).map((product, index) => (
                                       <tr
                                         key={`${product.partNumber}_${index}`}
                                         className="hover:bg-gray-50 cursor-pointer"
