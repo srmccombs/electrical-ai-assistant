@@ -54,7 +54,7 @@ export const getDatasheetUrls = async (
       // Process the links and fetch actual URLs from product_datasheets table
       if (links && links.length > 0) {
         // Get unique datasheet IDs
-        const datasheetIds = [...new Set((links as DatasheetLink[]).map(link => link.datasheet_id))]
+        const datasheetIds = [...new Set(links.map((link: any) => link.datasheet_id))]
         
         // Fetch datasheet info including URLs
         const { data: datasheets, error: dsError } = await supabase
@@ -68,14 +68,14 @@ export const getDatasheetUrls = async (
         } else if (datasheets) {
           // Create a map of datasheet_id to URL
           const datasheetMap = new Map<string, string>()
-          (datasheets as DatasheetInfo[]).forEach(ds => {
+          datasheets.forEach((ds: any) => {
             if (ds.file_url) {
               datasheetMap.set(ds.datasheet_id, ds.file_url)
             }
           })
           
           // Map URLs to part numbers
-          (links as DatasheetLink[]).forEach(link => {
+          links.forEach((link: any) => {
             const url = datasheetMap.get(link.datasheet_id)
             if (url) {
               datasheetCache.set(link.part_number, url)
