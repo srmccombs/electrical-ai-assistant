@@ -107,5 +107,5 @@ export const getDatasheetUrls = async (
  */
 export const clearDatasheetCache = (): void => {
   datasheetCache.clear()
-  logger.info('Datasheet cache cleared', {}, LogCategory.SYSTEM)
+  logger.info('Datasheet cache cleared', {}, LogCategory.CACHE)
 }
