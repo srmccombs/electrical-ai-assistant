@@ -1373,6 +1373,162 @@ export type Database = {
         }
         Relationships: []
       }
+      jack_modules: {
+        Row: {
+          id: number
+          part_number: string
+          brand: string
+          brand_normalized: string | null
+          product_line: string | null
+          short_description: string | null
+          upc_number: string | null
+          product_type: string | null
+          category_rating: string | null
+          pair_count: string | null
+          color: string | null
+          shielding_type: string | null
+          installation_tools_required: string | null
+          common_terms: string | null
+          compatible_faceplates: string | null
+          image_file: string | null
+          possible_cross: string | null
+          go_with_items: string | null
+          created_at: string | null
+          updated_at: string | null
+          is_active: boolean | null
+          search_vector: unknown | null
+        }
+        Insert: {
+          id: number
+          part_number: string
+          brand: string
+          brand_normalized?: string | null
+          product_line?: string | null
+          short_description?: string | null
+          upc_number?: string | null
+          product_type?: string | null
+          category_rating?: string | null
+          pair_count?: string | null
+          color?: string | null
+          shielding_type?: string | null
+          installation_tools_required?: string | null
+          common_terms?: string | null
+          compatible_faceplates?: string | null
+          image_file?: string | null
+          possible_cross?: string | null
+          go_with_items?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          is_active?: boolean | null
+          search_vector?: unknown | null
+        }
+        Update: {
+          id?: number
+          part_number?: string
+          brand?: string
+          brand_normalized?: string | null
+          product_line?: string | null
+          short_description?: string | null
+          upc_number?: string | null
+          product_type?: string | null
+          category_rating?: string | null
+          pair_count?: string | null
+          color?: string | null
+          shielding_type?: string | null
+          installation_tools_required?: string | null
+          common_terms?: string | null
+          compatible_faceplates?: string | null
+          image_file?: string | null
+          possible_cross?: string | null
+          go_with_items?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          is_active?: boolean | null
+          search_vector?: unknown | null
+        }
+        Relationships: []
+      }
+      faceplates: {
+        Row: {
+          id: number
+          part_number: string
+          brand: string
+          brand_normalized: string | null
+          product_line: string | null
+          short_description: string | null
+          upc_number: string | null
+          product_type: string | null
+          category_rating: string | null
+          color: string | null
+          number_of_ports: number | null
+          number_gang: string | null
+          type: string | null
+          shielding_type: string | null
+          installation_tools_required: string | null
+          common_terms: string | null
+          compatible_jacks: string | null
+          image_file: string | null
+          possible_cross: string | null
+          go_with_items: string | null
+          created_at: string | null
+          updated_at: string | null
+          is_active: boolean | null
+          search_vector: unknown | null
+        }
+        Insert: {
+          id: number
+          part_number: string
+          brand: string
+          brand_normalized?: string | null
+          product_line?: string | null
+          short_description?: string | null
+          upc_number?: string | null
+          product_type?: string | null
+          category_rating?: string | null
+          color?: string | null
+          number_of_ports?: number | null
+          number_gang?: string | null
+          type?: string | null
+          shielding_type?: string | null
+          installation_tools_required?: string | null
+          common_terms?: string | null
+          compatible_jacks?: string | null
+          image_file?: string | null
+          possible_cross?: string | null
+          go_with_items?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          is_active?: boolean | null
+          search_vector?: unknown | null
+        }
+        Update: {
+          id?: number
+          part_number?: string
+          brand?: string
+          brand_normalized?: string | null
+          product_line?: string | null
+          short_description?: string | null
+          upc_number?: string | null
+          product_type?: string | null
+          category_rating?: string | null
+          color?: string | null
+          number_of_ports?: number | null
+          number_gang?: string | null
+          type?: string | null
+          shielding_type?: string | null
+          installation_tools_required?: string | null
+          common_terms?: string | null
+          compatible_jacks?: string | null
+          image_file?: string | null
+          possible_cross?: string | null
+          go_with_items?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          is_active?: boolean | null
+          search_vector?: unknown | null
+        }
+        Relationships: []
+      }
       wall_mount_fiber_enclosures: {
         Row: {
           accepts_number_of_connector_housing_panels: number | null

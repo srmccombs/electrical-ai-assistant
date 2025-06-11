@@ -69,32 +69,95 @@ export async function POST(request) {
 
     console.log('🔍 Analyzing query:', query.substring(0, 100) + (query.length > 100 ? '...' : ''))
 
+    // Extract shopping list context if provided
+    const shoppingListContext = userContext?.shoppingListContext
+    let compatibilityContext = ''
+    
+    if (shoppingListContext?.hasItems) {
+      // Handle category cables context
+      if (shoppingListContext?.categoryCables?.length > 0) {
+        const categoriesInCart = [...new Set(shoppingListContext.categoryCables.map(cable => cable.categoryRating))].filter(Boolean)
+        const brandsInCart = [...new Set(shoppingListContext.categoryCables.map(cable => cable.brand))].filter(Boolean)
+        
+        compatibilityContext += `\n\nSHOPPING LIST CONTEXT (for compatibility matching):
+- Customer has ${shoppingListContext.categoryCables.length} category cable(s) in their list
+- Categories in cart: ${categoriesInCart.join(', ') || 'Various'}
+- Brands in cart: ${brandsInCart.join(', ') || 'Various'}
+
+When searching for jack modules or faceplates:
+- Prioritize products compatible with ${categoriesInCart.join(', ')} cables
+- Consider brand compatibility with ${brandsInCart.join(', ')}
+- Include in detectedSpecs: categoryRating that matches items in cart`
+        
+        console.log('🛒 Shopping list context detected (cables):', {
+          cablesInCart: shoppingListContext.categoryCables.length,
+          categories: categoriesInCart,
+          brands: brandsInCart
+        })
+      }
+      
+      // Handle jack modules context
+      if (shoppingListContext?.jackModules?.length > 0) {
+        const jackCategoriesInCart = [...new Set(shoppingListContext.jackModules.map(jack => jack.categoryRating))].filter(Boolean)
+        const jackBrandsInCart = [...new Set(shoppingListContext.jackModules.map(jack => jack.brand))].filter(Boolean)
+        const jackProductLinesInCart = [...new Set(shoppingListContext.jackModules.map(jack => jack.productLine))].filter(Boolean)
+        
+        // Get compatible faceplates values
+        const compatibleFaceplatesValues = [...new Set(shoppingListContext.jackModules.map(jack => jack.compatibleFaceplates))].filter(Boolean)
+        
+        compatibilityContext += `\n\nJACK MODULE CONTEXT (for faceplate compatibility):
+- Customer has ${shoppingListContext.jackModules.length} jack module(s) in their list
+- Jack categories: ${jackCategoriesInCart.join(', ') || 'Various'}
+- Jack brands: ${jackBrandsInCart.join(', ') || 'Various'}
+- Jack product lines: ${jackProductLinesInCart.join(', ') || 'Various'}
+- Compatible faceplates: ${compatibleFaceplatesValues.join(', ') || 'Not specified'}
+
+When searching for faceplates or surface mount boxes:
+- STRONGLY prioritize ${jackBrandsInCart.join(', ')} brand faceplates/boxes
+- IMPORTANT: Use the compatible_faceplates value exactly as shown: "${compatibleFaceplatesValues[0] || jackProductLinesInCart[0]}"
+- Include in detectedSpecs: manufacturer="${jackBrandsInCart[0]}" and productLine="${compatibleFaceplatesValues[0] || jackProductLinesInCart[0]}"
+- DO NOT add curly braces {} around the productLine value
+- If the compatible_faceplates contains comma-separated values like "netSelect, ISTATION", use it exactly as is`
+        
+        console.log('🛒 Shopping list context detected (jack modules):', {
+          jackModulesInCart: shoppingListContext.jackModules.length,
+          categories: jackCategoriesInCart,
+          brands: jackBrandsInCart,
+          productLines: jackProductLinesInCart
+        })
+      }
+    }
+
     const aiPrompt = `You are an expert electrical distributor AI assistant with 35+ years of experience.
 Your job is to analyze customer requests and provide the MOST SPECIFIC search strategy.
 
-CUSTOMER QUERY: "${query}"
+CUSTOMER QUERY: "${query}"${compatibilityContext}
 
 CRITICAL ROUTING RULES (follow these exactly):
 
 1. If query mentions "jack", "keystone", "RJ45 jack", "ethernet jack", "mini-com", or jack part numbers (CJ688, CJ5e88, CJ6X88):
    → searchStrategy: "jack_modules", productType: "JACK_MODULE"
 
-2. If query mentions "connectors" + fiber type (LC, SC, ST, FC, MTP, MPO, OM1-5, OS1-2):
+2. If query mentions "faceplate", "face plate", "wall plate", "wallplate", "surface mount box", "SMB", "S.M.B", "SM box":
+   → searchStrategy: "faceplates", productType: "FACEPLATE"
+   IMPORTANT: "SMB" = Surface Mount Box, not a jack module!
+
+3. If query mentions "connectors" + fiber type (LC, SC, ST, FC, MTP, MPO, OM1-5, OS1-2):
    → searchStrategy: "connectors", productType: "CONNECTOR"
 
-3. If query mentions cable length (ft, feet, meters) + fiber type:
+4. If query mentions cable length (ft, feet, meters) + fiber type:
    → searchStrategy: "cables", productType: "CABLE"
 
-4. If query mentions "panel" or "patch panel" (but NOT jack):
+5. If query mentions "panel" or "patch panel" (but NOT jack):
    → searchStrategy: "panels", productType: "PANEL"
 
-5. If query mentions category cable (Cat5, Cat6, ethernet) WITHOUT "jack":
+6. If query mentions category cable (Cat5, Cat6, ethernet) WITHOUT "jack":
    → searchStrategy: "cables", productType: "CABLE"
 
-6. If query mentions "enclosure", "housing", "rack mount", or rack units (RU, 1U, 2U, 4U):
+7. If query mentions "enclosure", "housing", "rack mount", or rack units (RU, 1U, 2U, 4U):
    → searchStrategy: "enclosures", productType: "ENCLOSURE"
 
-7. ONLY use "mixed" for very general queries with no specific product type
+8. ONLY use "mixed" for very general queries with no specific product type
 
 JACK MODULE EXAMPLES (VERY IMPORTANT):
 - "cat6a jack" → productType: "JACK_MODULE", searchStrategy: "jack_modules"
@@ -103,6 +166,16 @@ JACK MODULE EXAMPLES (VERY IMPORTANT):
 - "mini-com cat6 utp" → productType: "JACK_MODULE", searchStrategy: "jack_modules"
 - "100 cat5e jacks" → productType: "JACK_MODULE", searchStrategy: "jack_modules", requestedQuantity: 100
 - "shielded cat6a jack blue" → productType: "JACK_MODULE", searchStrategy: "jack_modules"
+
+FACEPLATE EXAMPLES (VERY IMPORTANT):
+- "2 port faceplate" → productType: "FACEPLATE", searchStrategy: "faceplates"
+- "single gang wall plate" → productType: "FACEPLATE", searchStrategy: "faceplates"
+- "4 port surface mount box" → productType: "FACEPLATE", searchStrategy: "faceplates"
+- "panduit faceplate white" → productType: "FACEPLATE", searchStrategy: "faceplates"
+- "blank faceplate" → productType: "FACEPLATE", searchStrategy: "faceplates"
+- "1 port SMB" → productType: "FACEPLATE", searchStrategy: "faceplates" (SMB = Surface Mount Box)
+- "10 SMB" → productType: "FACEPLATE", searchStrategy: "faceplates", requestedQuantity: 10
+- "2 port S.M.B" → productType: "FACEPLATE", searchStrategy: "faceplates"
 
 OTHER EXAMPLES:
 - "lc connectors om4" → productType: "CONNECTOR", searchStrategy: "connectors" 
@@ -119,8 +192,8 @@ QUANTITY DETECTION (VERY IMPORTANT):
 
 RESPOND WITH ONLY JSON:
 {
-  "searchStrategy": "jack_modules|connectors|cables|panels|enclosures|mixed",
-  "productType": "JACK_MODULE|CONNECTOR|CABLE|PANEL|ENCLOSURE|MIXED",
+  "searchStrategy": "jack_modules|faceplates|connectors|cables|panels|enclosures|mixed",
+  "productType": "JACK_MODULE|FACEPLATE|CONNECTOR|CABLE|PANEL|ENCLOSURE|MIXED",
   "confidence": 0.0-1.0,
   "detectedSpecs": {
     "fiberType": "OM3|OM4|OS1|OS2|singlemode|multimode or null",
@@ -174,6 +247,30 @@ RESPOND WITH ONLY JSON:
         searchAnalysis.searchStrategy = 'jack_modules'
         searchAnalysis.confidence = 0.95
         searchAnalysis.reasoning = 'Force corrected to jack modules based on keyword detection'
+      }
+
+      // FORCE FIX: If query contains faceplate-related terms but AI said "MIXED", fix it
+      if ((queryLower.includes('faceplate') || queryLower.includes('face plate') ||
+           queryLower.includes('wall plate') || queryLower.includes('wallplate') ||
+           queryLower.includes('surface mount box') || queryLower.includes('smb') ||
+           queryLower.includes('s.m.b') || queryLower.includes('sm box')) &&
+          searchAnalysis.productType === 'MIXED') {
+        console.log('🔧 FORCE FIX: Correcting MIXED to FACEPLATE')
+        searchAnalysis.productType = 'FACEPLATE'
+        searchAnalysis.searchStrategy = 'faceplates'
+        searchAnalysis.confidence = 0.95
+        searchAnalysis.reasoning = 'Force corrected to faceplates based on keyword detection'
+      }
+
+      // ADDITIONAL FORCE FIX: If query contains SMB-related terms but AI said "CABLE", fix it
+      if ((queryLower.includes('smb') || queryLower.includes('s.m.b') || 
+           queryLower.includes('sm box')) &&
+          (searchAnalysis.productType === 'CABLE' || searchAnalysis.productType === 'MIXED')) {
+        console.log('🔧 FORCE FIX: Correcting ' + searchAnalysis.productType + ' to FACEPLATE for SMB')
+        searchAnalysis.productType = 'FACEPLATE'
+        searchAnalysis.searchStrategy = 'faceplates'
+        searchAnalysis.confidence = 0.95
+        searchAnalysis.reasoning = 'Force corrected to faceplates - SMB = Surface Mount Box'
       }
 
       // FORCE FIX: If query contains "connectors" but AI said "MIXED", fix it

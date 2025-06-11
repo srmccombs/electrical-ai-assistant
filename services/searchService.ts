@@ -67,6 +67,10 @@ import {
   searchJackModules as searchJackModulesImpl,
 } from '@/search/jackModules/jackModuleSearch'
 
+import {
+  searchFaceplates as searchFaceplatesImpl,
+} from '@/search/faceplates/faceplateSearch'
+
 // Import shared industry knowledge
 import {
   validateElectricalQuery,
@@ -95,6 +99,17 @@ const enhanceAIAnalysis = (aiAnalysis: AISearchAnalysis | null, searchTerm: stri
 
   const term = searchTerm.toLowerCase()
   let wasEnhanced = false
+  
+  // Check for SMB (Surface Mount Box) abbreviations that AI often misses
+  if ((term.includes('smb') || term.includes('s.m.b') || term.includes('sm box')) &&
+      !term.includes('jack module') && !term.includes('keystone')) {
+    logger.info('Enhanced AI: Detected SMB/Surface Mount Box - overriding AI analysis', {}, LogCategory.AI)
+    aiAnalysis.productType = 'FACEPLATE'
+    aiAnalysis.searchStrategy = 'faceplates'
+    aiAnalysis.confidence = 0.95
+    aiAnalysis.reasoning = 'Detected SMB (Surface Mount Box) abbreviation'
+    wasEnhanced = true
+  }
   
   // Check if text detection found box quantities that AI missed
   const textDetectedQuantity = detectQuantity(searchTerm)
@@ -150,11 +165,11 @@ const enhanceAIAnalysis = (aiAnalysis: AISearchAnalysis | null, searchTerm: stri
 /**
  * Get AI analysis for search query (with caching)
  */
-const getAIAnalysis = async (query: string): Promise<AISearchAnalysis | null> => {
-  // Use the cache wrapper
+const getAIAnalysis = async (query: string, shoppingListContext?: SearchOptions['shoppingListContext']): Promise<AISearchAnalysis | null> => {
+  // Use the cache wrapper with shopping list context
   return getCachedAIAnalysis(query, async (q) => {
     try {
-      logger.debug('Getting FRESH AI analysis', { query: q }, LogCategory.AI)
+      logger.debug('Getting FRESH AI analysis', { query: q, hasShoppingListContext: !!shoppingListContext }, LogCategory.AI)
 
       const response = await fetch('/api/ai-search', {
         method: 'POST',
@@ -164,7 +179,8 @@ const getAIAnalysis = async (query: string): Promise<AISearchAnalysis | null> =>
         body: JSON.stringify({
           query: q,
           userContext: {
-            businessType: 'electrical_distributor'
+            businessType: 'electrical_distributor',
+            shoppingListContext
           }
         }),
       })
@@ -184,7 +200,7 @@ const getAIAnalysis = async (query: string): Promise<AISearchAnalysis | null> =>
       logger.error('AI analysis error', error, LogCategory.AI)
       return null
     }
-  })
+  }, shoppingListContext)
 }
 
 // ===================================================================
@@ -586,11 +602,55 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
   const query = searchTerm.toLowerCase()
 
   logger.debug('Available product types', { types: Object.keys(PRODUCT_TYPES) }, LogCategory.SEARCH)
+  
+  // Log the full AI analysis for debugging
+  logger.info('determineTargetTable - AI Analysis received', {
+    hasAiAnalysis: !!aiAnalysis,
+    productType: aiAnalysis?.productType,
+    searchStrategy: aiAnalysis?.searchStrategy,
+    confidence: aiAnalysis?.confidence,
+    searchTerm: searchTerm
+  }, LogCategory.SEARCH)
+
+  // Check if aiAnalysis is null or undefined
+  if (!aiAnalysis) {
+    logger.warn('determineTargetTable - AI Analysis is null/undefined, using keyword fallback', {}, LogCategory.SEARCH)
+  }
 
   // PRIORITY 1: Check if AI says ENCLOSURE
   if (aiAnalysis?.productType === 'ENCLOSURE') {
     logger.info('AI productType is ENCLOSURE - routing to fiber_enclosures', {}, LogCategory.AI)
     return 'fiber_enclosures'
+  }
+
+  // PRIORITY 1.5: Check if AI says FACEPLATE (includes SMB)
+  logger.info('Checking if AI productType is FACEPLATE', {
+    aiProductType: aiAnalysis?.productType,
+    isFaceplate: aiAnalysis?.productType === 'FACEPLATE',
+    aiAnalysisExists: !!aiAnalysis
+  }, LogCategory.SEARCH)
+  
+  if (aiAnalysis?.productType === 'FACEPLATE') {
+    logger.info('AI productType is FACEPLATE - routing to faceplates', {}, LogCategory.AI)
+    return 'faceplates'
+  }
+
+  // PRIORITY 1.6: Check if AI says JACK_MODULE
+  if (aiAnalysis?.productType === 'JACK_MODULE') {
+    logger.info('AI productType is JACK_MODULE - routing to jack_modules', {}, LogCategory.AI)
+    return 'jack_modules'
+  }
+
+  // PRIORITY 1.7: Check if AI says CONNECTOR
+  if (aiAnalysis?.productType === 'CONNECTOR') {
+    logger.info('AI productType is CONNECTOR - routing to fiber_connectors', {}, LogCategory.AI)
+    return 'fiber_connectors'
+  }
+
+  // PRIORITY 1.8: Check if AI says PANEL
+  if (aiAnalysis?.productType === 'PANEL') {
+    logger.info('AI productType is PANEL - routing to adapter_panels', {}, LogCategory.AI)
+    return 'adapter_panels'
   }
 
   // PRIORITY 2: Check for fiber enclosure keywords
@@ -650,7 +710,20 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
     }
   }
 
-
+  // PRIORITY 4: Check for faceplate keywords
+  const faceplateTerms = [
+    'faceplate', 'face plate', 'wall plate', 'wallplate',
+    'surface mount box', 'surface mount', 'surface box',
+    'mounting box', 'box mount', 'gang plate', 'gang box',
+    'outlet frame', 'port plate', 'smb', 's.m.b', 'sm box'
+  ]
+  
+  const hasFaceplateTerms = faceplateTerms.some(term => query.includes(term))
+  
+  if (hasFaceplateTerms) {
+    logger.info('Faceplate/Surface Mount Box detected - routing to faceplates', {}, LogCategory.SEARCH)
+    return 'faceplates'
+  }
 
   // Check for brand-only searches
   const brandKeywords = ['corning', 'panduit', 'leviton', 'superior', 'essex', 'berktek', 'prysmian', 'dmsi', 'siecor', 'hubbell']
@@ -693,7 +766,15 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
   }
 
   // Default to category cables for typical electrical searches
-  logger.info('Default routing to category_cables', {}, LogCategory.SEARCH)
+  logger.info('Default routing to category_cables - no specific product type matched', {
+    aiProductType: aiAnalysis?.productType,
+    searchTerm: query,
+    hadEnclosureTerms: hasEnclosureTerms,
+    hadJackTerms: hasJackTerms,
+    hadFaceplateTerms: hasFaceplateTerms,
+    hadConnectorTerms: hasConnectorTerms,
+    hadFiberTerms: hasFiberTerms
+  }, LogCategory.SEARCH)
   return 'category_cables'
 }
 
@@ -901,10 +982,13 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
     }
   }
 
-  const { query, limit = 200, includeAI = true } = options
+  const { query, limit = 200, includeAI = true, shoppingListContext } = options
 
   try {
-    logger.info('SEARCH SERVICE - Enhanced search started', { query }, LogCategory.SEARCH)
+    logger.info('SEARCH SERVICE - Enhanced search started', { 
+      query, 
+      hasShoppingListContext: !!shoppingListContext 
+    }, LogCategory.SEARCH)
 
     // Step 1: Validate query
     const validation = validateElectricalQuery(query)
@@ -1054,7 +1138,7 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
     let aiAnalysis: AISearchAnalysis | null = null
     if (includeAI) {
       searchType = 'ai'
-      aiAnalysis = await getAIAnalysis(processedQuery.processedTerm)
+      aiAnalysis = await getAIAnalysis(processedQuery.processedTerm, shoppingListContext)
 
       logger.debug('BEFORE enhancement', {
         productType: aiAnalysis?.productType,
@@ -1144,7 +1228,16 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
         searchStrategy = `jack_modules_${jackResult.searchStrategy}`
         break
 
-
+      case 'faceplates':
+        logger.info('Executing faceplates search', {}, LogCategory.SEARCH)
+        const faceplateResult = await searchFaceplatesImpl({
+          searchTerm: processedQuery.processedTerm,
+          aiAnalysis,
+          limit
+        })
+        products = faceplateResult.products
+        searchStrategy = `faceplates_${faceplateResult.searchStrategy}`
+        break
 
       case 'fiber_enclosures':
         logger.info('Executing fiber enclosures search', {}, LogCategory.SEARCH)

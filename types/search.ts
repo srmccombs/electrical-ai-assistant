@@ -12,6 +12,23 @@ export interface SearchOptions {
   query: string
   limit?: number
   includeAI?: boolean
+  shoppingListContext?: {
+    hasItems: boolean
+    categoryCables?: Array<{
+      partNumber: string
+      categoryRating: string
+      brand: string
+      description: string
+    }>
+    jackModules?: Array<{
+      partNumber: string
+      categoryRating: string
+      brand: string
+      productLine: string
+      compatibleFaceplates: string
+      description: string
+    }>
+  }
 }
 
 export interface SearchResult {
@@ -195,6 +212,7 @@ export type ProductTable =
   | 'rack_mount_fiber_enclosures'
   | 'wall_mount_fiber_enclosures'
   | 'jack_modules'  // ADDED
+  | 'faceplates'    // ADDED
   | 'multi_table'
 
 export interface TableInfo {

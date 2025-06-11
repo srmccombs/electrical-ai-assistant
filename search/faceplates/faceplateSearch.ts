@@ -1,0 +1,509 @@
+import { supabase } from '@/lib/supabase';
+import { Product } from '@/types/product';
+import { AISearchAnalysis } from '@/types/search';
+import { logger } from '@/utils/logger';
+import { Tables } from '@/src/types/supabase';
+import { detectColor, detectSurfaceMountBox, detectFaceplateType } from '@/search/shared/industryKnowledge';
+
+type Faceplate = Tables<'faceplates'>;
+
+export interface FaceplateSearchOptions {
+  searchTerm: string
+  aiAnalysis?: AISearchAnalysis | null
+  limit?: number
+}
+
+export interface FaceplateSearchResult {
+  products: Product[]
+  searchStrategy: string
+  totalFound: number
+  searchTime: number
+}
+
+export async function searchFaceplates(
+  options: FaceplateSearchOptions
+): Promise<FaceplateSearchResult> {
+  const startTime = performance.now()
+  const { searchTerm, aiAnalysis, limit = 100 } = options
+  logger.info('[Faceplate Search] Starting search', { searchTerm, aiAnalysis });
+
+  try {
+    // Build the query
+    let query = supabase
+      .from('faceplates')
+      .select('*')
+      .eq('is_active', true);
+
+    // Part number search (highest priority)
+    const cleanedTerm = searchTerm.trim().toUpperCase();
+    const isPartNumber = /^[A-Z0-9\-]{3,}$/.test(cleanedTerm);
+    
+    // Use the enhanced surface mount box detection from industryKnowledge
+    const searchingForSurfaceMount = detectSurfaceMountBox(searchTerm);
+    
+    // Build search conditions array - separate SMB conditions from general conditions
+    const searchConditions: string[] = [];
+    const smbSpecificConditions: string[] = [];
+    
+    // Extract values for logging
+    let portsMatch: RegExpMatchArray | null = null;
+    let colorValue: string | undefined;
+    let brandValue: string | undefined;
+    let productLineValue: string | undefined;
+    
+    // Variables for post-query filtering
+    let needsPostFiltering = false;
+    let postFilterBrand: string | undefined;
+    let postFilterProductLines: string[] = [];
+    let postFilterColor: string | undefined;
+    
+    // Detect faceplate type specifications
+    const faceplateTypeInfo = detectFaceplateType(searchTerm);
+    
+    if (isPartNumber) {
+      searchConditions.push(`part_number.ilike.%${cleanedTerm}%`);
+      searchConditions.push(`part_number.ilike.${cleanedTerm}%`);
+      searchConditions.push(`short_description.ilike.%${cleanedTerm}%`);
+      searchConditions.push(`common_terms.ilike.%${cleanedTerm}%`);
+      searchConditions.push(`possible_cross.ilike.%${cleanedTerm}%`);
+    }
+    
+    // Apply AI analysis filters
+    if (aiAnalysis) {
+      // Product type filter (Faceplate or Surface Mount Box)
+      if (searchingForSurfaceMount) {
+        // Build SMB-specific conditions separately to avoid conflicts with brand/product line filters
+        const smbTerms = ['surface mount box', 'SMB', 'surface mount', 'S.M.B', 'surface box', 'mounting box'];
+        smbTerms.forEach(term => {
+          smbSpecificConditions.push(`product_type.ilike.%${term}%`);
+          smbSpecificConditions.push(`short_description.ilike.%${term}%`);
+          smbSpecificConditions.push(`common_terms.ilike.%${term}%`);
+          smbSpecificConditions.push(`type.ilike.%${term}%`);
+        });
+        logger.info('[Faceplate Search] Built SMB-specific conditions', { count: smbSpecificConditions.length });
+      } else {
+        // For regular faceplate searches, no specific product type filtering needed
+        logger.info('[Faceplate Search] Searching for Faceplates (general search)');
+      }
+
+      // Number of ports filter - extract from search term if present
+      portsMatch = searchTerm.match(/(\d+)\s*port/i);
+      if (portsMatch && portsMatch[1]) {
+        const numberOfPorts = parseInt(portsMatch[1]);
+        if (!isNaN(numberOfPorts)) {
+          query = query.eq('number_of_ports', numberOfPorts);
+        }
+      }
+
+      // Apply keystone type filter if detected
+      if (faceplateTypeInfo.isKeystone) {
+        searchConditions.push(`type.ilike.%keystone%`);
+        searchConditions.push(`type.ilike.%modular%`);
+        searchConditions.push(`common_terms.ilike.%keystone%`);
+        logger.info('[Faceplate Search] Filtering for keystone type');
+      }
+      
+      // Apply gang count filter if detected
+      if (faceplateTypeInfo.gangCount) {
+        query = query.eq('number_gang', `${faceplateTypeInfo.gangCount}`);
+        logger.info('[Faceplate Search] Filtering for gang count', { gangCount: faceplateTypeInfo.gangCount });
+      }
+
+      // Build compatibility search conditions FIRST (before color detection)
+      brandValue = aiAnalysis.detectedSpecs?.manufacturer;
+      productLineValue = aiAnalysis.detectedSpecs?.productLine;
+      
+      // Remove any curly braces that might have been added by AI
+      if (productLineValue) {
+        productLineValue = productLineValue.replace(/[{}]/g, '');
+        logger.info('[Faceplate Search] Cleaned product line value', { 
+          original: aiAnalysis.detectedSpecs?.productLine,
+          cleaned: productLineValue 
+        });
+      }
+
+      // Color filter - use enhanced detection or AI analysis (AFTER brand/productLine are set)
+      colorValue = detectColor(searchTerm) || aiAnalysis.detectedSpecs?.color;
+      if (colorValue) {
+        logger.info('[Faceplate Search] Color detected', { color: colorValue });
+        // If we already have brand/product line filters, we'll need to post-filter color
+        // to ensure proper AND logic
+        if (brandValue || productLineValue) {
+          postFilterColor = colorValue;
+          needsPostFiltering = true;
+          logger.info('[Faceplate Search] Will apply color filter in post-processing', { color: colorValue });
+        } else {
+          // No other filters, can apply color filter directly
+          query = query.ilike('color', `%${colorValue}%`);
+        }
+      }
+      
+      if (brandValue || productLineValue) {
+        logger.info('[Faceplate Search] Applying compatibility filters', { 
+          brand: brandValue, 
+          productLine: productLineValue 
+        });
+        
+        // IMPORTANT: For compatibility, we need to ensure AND logic between brand and product line
+        if (brandValue && productLineValue) {
+          // Both brand AND product line must match
+          // Since Supabase doesn't easily support complex AND/OR combinations,
+          // we'll filter by brand in the query and product line in post-processing
+          needsPostFiltering = true;
+          postFilterBrand = brandValue;
+          postFilterProductLines = productLineValue.split(',').map(pl => pl.trim()).filter(pl => pl);
+          
+          logger.info('[Faceplate Search] Will enforce brand AND product line match', { 
+            brand: brandValue,
+            productLines: postFilterProductLines
+          });
+          
+          // First filter by brand in the query
+          query = query.or(`brand.ilike.%${brandValue}%,brand_normalized.ilike.%${brandValue}%`);
+          
+        } else if (brandValue) {
+          // Just brand filter
+          logger.info('[Faceplate Search] Searching for brand match only', { brand: brandValue });
+          query = query.or(`brand.ilike.%${brandValue}%,brand_normalized.ilike.%${brandValue}%`);
+        } else if (productLineValue) {
+          // Just product line filter
+          const productLines = productLineValue.split(',').map(pl => pl.trim()).filter(pl => pl);
+          logger.info('[Faceplate Search] Searching for product line match only', { productLines });
+          
+          if (productLines.length > 0) {
+            const plConditions = productLines.map(pl => `product_line.ilike.%${pl}%`).join(',');
+            query = query.or(plConditions);
+          }
+        }
+      }
+    }
+    
+    // Add general text search if not a part number - search ALL fields
+    if (!isPartNumber) {
+      searchConditions.push(`short_description.ilike.%${searchTerm}%`);
+      searchConditions.push(`common_terms.ilike.%${searchTerm}%`);
+      searchConditions.push(`product_line.ilike.%${searchTerm}%`);
+      searchConditions.push(`compatible_jacks.ilike.%${searchTerm}%`);
+      searchConditions.push(`type.ilike.%${searchTerm}%`);
+      searchConditions.push(`possible_cross.ilike.%${searchTerm}%`);
+      
+      // Handle common faceplate-specific misspellings and abbreviations
+      const faceplateAbbreviations: { [key: string]: string[] } = {
+        'fp': ['faceplate', 'face plate'],
+        'f/p': ['faceplate', 'face plate'],
+        'wallplate': ['wall plate', 'faceplate'],
+        'wall-plate': ['wall plate', 'faceplate'],
+        'coverplate': ['cover plate', 'faceplate'],
+        'cover-plate': ['cover plate', 'faceplate'],
+        'dataplate': ['data plate', 'faceplate'],
+        'data-plate': ['data plate', 'faceplate'],
+        'keystone': ['keystone', 'modular'],
+        'kyst': ['keystone'],
+        'kystone': ['keystone'],
+        'keystne': ['keystone'],
+        'gang': ['gang', 'position'],
+        'gng': ['gang'],
+        'port': ['port', 'position', 'opening'],
+        'prt': ['port'],
+        'ss': ['stainless steel', 'stainless'],
+        's/s': ['stainless steel', 'stainless'],
+        'al': ['almond'],
+        'iv': ['ivory'],
+        'wh': ['white'],
+        'blk': ['black'],
+        'br': ['brown'],
+        'gy': ['gray', 'grey']
+      };
+      
+      // Check if any abbreviations are in the search term
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      for (const [abbr, expansions] of Object.entries(faceplateAbbreviations)) {
+        if (lowerSearchTerm.includes(abbr)) {
+          expansions.forEach(expansion => {
+            searchConditions.push(`short_description.ilike.%${expansion}%`);
+            searchConditions.push(`common_terms.ilike.%${expansion}%`);
+            searchConditions.push(`type.ilike.%${expansion}%`);
+            searchConditions.push(`color.ilike.%${expansion}%`);
+          });
+        }
+      }
+      
+      // Also search for individual words across ALL fields
+      const words = searchTerm.split(' ').filter(w => w.length > 1); // Changed from > 2 to > 1 to catch "smb"
+      words.forEach(word => {
+        if (!['the', 'and', 'for', 'with', 'need', 'i'].includes(word.toLowerCase())) {
+          searchConditions.push(`short_description.ilike.%${word}%`);
+          searchConditions.push(`common_terms.ilike.%${word}%`);
+          searchConditions.push(`product_line.ilike.%${word}%`);
+          searchConditions.push(`brand.ilike.%${word}%`);
+          searchConditions.push(`color.ilike.%${word}%`);
+          searchConditions.push(`type.ilike.%${word}%`);
+          searchConditions.push(`compatible_jacks.ilike.%${word}%`);
+        }
+      });
+      
+      // Special handling for SMB searches - add extra conditions
+      if (searchingForSurfaceMount) {
+        // Add specific SMB search terms to common fields
+        searchConditions.push(`type.ilike.%surface%mount%`);
+        searchConditions.push(`type.ilike.%SMB%`);
+        searchConditions.push(`type.ilike.%biscuit%`); // Some call them biscuit boxes
+      }
+    }
+    
+    // Apply search conditions based on the search type
+    if (searchingForSurfaceMount && smbSpecificConditions.length > 0) {
+      // For SMB searches, apply SMB conditions
+      if (!brandValue && !productLineValue) {
+        // No compatibility filters - apply SMB conditions directly
+        query = query.or(smbSpecificConditions.join(','));
+        logger.info('[Faceplate Search] Applying SMB conditions directly (no compatibility filters)');
+      } else {
+        // We have compatibility filters - need to handle this specially
+        // Mark that we need to filter for SMB in post-processing
+        needsPostFiltering = true;
+        logger.info('[Faceplate Search] SMB search with compatibility filters - will filter for SMB in post-processing', {
+          brand: brandValue,
+          productLine: productLineValue
+        });
+      }
+    } else if (searchConditions.length > 0 && !brandValue && !productLineValue) {
+      // Regular search without compatibility filters
+      query = query.or(searchConditions.join(','));
+    } else if (!brandValue && !productLineValue && !searchingForSurfaceMount && searchConditions.length === 0) {
+      // No conditions at all - use text search
+      query = query.textSearch('search_vector', searchTerm);
+    }
+    // If we have brand/product line filters, they've already been applied above
+
+    // Log the final query for debugging
+    logger.info('[Faceplate Search] Query conditions', { 
+      searchConditions: searchConditions.length,
+      hasPortFilter: !!portsMatch,
+      hasSurfaceMountFilter: searchingForSurfaceMount,
+      hasColorFilter: !!colorValue,
+      colorValue: colorValue,
+      hasBrandFilter: !!brandValue,
+      hasProductLineFilter: !!productLineValue,
+      hasKeystoneFilter: faceplateTypeInfo.isKeystone,
+      hasGangFilter: !!faceplateTypeInfo.gangCount,
+      gangCount: faceplateTypeInfo.gangCount,
+      willPostFilter: needsPostFiltering,
+      brandValue: brandValue,
+      productLineValue: productLineValue
+    });
+
+    // Execute query
+    const { data, error } = await query.limit(100);
+
+    if (error) {
+      logger.error('[Faceplate Search] Database error', { error });
+      throw error;
+    }
+
+    let faceplates = data || [];
+    
+    // Apply post-query filtering for complex AND conditions
+    if (needsPostFiltering && faceplates.length > 0) {
+      const beforeCount = faceplates.length;
+      logger.info('[Faceplate Search] Applying post-query filters', {
+        beforeCount: beforeCount,
+        hasProductLineFilter: postFilterProductLines.length > 0,
+        hasColorFilter: !!postFilterColor,
+        isSearchingForSMB: searchingForSurfaceMount
+      });
+      
+      // Apply product line filter
+      if (postFilterProductLines.length > 0) {
+        faceplates = faceplates.filter((faceplate: any) => {
+          if (!faceplate.product_line) return false;
+          
+          // Normalize the faceplate's product line for comparison
+          const faceplateProductLine = faceplate.product_line.toLowerCase().replace(/\s+/g, '').trim();
+          
+          // Check if the faceplate's product line matches any of the required product lines
+          return postFilterProductLines.some(requiredPL => {
+            // Normalize the required product line for comparison
+            const normalizedRequired = requiredPL.toLowerCase().replace(/\s+/g, '').trim();
+            
+            // Check for exact match or containment
+            return faceplateProductLine === normalizedRequired || 
+                   faceplateProductLine.includes(normalizedRequired) ||
+                   normalizedRequired.includes(faceplateProductLine);
+          });
+        });
+      }
+      
+      // Apply color filter
+      if (postFilterColor) {
+        faceplates = faceplates.filter((faceplate: any) => {
+          if (!faceplate.color) return false;
+          
+          const faceplateColor = faceplate.color.toLowerCase();
+          const targetColor = postFilterColor!.toLowerCase();
+          
+          // Special handling for stainless steel
+          if (targetColor === 'stainless steel') {
+            return faceplateColor.includes('stainless') || 
+                   faceplateColor.includes('steel') ||
+                   faceplateColor.includes('chrome') ||
+                   faceplateColor.includes('metallic') ||
+                   faceplateColor.includes('silver') ||
+                   faceplateColor.includes('nickel') ||
+                   faceplateColor.includes('brushed') ||
+                   faceplateColor.includes('satin');
+          }
+          
+          // Regular color matching
+          return faceplateColor.includes(targetColor);
+        });
+      }
+      
+      // Additional SMB filtering if we're searching for SMB with compatibility filters
+      if (searchingForSurfaceMount && (brandValue || productLineValue)) {
+        faceplates = faceplates.filter((faceplate: any) => {
+          // Check if this is actually a surface mount box
+          const productType = (faceplate.product_type || '').toLowerCase();
+          const description = (faceplate.short_description || '').toLowerCase();
+          const commonTerms = (faceplate.common_terms || '').toLowerCase();
+          const type = (faceplate.type || '').toLowerCase();
+          
+          return productType.includes('surface') || productType.includes('mount') || productType.includes('smb') ||
+                 description.includes('surface mount') || description.includes('smb') ||
+                 commonTerms.includes('surface mount') || commonTerms.includes('smb') ||
+                 type.includes('surface') || type.includes('mount') || type.includes('smb');
+        });
+        
+        logger.info('[Faceplate Search] Filtered for SMB products', {
+          afterSMBFilter: faceplates.length
+        });
+      }
+      
+      logger.info('[Faceplate Search] Post-query filter results', {
+        afterCount: faceplates.length,
+        filtered: beforeCount - faceplates.length
+      });
+    }
+    
+    // Log result summary for debugging
+    if (faceplates.length > 0) {
+      const brands = [...new Set(faceplates.map((f: any) => f.brand))].filter(Boolean);
+      const productLines = [...new Set(faceplates.map((f: any) => f.product_line))].filter(Boolean);
+      const productTypes = [...new Set(faceplates.map((f: any) => f.product_type))].filter(Boolean);
+      
+      logger.info('[Faceplate Search] Found results', { 
+        count: faceplates.length,
+        brands: brands.join(', '),
+        productLines: productLines.join(', '),
+        productTypes: productTypes.join(', ')
+      });
+    } else {
+      logger.info('[Faceplate Search] Found results', { count: 0 });
+    }
+
+    // If no results with compatibility filters, try a broader search
+    if (faceplates.length === 0 && (brandValue || productLineValue)) {
+      logger.info('[Faceplate Search] No results with compatibility filters, trying broader search', {
+        hadBrandFilter: !!brandValue,
+        hadProductLineFilter: !!productLineValue,
+        wasPostFiltered: needsPostFiltering
+      });
+      
+      // Reset query
+      query = supabase
+        .from('faceplates')
+        .select('*')
+        .eq('is_active', true);
+      
+      // Apply only essential filters
+      if (searchingForSurfaceMount) {
+        // Build comprehensive SMB search conditions
+        const smbTerms = ['surface mount box', 'SMB', 'surface mount', 'S.M.B', 'surface box', 'mounting box'];
+        const smbConditions: string[] = [];
+        
+        smbTerms.forEach(term => {
+          smbConditions.push(`product_type.ilike.%${term}%`);
+          smbConditions.push(`short_description.ilike.%${term}%`);
+          smbConditions.push(`common_terms.ilike.%${term}%`);
+          smbConditions.push(`type.ilike.%${term}%`);
+        });
+        
+        if (smbConditions.length > 0) {
+          query = query.or(smbConditions.join(','));
+        }
+      }
+      
+      if (portsMatch && portsMatch[1]) {
+        const numberOfPorts = parseInt(portsMatch[1]);
+        if (!isNaN(numberOfPorts)) {
+          query = query.eq('number_of_ports', numberOfPorts);
+        }
+      }
+      
+      // Use text search for the term
+      query = query.textSearch('search_vector', searchTerm);
+      
+      const fallbackResult = await query.limit(100);
+      if (!fallbackResult.error && fallbackResult.data) {
+        faceplates = fallbackResult.data;
+        
+        // Log fallback result summary
+        if (faceplates.length > 0) {
+          const brands = [...new Set(faceplates.map((f: any) => f.brand))].filter(Boolean);
+          const productLines = [...new Set(faceplates.map((f: any) => f.product_line))].filter(Boolean);
+          const productTypes = [...new Set(faceplates.map((f: any) => f.product_type))].filter(Boolean);
+          
+          logger.info('[Faceplate Search] Fallback search found results', { 
+            count: faceplates.length,
+            brands: brands.join(', '),
+            productLines: productLines.join(', '),
+            productTypes: productTypes.join(', ')
+          });
+        } else {
+          logger.info('[Faceplate Search] Fallback search found results', { count: 0 });
+        }
+      }
+    }
+
+    // Transform to Product format
+    const products: Product[] = faceplates.map((faceplate: any) => ({
+      id: `faceplate-${faceplate.id}`,
+      partNumber: faceplate.part_number,
+      brand: faceplate.brand,
+      description: faceplate.short_description || '',
+      price: Math.random() * 25 + 5, // Random price between 5-30
+      stockLocal: Math.floor(Math.random() * 100),
+      stockDistribution: 500,
+      leadTime: 'Ships Today',
+      category: faceplate.product_type || 'Faceplate',
+      // Additional properties
+      productLine: faceplate.product_line || undefined,
+      productType: faceplate.product_type || 'Faceplate',
+      color: faceplate.color || undefined,
+      numberOfPorts: faceplate.number_of_ports || undefined,
+      numberGang: faceplate.number_gang || undefined,
+      type: faceplate.type || undefined,
+      compatibleJacks: faceplate.compatible_jacks || undefined,
+      // Search properties
+      searchRelevance: 1.0,
+      tableName: 'faceplates',
+      stockStatus: 'in_stock' as const,
+      stockColor: 'green' as const,
+      stockMessage: 'In stock - Ships today'
+    }));
+
+    const endTime = performance.now();
+    const searchTime = Math.round(endTime - startTime);
+
+    return { 
+      products, 
+      searchStrategy: 'faceplate_search',
+      totalFound: products.length,
+      searchTime
+    };
+  } catch (error) {
+    logger.error('[Faceplate Search] Error', { error });
+    throw error;
+  }
+}
+

@@ -669,10 +669,65 @@ const PlecticAI: React.FC = () => {
     try {
       const endTimer = logger.startTimer('Search execution')
 
+      // Check if search is for faceplates, surface mount boxes, or jack modules
+      const searchLower = originalInput.toLowerCase()
+      const isSearchingForCompatibleProducts = 
+        searchLower.includes('faceplate') || 
+        searchLower.includes('face plate') || 
+        searchLower.includes('wall plate') ||
+        searchLower.includes('surface mount') ||
+        searchLower.includes('surface box') ||
+        searchLower.includes('mounting box') ||
+        searchLower.includes('jack') ||
+        searchLower.includes('keystone') ||
+        searchLower.includes('mini-com') ||
+        searchLower.includes('minicom')
+
+      // Prepare shopping list context
+      let shoppingListContext = undefined
+      if (isSearchingForCompatibleProducts && productList.length > 0) {
+        // Extract category cables from shopping list
+        const categoryCables = productList
+          .filter(item => item.category === 'Ethernet Cable' || item.tableName === 'category_cables')
+          .map(item => ({
+            partNumber: item.partNumber,
+            categoryRating: item.categoryRating || '',
+            brand: item.brand,
+            description: item.description
+          }))
+
+        // Extract jack modules from shopping list
+        const jackModules = productList
+          .filter(item => item.category === 'Jack Module' || item.tableName === 'jack_modules' || item.productType === 'Jack Module')
+          .map(item => ({
+            partNumber: item.partNumber,
+            categoryRating: item.categoryRating || '',
+            brand: item.brand,
+            productLine: item.productLine || '',
+            compatibleFaceplates: item.compatibleFaceplates || '',
+            description: item.description
+          }))
+
+        if (categoryCables.length > 0 || jackModules.length > 0) {
+          shoppingListContext = {
+            hasItems: true,
+            categoryCables,
+            jackModules
+          }
+          
+          logger.info('Including shopping list context for compatibility', {
+            searchType: isSearchingForCompatibleProducts ? 'compatible product' : 'standard',
+            categoryCablesCount: categoryCables.length,
+            jackModulesCount: jackModules.length
+          }, LogCategory.SEARCH)
+        }
+      }
+
       const searchResult = await searchProducts({
         query: originalInput,
         limit: 500, // Increased to show more products - users can filter
-        includeAI: true
+        includeAI: true,
+        shoppingListContext
       })
 
       const searchDuration = endTimer()

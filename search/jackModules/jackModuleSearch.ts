@@ -211,12 +211,15 @@ const searchByPartNumber = async (
     .eq('is_active', true)
     .limit(limit)
 
-  // Build search conditions for part number
+  // Build search conditions for part number - also check other fields
   const searchConditions = [
     `part_number.ilike.${searchTerm}%`,      // Starts with original
     `part_number.ilike.${normalized}%`,      // Starts with normalized
     `part_number.ilike.%${searchTerm}%`,    // Contains original
-    `part_number.ilike.%${normalized}%`     // Contains normalized
+    `part_number.ilike.%${normalized}%`,     // Contains normalized
+    `short_description.ilike.%${searchTerm}%`, // Check description
+    `common_terms.ilike.%${searchTerm}%`,      // Check common terms
+    `possible_cross.ilike.%${searchTerm}%`     // Check cross references
   ]
 
   query = query.or(searchConditions.join(','))
@@ -277,38 +280,204 @@ const searchByMultiCriteria = async (
   if (detectedModuleType) {
     // For category modules (Cat6A, Cat6, Cat5e)
     if (detectedModuleType.includes('Category')) {
-      searchConditions.push(`category_rating.ilike.%${detectedModuleType}%`)
-      
-      // Also search in descriptions for the category
-      const shortCategory = detectedModuleType.replace('Category ', 'Cat')
-      searchConditions.push(`short_description.ilike.%${shortCategory}%`)
-      searchConditions.push(`short_description.ilike.%${detectedModuleType}%`)
-      searchConditions.push(`common_terms.ilike.%${shortCategory}%`)
+      // For exact category matching, we need to be more precise
+      // to avoid Cat6 matching Cat6A products or Cat5e matching Cat6
+      if (detectedModuleType === 'Category 5e') {
+        // Build a specific query for ONLY Category 5e products
+        let cat5eQuery = supabase
+          .from('jack_modules')
+          .select('*')
+          .eq('is_active', true)
+          .limit(1000)
+        
+        // Apply brand filter if detected
+        if (detectedBrand) {
+          cat5eQuery = cat5eQuery.ilike('brand', `%${detectedBrand}%`)
+        }
+        
+        // Apply product line filter if detected  
+        if (detectedProductLine) {
+          cat5eQuery = cat5eQuery.ilike('product_line', `%${detectedProductLine}%`)
+        }
+        
+        // Apply color filter if detected
+        if (detectedColor) {
+          cat5eQuery = cat5eQuery.ilike('color', `%${detectedColor}%`)
+        }
+        
+        // Apply shielding filter if explicitly detected
+        if (detectedShielding) {
+          cat5eQuery = cat5eQuery.eq('shielding_type', detectedShielding.toUpperCase())
+        }
+        
+        // Use specific OR conditions to get ONLY Category 5e
+        cat5eQuery = cat5eQuery.or(
+          `category_rating.eq.Category 5e,` +
+          `category_rating.eq.Category 5e   ,` + // Note: some entries have spaces
+          `category_rating.ilike.Category 5e,` +
+          `category_rating.ilike.Cat5e,` +
+          `category_rating.ilike.Cat 5e`
+        )
+        
+        // Execute this specific query and return early
+        const { data: cat5eData, error: cat5eError } = await cat5eQuery
+        
+        if (!cat5eError && cat5eData) {
+          // No need to filter out other categories since we only matched Cat5e
+          console.log(`🎯 Category 5e specific search found: ${cat5eData.length} products`)
+          return formatJackModuleResults(cat5eData, 'multi_criteria_search')
+        }
+      } else if (detectedModuleType === 'Category 6') {
+        // Build a specific query to exclude Cat6A products
+        let cat6Query = supabase
+          .from('jack_modules')
+          .select('*')
+          .eq('is_active', true)
+          .limit(1000)
+        
+        // Apply brand filter if detected
+        if (detectedBrand) {
+          cat6Query = cat6Query.ilike('brand', `%${detectedBrand}%`)
+        }
+        
+        // Apply product line filter if detected  
+        if (detectedProductLine) {
+          cat6Query = cat6Query.ilike('product_line', `%${detectedProductLine}%`)
+        }
+        
+        // Apply color filter if detected
+        if (detectedColor) {
+          cat6Query = cat6Query.ilike('color', `%${detectedColor}%`)
+        }
+        
+        // Apply shielding filter if explicitly detected
+        if (detectedShielding) {
+          cat6Query = cat6Query.eq('shielding_type', detectedShielding.toUpperCase())
+        }
+        
+        // Use specific OR conditions to get ONLY Category 6 (not 6A)
+        // Include ALL available fields for comprehensive search
+        cat6Query = cat6Query.or(
+          `category_rating.eq.Category 6,` +
+          `category_rating.eq.Category 6 ,` +
+          `category_rating.ilike.Category 6,` +
+          `short_description.ilike.%Category 6%,` +
+          `short_description.ilike.%Cat6%,` +
+          `common_terms.ilike.%Category 6%,` +
+          `common_terms.ilike.%Cat6%,` +
+          `product_type.ilike.%Cat6%,` +
+          `possible_cross.ilike.%Cat6%`
+        )
+        
+        // Execute this specific query and return early
+        const { data: cat6Data, error: cat6Error } = await cat6Query
+        
+        if (!cat6Error && cat6Data) {
+          // Filter out any Cat6A that might have slipped through
+          const filteredData = cat6Data.filter((item: any) => {
+            const rating = item.category_rating?.toLowerCase() || ''
+            const desc = item.short_description?.toLowerCase() || ''
+            const commonTerms = item.common_terms?.toLowerCase() || ''
+            const productType = item.product_type?.toLowerCase() || ''
+            // Exclude if it contains '6a' or '6A' in any field
+            return !rating.includes('6a') && !desc.includes('cat6a') && !desc.includes('cat 6a') &&
+                   !commonTerms.includes('6a') && !productType.includes('6a')
+          })
+          
+          const products = formatJackModuleResults(filteredData, 'multi_criteria_search')
+          console.log(`🎯 Category 6 specific search found: ${products.length} products (excluded Cat6A)`)
+          return products
+        }
+      } else if (detectedModuleType === 'Category 6A') {
+        // Build a specific query for ONLY Category 6A products
+        let cat6aQuery = supabase
+          .from('jack_modules')
+          .select('*')
+          .eq('is_active', true)
+          .limit(1000)
+        
+        // Apply brand filter if detected
+        if (detectedBrand) {
+          cat6aQuery = cat6aQuery.ilike('brand', `%${detectedBrand}%`)
+        }
+        
+        // Apply product line filter if detected  
+        if (detectedProductLine) {
+          cat6aQuery = cat6aQuery.ilike('product_line', `%${detectedProductLine}%`)
+        }
+        
+        // Apply color filter if detected
+        if (detectedColor) {
+          cat6aQuery = cat6aQuery.ilike('color', `%${detectedColor}%`)
+        }
+        
+        // Apply shielding filter if explicitly detected
+        if (detectedShielding) {
+          cat6aQuery = cat6aQuery.eq('shielding_type', detectedShielding.toUpperCase())
+        }
+        
+        // Use specific OR conditions to get ONLY Category 6A
+        cat6aQuery = cat6aQuery.or(
+          `category_rating.eq.Category 6A,` +
+          `category_rating.ilike.Category 6A,` +
+          `category_rating.ilike.Cat6A,` +
+          `category_rating.ilike.Cat 6A`
+        )
+        
+        // Execute this specific query and return early
+        const { data: cat6aData, error: cat6aError } = await cat6aQuery
+        
+        if (!cat6aError && cat6aData) {
+          console.log(`🎯 Category 6A specific search found: ${cat6aData.length} products`)
+          return formatJackModuleResults(cat6aData, 'multi_criteria_search')
+        }
+      } else {
+        // For other categories, use generic approach - search ALL fields
+        searchConditions.push(`category_rating.ilike.%${detectedModuleType}%`)
+        const shortCategory = detectedModuleType.replace('Category ', 'Cat')
+        searchConditions.push(`short_description.ilike.%${shortCategory}%`)
+        searchConditions.push(`short_description.ilike.%${detectedModuleType}%`)
+        searchConditions.push(`common_terms.ilike.%${shortCategory}%`)
+        searchConditions.push(`common_terms.ilike.%${detectedModuleType}%`)
+        searchConditions.push(`product_type.ilike.%${shortCategory}%`)
+        searchConditions.push(`possible_cross.ilike.%${shortCategory}%`)
+        searchConditions.push(`compatible_faceplates.ilike.%${shortCategory}%`)
+      }
     } else {
-      // For special modules (Blank, F-Type Coax, HDMI Coup)
+      // For special modules (Blank, F-Type Coax, HDMI Coup) - search ALL fields
       searchConditions.push(`category_rating.ilike.%${detectedModuleType}%`)
       searchConditions.push(`short_description.ilike.%${detectedModuleType}%`)
+      searchConditions.push(`product_type.ilike.%${detectedModuleType}%`)
+      searchConditions.push(`common_terms.ilike.%${detectedModuleType}%`)
       
-      // Add specific terms for each type
+      // Add specific terms for each type - search in ALL fields
       const specialTerms = SPECIAL_MODULE_TYPES[detectedModuleType] || []
       specialTerms.forEach(term => {
         searchConditions.push(`short_description.ilike.%${term}%`)
         searchConditions.push(`common_terms.ilike.%${term}%`)
+        searchConditions.push(`product_type.ilike.%${term}%`)
+        searchConditions.push(`possible_cross.ilike.%${term}%`)
       })
     }
-    console.log(`🎯 Using ${detectedModuleType} search terms`)
+    console.log(`🎯 Using ${detectedModuleType} search terms across ALL fields`)
   } else {
-    // General jack module search
+    // General jack module search - comprehensive search across ALL fields
     searchConditions.push(`product_type.ilike.%jack%`)
     searchConditions.push(`short_description.ilike.%jack%`)
     searchConditions.push(`short_description.ilike.%module%`)
+    searchConditions.push(`common_terms.ilike.%jack%`)
     searchConditions.push(`part_number.ilike.%${searchTerm}%`)
+    searchConditions.push(`short_description.ilike.%${searchTerm}%`)
+    searchConditions.push(`common_terms.ilike.%${searchTerm}%`)
+    searchConditions.push(`product_line.ilike.%${searchTerm}%`)
+    searchConditions.push(`possible_cross.ilike.%${searchTerm}%`)
   }
 
-  // Color search - using 'color' field now, not 'jacket_color'
+  // Color search - using 'color' field now, not 'jacket_color' - search ALL relevant fields
   if (detectedColor) {
     searchConditions.push(`color.ilike.%${detectedColor}%`)
     searchConditions.push(`short_description.ilike.%${detectedColor}%`)
+    searchConditions.push(`common_terms.ilike.%${detectedColor}%`)
   }
 
   if (searchConditions.length > 0) {
@@ -401,59 +570,114 @@ const searchByCategoryRating = async (
  */
 const searchByFallback = async (
   searchTerm: string,
-  limit: number
+  limit: number,
+  aiAnalysis?: AISearchAnalysis | null
 ): Promise<Product[]> => {
   console.log(`🔍 STRATEGY 4: Fallback Search: "${searchTerm}"`)
+  console.log(`🤖 AI Analysis available:`, !!aiAnalysis)
 
-  // First, get a diverse sample by fetching products from different brands/product lines
-  const diverseQuery = supabase
+  // Start with base query
+  let query = supabase
     .from('jack_modules')
     .select('*')
     .eq('is_active', true)
     .order('brand', { ascending: true })
     .order('product_line', { ascending: true })
     .order('category_rating', { ascending: true })
-    .limit(1000) // Get many products for maximum diversity
+    .limit(1000) // Get many products for initial filtering
+
+  // Apply AI detected filters if available
+  if (aiAnalysis?.detectedSpecs) {
+    // Brand filter from AI
+    if (aiAnalysis.detectedSpecs.manufacturer) {
+      query = query.ilike('brand', `%${aiAnalysis.detectedSpecs.manufacturer}%`)
+      console.log(`🏢 Applying AI brand filter in fallback: ${aiAnalysis.detectedSpecs.manufacturer}`)
+    }
+    
+    // Category filter from AI
+    if (aiAnalysis.detectedSpecs.categoryRating) {
+      const categoryMap: Record<string, string> = {
+        'CAT6A': 'Category 6A',
+        'CAT6': 'Category 6',
+        'CAT5E': 'Category 5e'
+      }
+      const mappedCategory = categoryMap[aiAnalysis.detectedSpecs.categoryRating]
+      if (mappedCategory) {
+        // For Category 6, exclude Cat6A
+        if (mappedCategory === 'Category 6') {
+          query = query.ilike('category_rating', '%Category 6%')
+          console.log(`📊 Applying AI category filter in fallback: ${mappedCategory} (will filter Cat6A in post-processing)`)
+        } else {
+          query = query.ilike('category_rating', `%${mappedCategory}%`)
+          console.log(`📊 Applying AI category filter in fallback: ${mappedCategory}`)
+        }
+      }
+    }
+  }
 
   const searchConditions: string[] = []
 
-  // Extract meaningful words (skip common words)
+  // Extract meaningful words (skip common words and typos)
   const skipWords = ['i', 'need', 'want', 'looking', 'for', 'the', 'a', 'an']
-  const words = searchTerm.split(' ').filter(w =>
-    w.length > 1 && !skipWords.includes(w.toLowerCase())
-  )
+  const words = searchTerm.split(' ').filter(w => {
+    if (w.length <= 1 || skipWords.includes(w.toLowerCase())) return false
+    // Skip potential typos of 'cat' (like 'cabt')
+    if (w.toLowerCase().match(/^ca[bt]t?\d*$/i)) {
+      console.log(`🔍 Skipping potential typo: ${w}`)
+      return false
+    }
+    return true
+  })
 
   console.log(`🔍 Searching for words:`, words)
 
-  // Search for jack-related terms broadly
+  // Search for jack-related terms broadly across ALL fields
   searchConditions.push(`product_type.ilike.%jack%`)
   searchConditions.push(`short_description.ilike.%jack%`)
   searchConditions.push(`common_terms.ilike.%jack%`)
+  searchConditions.push(`category_rating.ilike.%jack%`)
+  searchConditions.push(`possible_cross.ilike.%jack%`)
 
-  // Also search for each meaningful word
+  // Also search for each meaningful word across ALL fields
   words.forEach(word => {
     searchConditions.push(`short_description.ilike.%${word}%`)
     searchConditions.push(`common_terms.ilike.%${word}%`)
     searchConditions.push(`part_number.ilike.%${word}%`)
-    searchConditions.push(`category_rating.ilike.%${word}%`)
+    searchConditions.push(`product_line.ilike.%${word}%`)
+    searchConditions.push(`color.ilike.%${word}%`)
+    searchConditions.push(`possible_cross.ilike.%${word}%`)
+    searchConditions.push(`compatible_faceplates.ilike.%${word}%`)
+    searchConditions.push(`upc_number.ilike.%${word}%`)
   })
 
-  // Add brand search
-  searchConditions.push(`brand.ilike.%${searchTerm}%`)
-  searchConditions.push(`product_line.ilike.%${searchTerm}%`)
-
-  const query = diverseQuery.or(searchConditions.join(','))
+  // Only add OR conditions if we have some
+  if (searchConditions.length > 0) {
+    query = query.or(searchConditions.join(','))
+  }
 
   const { data: resultData, error: resultError } = await query as { data: any[] | null, error: any }
   console.log(`🔍 Fallback search query result:`, resultError || `${resultData?.length} items`)
 
   if (!resultError && resultData && resultData.length > 0) {
+    // Filter results based on AI analysis if available
+    let filteredResults = resultData
+    
+    // For Category 6, exclude Cat6A products
+    if (aiAnalysis?.detectedSpecs?.categoryRating === 'CAT6') {
+      filteredResults = filteredResults.filter(item => {
+        const category = item.category_rating?.toLowerCase() || ''
+        const desc = item.short_description?.toLowerCase() || ''
+        return !category.includes('6a') && !desc.includes('cat6a') && !desc.includes('cat 6a')
+      })
+      console.log(`🎯 Filtered Cat6 results: ${resultData.length} → ${filteredResults.length}`)
+    }
+    
     // Get unique combinations of brand + product_line to ensure diversity
     const seenCombos = new Set<string>()
     const diverseProducts: any[] = []
     
     // First pass: get one product from each unique brand/product_line combo
-    for (const item of resultData) {
+    for (const item of filteredResults) {
       const combo = `${item.brand || 'Unknown'}_${item.product_line || 'None'}`
       if (!seenCombos.has(combo) && diverseProducts.length < limit) {
         seenCombos.add(combo)
@@ -462,7 +686,7 @@ const searchByFallback = async (
     }
     
     // Second pass: fill remaining slots with other products
-    for (const item of resultData) {
+    for (const item of filteredResults) {
       if (diverseProducts.length >= limit) break
       if (!diverseProducts.includes(item)) {
         diverseProducts.push(item)
@@ -582,8 +806,21 @@ export const searchJackModules = async (
     // STRATEGY 4: Fallback Search
     if (products.length === 0) {
       console.log(`🚀 STRATEGY 4: Fallback Search`)
-      products = await searchByFallback(searchTerm, limit)
+      products = await searchByFallback(searchTerm, limit, aiAnalysis)
       searchStrategy = 'fallback_search'
+      
+      // Post-process to filter out Cat6A when searching for Cat6
+      if (aiAnalysis?.detectedSpecs?.categoryRating === 'CAT6') {
+        const beforeCount = products.length
+        products = products.filter(p => {
+          const category = p.categoryRating?.toLowerCase() || ''
+          const desc = p.description?.toLowerCase() || ''
+          return !category.includes('6a') && !desc.includes('cat6a') && !desc.includes('cat 6a')
+        })
+        if (beforeCount !== products.length) {
+          console.log(`🎯 Filtered out ${beforeCount - products.length} Cat6A products from Cat6 search`)
+        }
+      }
     }
 
     const endTime = performance.now()

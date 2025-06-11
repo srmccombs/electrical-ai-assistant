@@ -27,10 +27,34 @@ let cacheStats = {
  */
 export const getCachedAIAnalysis = async (
   query: string,
-  getAIAnalysisFn: (query: string) => Promise<any>
+  getAIAnalysisFn: (query: string) => Promise<any>,
+  shoppingListContext?: any
 ): Promise<any> => {
-  // Normalize the cache key
-  const cacheKey = query.toLowerCase().trim()
+  // Create cache key that includes shopping list context
+  let cacheKey = query.toLowerCase().trim()
+  
+  // If there's shopping list context, include key information in the cache key
+  if (shoppingListContext?.hasItems) {
+    const contextParts: string[] = []
+    
+    // Include jack module brands and product lines
+    if (shoppingListContext.jackModules?.length > 0) {
+      const brands = [...new Set(shoppingListContext.jackModules.map((j: any) => j.brand))].sort()
+      const productLines = [...new Set(shoppingListContext.jackModules.map((j: any) => j.productLine || j.compatibleFaceplates))].filter(Boolean).sort()
+      contextParts.push(`jacks:${brands.join(',')};${productLines.join(',')}`)
+    }
+    
+    // Include cable categories and brands
+    if (shoppingListContext.categoryCables?.length > 0) {
+      const categories = [...new Set(shoppingListContext.categoryCables.map((c: any) => c.categoryRating))].filter(Boolean).sort()
+      const brands = [...new Set(shoppingListContext.categoryCables.map((c: any) => c.brand))].sort()
+      contextParts.push(`cables:${categories.join(',')};${brands.join(',')}`)
+    }
+    
+    if (contextParts.length > 0) {
+      cacheKey += `|context:${contextParts.join('|')}`
+    }
+  }
 
   // Check if we have a cached entry
   const cached = AI_CACHE.get(cacheKey)

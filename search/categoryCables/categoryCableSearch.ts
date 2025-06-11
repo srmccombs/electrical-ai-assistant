@@ -284,9 +284,14 @@ const searchByMultiCriteria = async (
     searchConditions.push('short_description.ilike.%category 5e%')
     console.log('🎯 Using comprehensive CAT5E search terms')
   } else {
-    // General search
+    // General search - comprehensive across ALL fields
     searchConditions.push(`part_number.ilike.%${searchTerm}%`)
     searchConditions.push(`short_description.ilike.%${searchTerm}%`)
+    searchConditions.push(`common_terms.ilike.%${searchTerm}%`)
+    searchConditions.push(`product_line.ilike.%${searchTerm}%`)
+    searchConditions.push(`possible_cross.ilike.%${searchTerm}%`)
+    searchConditions.push(`application.ilike.%${searchTerm}%`)
+    searchConditions.push(`upc_number.ilike.%${searchTerm}%`)
   }
 
   if (searchConditions.length > 0) {
@@ -324,15 +329,24 @@ const searchByFallback = async (
 
   const searchConditions: string[] = []
 
-  // Add general search conditions
+  // Add comprehensive search conditions across ALL fields
   searchConditions.push(`short_description.ilike.%${searchTerm}%`)
   searchConditions.push(`product_line.ilike.%${searchTerm}%`)
   searchConditions.push(`part_number.ilike.%${searchTerm}%`)
+  searchConditions.push(`common_terms.ilike.%${searchTerm}%`)
+  searchConditions.push(`possible_cross.ilike.%${searchTerm}%`)
+  searchConditions.push(`application.ilike.%${searchTerm}%`)
+  searchConditions.push(`brand.ilike.%${searchTerm}%`)
+  searchConditions.push(`upc_number.ilike.%${searchTerm}%`)
 
-  // Also search for individual terms
+  // Also search for individual terms across ALL fields
   const terms = searchTerm.split(' ').filter(t => t.length > 2)
   terms.forEach(term => {
     searchConditions.push(`short_description.ilike.%${term}%`)
+    searchConditions.push(`common_terms.ilike.%${term}%`)
+    searchConditions.push(`jacket_color.ilike.%${term}%`)
+    searchConditions.push(`application.ilike.%${term}%`)
+    searchConditions.push(`possible_cross.ilike.%${term}%`)
   })
 
   // Enhanced category matching

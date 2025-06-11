@@ -303,11 +303,32 @@ export const detectQuantity = (searchTerm: string): number | null => {
   return null
 }
 
-// Enhanced color detection
+// Enhanced color detection with stainless steel support
 export const detectColor = (searchTerm: string): string | null => {
-  const colors = ["black", "blue", "brown", "gray", "grey", "green", "orange", "pink", "red", "violet", "white", "yellow"]
   const query = searchTerm.toLowerCase()
-
+  
+  // Check for stainless steel variations first (most specific)
+  const stainlessSteelVariations = [
+    "stainless steel", "stainless-steel", "stainlesssteel",
+    "stainless", "ss", "s.s.", "s/s",
+    "brushed steel", "brushed stainless", "brushed finish",
+    "satin steel", "satin stainless", "satin finish",
+    "polished steel", "polished stainless",
+    "chrome", "chrome finish", "chrome plated",
+    "nickel", "nickel finish", "nickel plated",
+    "metallic", "metal finish", "silver steel"
+  ]
+  
+  for (const variant of stainlessSteelVariations) {
+    if (query.includes(variant)) {
+      console.log(`🎨 DETECTED COLOR: Stainless Steel from variant: "${variant}"`)
+      return "Stainless Steel"
+    }
+  }
+  
+  // Then check for standard colors
+  const colors = ["black", "blue", "brown", "gray", "grey", "green", "orange", "pink", "red", "violet", "white", "yellow", "ivory", "almond"]
+  
   for (const color of colors) {
     if (query.includes(color)) {
       // Normalize gray/grey to gray
@@ -318,6 +339,86 @@ export const detectColor = (searchTerm: string): string | null => {
   }
 
   return null
+}
+
+// NEW: Surface Mount Box detection function
+export const detectSurfaceMountBox = (searchTerm: string): boolean => {
+  const query = searchTerm.toLowerCase()
+  
+  // Comprehensive surface mount box variations
+  const surfaceMountVariations = [
+    // Full terms
+    "surface mount box", "surface mount boxes",
+    "surface mounting box", "surface mounting boxes",
+    "surface-mount box", "surface-mount boxes",
+    "surface box", "surface boxes",
+    
+    // Abbreviated terms - MOST COMMON
+    "smb", "s.m.b.", "s-m-b", "sm.b",
+    "sm box", "sm boxes", "s m b",
+    "smbs", "smb's", "smb box", "smb boxes",
+    
+    // With common modifiers
+    "surface mount outlet box",
+    "surface mount junction box",
+    "surface mount electrical box",
+    "surface mount data box",
+    "surface mount network box",
+    
+    // Alternative phrasings
+    "box for surface mount",
+    "surface type box",
+    "surface style box",
+    "on-wall box", "on wall box",
+    "wall surface box",
+    "biscuit box", "biscuit", // Some electricians call them this
+    
+    // Common misspellings
+    "surfce mount box",
+    "suface mount box",
+    "surfacemount box",
+    "serface mount box",
+    "serfice mount box"
+  ]
+  
+  for (const variant of surfaceMountVariations) {
+    if (query.includes(variant)) {
+      console.log(`📦 DETECTED SURFACE MOUNT BOX from variant: "${variant}"`)
+      return true
+    }
+  }
+  
+  return false
+}
+
+// NEW: Faceplate type detection with common variations and misspellings
+export const detectFaceplateType = (searchTerm: string): { isKeystone?: boolean, gangCount?: number } => {
+  const query = searchTerm.toLowerCase()
+  const result: { isKeystone?: boolean, gangCount?: number } = {}
+  
+  // Keystone variations
+  const keystoneVariations = [
+    "keystone", "key stone", "key-stone",
+    "kyst", "kystone", "keystne", "keyston",
+    "modular", "snap-in", "snap in"
+  ]
+  
+  for (const variant of keystoneVariations) {
+    if (query.includes(variant)) {
+      result.isKeystone = true
+      console.log(`🔑 DETECTED KEYSTONE TYPE from variant: "${variant}"`)
+      break
+    }
+  }
+  
+  // Gang count detection
+  const gangMatch = query.match(/(\d+)\s*(?:gang|gng|position|pos)\b/i)
+  if (gangMatch && gangMatch[1]) {
+    result.gangCount = parseInt(gangMatch[1])
+    console.log(`🔢 DETECTED GANG COUNT: ${result.gangCount}`)
+  }
+  
+  return result
 }
 
 // NEW: Brand detection function - centralized for reuse
