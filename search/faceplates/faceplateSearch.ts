@@ -68,6 +68,22 @@ export async function searchFaceplates(
       searchConditions.push(`possible_cross.ilike.%${cleanedTerm}%`);
     }
     
+    // Always detect color early
+    colorValue = detectColor(searchTerm);
+    if (colorValue) {
+      logger.info('[Faceplate Search] Color detected', { color: colorValue });
+    }
+    
+    // Always check for port count
+    portsMatch = searchTerm.match(/(\d+)\s*port/i);
+    if (portsMatch && portsMatch[1]) {
+      const numberOfPorts = parseInt(portsMatch[1]);
+      if (!isNaN(numberOfPorts)) {
+        query = query.eq('number_of_ports', numberOfPorts);
+        logger.info('[Faceplate Search] Port count detected', { ports: numberOfPorts });
+      }
+    }
+    
     // Apply AI analysis filters
     if (aiAnalysis) {
       // Product type filter (Faceplate or Surface Mount Box)
@@ -84,15 +100,6 @@ export async function searchFaceplates(
       } else {
         // For regular faceplate searches, no specific product type filtering needed
         logger.info('[Faceplate Search] Searching for Faceplates (general search)');
-      }
-
-      // Number of ports filter - extract from search term if present
-      portsMatch = searchTerm.match(/(\d+)\s*port/i);
-      if (portsMatch && portsMatch[1]) {
-        const numberOfPorts = parseInt(portsMatch[1]);
-        if (!isNaN(numberOfPorts)) {
-          query = query.eq('number_of_ports', numberOfPorts);
-        }
       }
 
       // Apply keystone type filter if detected
@@ -122,20 +129,10 @@ export async function searchFaceplates(
         });
       }
 
-      // Color filter - use enhanced detection or AI analysis (AFTER brand/productLine are set)
-      colorValue = detectColor(searchTerm) || aiAnalysis.detectedSpecs?.color;
-      if (colorValue) {
-        logger.info('[Faceplate Search] Color detected', { color: colorValue });
-        // If we already have brand/product line filters, we'll need to post-filter color
-        // to ensure proper AND logic
-        if (brandValue || productLineValue) {
-          postFilterColor = colorValue;
-          needsPostFiltering = true;
-          logger.info('[Faceplate Search] Will apply color filter in post-processing', { color: colorValue });
-        } else {
-          // No other filters, can apply color filter directly
-          query = query.ilike('color', `%${colorValue}%`);
-        }
+      // Use AI-detected color if available and different from text-detected
+      if (aiAnalysis.detectedSpecs?.color && aiAnalysis.detectedSpecs.color !== colorValue) {
+        colorValue = aiAnalysis.detectedSpecs.color;
+        logger.info('[Faceplate Search] Using AI-detected color', { color: colorValue });
       }
       
       if (brandValue || productLineValue) {
@@ -178,77 +175,26 @@ export async function searchFaceplates(
       }
     }
     
-    // Add general text search if not a part number - search ALL fields
-    if (!isPartNumber) {
-      searchConditions.push(`short_description.ilike.%${searchTerm}%`);
-      searchConditions.push(`common_terms.ilike.%${searchTerm}%`);
-      searchConditions.push(`product_line.ilike.%${searchTerm}%`);
-      searchConditions.push(`compatible_jacks.ilike.%${searchTerm}%`);
-      searchConditions.push(`type.ilike.%${searchTerm}%`);
-      searchConditions.push(`possible_cross.ilike.%${searchTerm}%`);
+    // Apply color filter if detected and no compatibility filters
+    if (colorValue && !brandValue && !productLineValue) {
+      query = query.ilike('color', `%${colorValue}%`);
+      logger.info('[Faceplate Search] Applied color filter directly', { color: colorValue });
+    } else if (colorValue && (brandValue || productLineValue)) {
+      // Need to post-filter color when we have compatibility filters
+      postFilterColor = colorValue;
+      needsPostFiltering = true;
+      logger.info('[Faceplate Search] Will apply color filter in post-processing', { color: colorValue });
+    }
+    
+    // Add general text search if not a part number
+    if (!isPartNumber && aiAnalysis === null) {
+      // No AI analysis - for simple faceplate searches without AI,
+      // we'll rely on the port and color filters already applied
+      // and use text search for the main query
+      logger.info('[Faceplate Search] No AI analysis - using simplified search');
       
-      // Handle common faceplate-specific misspellings and abbreviations
-      const faceplateAbbreviations: { [key: string]: string[] } = {
-        'fp': ['faceplate', 'face plate'],
-        'f/p': ['faceplate', 'face plate'],
-        'wallplate': ['wall plate', 'faceplate'],
-        'wall-plate': ['wall plate', 'faceplate'],
-        'coverplate': ['cover plate', 'faceplate'],
-        'cover-plate': ['cover plate', 'faceplate'],
-        'dataplate': ['data plate', 'faceplate'],
-        'data-plate': ['data plate', 'faceplate'],
-        'keystone': ['keystone', 'modular'],
-        'kyst': ['keystone'],
-        'kystone': ['keystone'],
-        'keystne': ['keystone'],
-        'gang': ['gang', 'position'],
-        'gng': ['gang'],
-        'port': ['port', 'position', 'opening'],
-        'prt': ['port'],
-        'ss': ['stainless steel', 'stainless'],
-        's/s': ['stainless steel', 'stainless'],
-        'al': ['almond'],
-        'iv': ['ivory'],
-        'wh': ['white'],
-        'blk': ['black'],
-        'br': ['brown'],
-        'gy': ['gray', 'grey']
-      };
-      
-      // Check if any abbreviations are in the search term
-      const lowerSearchTerm = searchTerm.toLowerCase();
-      for (const [abbr, expansions] of Object.entries(faceplateAbbreviations)) {
-        if (lowerSearchTerm.includes(abbr)) {
-          expansions.forEach(expansion => {
-            searchConditions.push(`short_description.ilike.%${expansion}%`);
-            searchConditions.push(`common_terms.ilike.%${expansion}%`);
-            searchConditions.push(`type.ilike.%${expansion}%`);
-            searchConditions.push(`color.ilike.%${expansion}%`);
-          });
-        }
-      }
-      
-      // Also search for individual words across ALL fields
-      const words = searchTerm.split(' ').filter(w => w.length > 1); // Changed from > 2 to > 1 to catch "smb"
-      words.forEach(word => {
-        if (!['the', 'and', 'for', 'with', 'need', 'i'].includes(word.toLowerCase())) {
-          searchConditions.push(`short_description.ilike.%${word}%`);
-          searchConditions.push(`common_terms.ilike.%${word}%`);
-          searchConditions.push(`product_line.ilike.%${word}%`);
-          searchConditions.push(`brand.ilike.%${word}%`);
-          searchConditions.push(`color.ilike.%${word}%`);
-          searchConditions.push(`type.ilike.%${word}%`);
-          searchConditions.push(`compatible_jacks.ilike.%${word}%`);
-        }
-      });
-      
-      // Special handling for SMB searches - add extra conditions
-      if (searchingForSurfaceMount) {
-        // Add specific SMB search terms to common fields
-        searchConditions.push(`type.ilike.%surface%mount%`);
-        searchConditions.push(`type.ilike.%SMB%`);
-        searchConditions.push(`type.ilike.%biscuit%`); // Some call them biscuit boxes
-      }
+      // Don't add many search conditions - let text search handle it
+      // This prevents the extremely long OR conditions
     }
     
     // Apply search conditions based on the search type
