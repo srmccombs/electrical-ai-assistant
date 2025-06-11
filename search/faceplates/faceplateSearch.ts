@@ -38,12 +38,8 @@ export async function searchFaceplates(
     const cleanedTerm = searchTerm.trim().toUpperCase();
     const isPartNumber = /^[A-Z0-9\-]{3,}$/.test(cleanedTerm);
     
-    // Use the enhanced surface mount box detection from industryKnowledge
-    const searchingForSurfaceMount = detectSurfaceMountBox(searchTerm);
-    
-    // Build search conditions array - separate SMB conditions from general conditions
+    // Build search conditions array
     const searchConditions: string[] = [];
-    const smbSpecificConditions: string[] = [];
     
     // Extract values for logging
     let portsMatch: RegExpMatchArray | null = null;
@@ -86,21 +82,8 @@ export async function searchFaceplates(
     
     // Apply AI analysis filters
     if (aiAnalysis) {
-      // Product type filter (Faceplate or Surface Mount Box)
-      if (searchingForSurfaceMount) {
-        // Build SMB-specific conditions separately to avoid conflicts with brand/product line filters
-        const smbTerms = ['surface mount box', 'SMB', 'surface mount', 'S.M.B', 'surface box', 'mounting box'];
-        smbTerms.forEach(term => {
-          smbSpecificConditions.push(`product_type.ilike.%${term}%`);
-          smbSpecificConditions.push(`short_description.ilike.%${term}%`);
-          smbSpecificConditions.push(`common_terms.ilike.%${term}%`);
-          smbSpecificConditions.push(`type.ilike.%${term}%`);
-        });
-        logger.info('[Faceplate Search] Built SMB-specific conditions', { count: smbSpecificConditions.length });
-      } else {
-        // For regular faceplate searches, no specific product type filtering needed
-        logger.info('[Faceplate Search] Searching for Faceplates (general search)');
-      }
+      // Log that we're doing a faceplate search
+      logger.info('[Faceplate Search] Processing faceplate search with AI analysis');
 
       // Apply keystone type filter if detected
       if (faceplateTypeInfo.isKeystone) {
@@ -197,26 +180,11 @@ export async function searchFaceplates(
       // This prevents the extremely long OR conditions
     }
     
-    // Apply search conditions based on the search type
-    if (searchingForSurfaceMount && smbSpecificConditions.length > 0) {
-      // For SMB searches, apply SMB conditions
-      if (!brandValue && !productLineValue) {
-        // No compatibility filters - apply SMB conditions directly
-        query = query.or(smbSpecificConditions.join(','));
-        logger.info('[Faceplate Search] Applying SMB conditions directly (no compatibility filters)');
-      } else {
-        // We have compatibility filters - need to handle this specially
-        // Mark that we need to filter for SMB in post-processing
-        needsPostFiltering = true;
-        logger.info('[Faceplate Search] SMB search with compatibility filters - will filter for SMB in post-processing', {
-          brand: brandValue,
-          productLine: productLineValue
-        });
-      }
-    } else if (searchConditions.length > 0 && !brandValue && !productLineValue) {
+    // Apply search conditions
+    if (searchConditions.length > 0 && !brandValue && !productLineValue) {
       // Regular search without compatibility filters
       query = query.or(searchConditions.join(','));
-    } else if (!brandValue && !productLineValue && !searchingForSurfaceMount && searchConditions.length === 0) {
+    } else if (!brandValue && !productLineValue && searchConditions.length === 0) {
       // No conditions at all - use text search
       query = query.textSearch('search_vector', searchTerm);
     }
@@ -226,7 +194,6 @@ export async function searchFaceplates(
     logger.info('[Faceplate Search] Query conditions', { 
       searchConditions: searchConditions.length,
       hasPortFilter: !!portsMatch,
-      hasSurfaceMountFilter: searchingForSurfaceMount,
       hasColorFilter: !!colorValue,
       colorValue: colorValue,
       hasBrandFilter: !!brandValue,
@@ -255,8 +222,7 @@ export async function searchFaceplates(
       logger.info('[Faceplate Search] Applying post-query filters', {
         beforeCount: beforeCount,
         hasProductLineFilter: postFilterProductLines.length > 0,
-        hasColorFilter: !!postFilterColor,
-        isSearchingForSMB: searchingForSurfaceMount
+        hasColorFilter: !!postFilterColor
       });
       
       // Apply product line filter
@@ -305,26 +271,6 @@ export async function searchFaceplates(
         });
       }
       
-      // Additional SMB filtering if we're searching for SMB with compatibility filters
-      if (searchingForSurfaceMount && (brandValue || productLineValue)) {
-        faceplates = faceplates.filter((faceplate: any) => {
-          // Check if this is actually a surface mount box
-          const productType = (faceplate.product_type || '').toLowerCase();
-          const description = (faceplate.short_description || '').toLowerCase();
-          const commonTerms = (faceplate.common_terms || '').toLowerCase();
-          const type = (faceplate.type || '').toLowerCase();
-          
-          return productType.includes('surface') || productType.includes('mount') || productType.includes('smb') ||
-                 description.includes('surface mount') || description.includes('smb') ||
-                 commonTerms.includes('surface mount') || commonTerms.includes('smb') ||
-                 type.includes('surface') || type.includes('mount') || type.includes('smb');
-        });
-        
-        logger.info('[Faceplate Search] Filtered for SMB products', {
-          afterSMBFilter: faceplates.length
-        });
-      }
-      
       logger.info('[Faceplate Search] Post-query filter results', {
         afterCount: faceplates.length,
         filtered: beforeCount - faceplates.length
@@ -362,23 +308,6 @@ export async function searchFaceplates(
         .eq('is_active', true);
       
       // Apply only essential filters
-      if (searchingForSurfaceMount) {
-        // Build comprehensive SMB search conditions
-        const smbTerms = ['surface mount box', 'SMB', 'surface mount', 'S.M.B', 'surface box', 'mounting box'];
-        const smbConditions: string[] = [];
-        
-        smbTerms.forEach(term => {
-          smbConditions.push(`product_type.ilike.%${term}%`);
-          smbConditions.push(`short_description.ilike.%${term}%`);
-          smbConditions.push(`common_terms.ilike.%${term}%`);
-          smbConditions.push(`type.ilike.%${term}%`);
-        });
-        
-        if (smbConditions.length > 0) {
-          query = query.or(smbConditions.join(','));
-        }
-      }
-      
       if (portsMatch && portsMatch[1]) {
         const numberOfPorts = parseInt(portsMatch[1]);
         if (!isNaN(numberOfPorts)) {

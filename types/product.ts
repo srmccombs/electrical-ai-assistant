@@ -67,6 +67,10 @@ export interface Product {
   compatibleFaceplates?: string
   upcNumber?: string  // Note: You have upcCode above, but jack modules use upcNumber
   
+  // Surface Mount Box specific fields
+  mountingDepth?: number
+  compatibleJacks?: string
+  
   // Cross-reference UI field
   isSourceProduct?: boolean // Mark source product in cross-reference results
   

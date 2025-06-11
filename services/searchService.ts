@@ -71,6 +71,10 @@ import {
   searchFaceplates as searchFaceplatesImpl,
 } from '@/search/faceplates/faceplateSearch'
 
+import {
+  searchSurfaceMountBoxes as searchSurfaceMountBoxesImpl,
+} from '@/search/surfaceMountBoxes/surfaceMountBoxSearch'
+
 // Import shared industry knowledge
 import {
   validateElectricalQuery,
@@ -104,8 +108,8 @@ const enhanceAIAnalysis = (aiAnalysis: AISearchAnalysis | null, searchTerm: stri
   if ((term.includes('smb') || term.includes('s.m.b') || term.includes('sm box')) &&
       !term.includes('jack module') && !term.includes('keystone')) {
     logger.info('Enhanced AI: Detected SMB/Surface Mount Box - overriding AI analysis', {}, LogCategory.AI)
-    aiAnalysis.productType = 'FACEPLATE'
-    aiAnalysis.searchStrategy = 'faceplates'
+    aiAnalysis.productType = 'SURFACE_MOUNT_BOX'
+    aiAnalysis.searchStrategy = 'surface_mount_box'
     aiAnalysis.confidence = 0.95
     aiAnalysis.reasoning = 'Detected SMB (Surface Mount Box) abbreviation'
     wasEnhanced = true
@@ -634,6 +638,12 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
     logger.info('AI productType is FACEPLATE - routing to faceplates', {}, LogCategory.AI)
     return 'faceplates'
   }
+  
+  // PRIORITY 1.55: Check if AI says SURFACE_MOUNT_BOX
+  if (aiAnalysis?.productType === 'SURFACE_MOUNT_BOX') {
+    logger.info('AI productType is SURFACE_MOUNT_BOX - routing to surface_mount_box', {}, LogCategory.AI)
+    return 'surface_mount_box'
+  }
 
   // PRIORITY 1.6: Check if AI says JACK_MODULE
   if (aiAnalysis?.productType === 'JACK_MODULE') {
@@ -710,18 +720,30 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
     }
   }
 
-  // PRIORITY 4: Check for faceplate keywords
+  // PRIORITY 4: Check for surface mount box keywords FIRST
+  const smbTerms = [
+    'surface mount box', 'surface mount', 'surface box',
+    'mounting box', 'box mount', 'smb', 's.m.b', 'sm box',
+    'surface-mount', 'surfacemount', 's m b'
+  ]
+  
+  const hasSMBTerms = smbTerms.some(term => query.includes(term))
+  
+  if (hasSMBTerms) {
+    logger.info('Surface Mount Box detected - routing to surface_mount_box', {}, LogCategory.SEARCH)
+    return 'surface_mount_box'
+  }
+  
+  // PRIORITY 5: Check for faceplate keywords
   const faceplateTerms = [
     'faceplate', 'face plate', 'wall plate', 'wallplate',
-    'surface mount box', 'surface mount', 'surface box',
-    'mounting box', 'box mount', 'gang plate', 'gang box',
-    'outlet frame', 'port plate', 'smb', 's.m.b', 'sm box'
+    'gang plate', 'gang box', 'outlet frame', 'port plate'
   ]
   
   const hasFaceplateTerms = faceplateTerms.some(term => query.includes(term))
   
   if (hasFaceplateTerms) {
-    logger.info('Faceplate/Surface Mount Box detected - routing to faceplates', {}, LogCategory.SEARCH)
+    logger.info('Faceplate detected - routing to faceplates', {}, LogCategory.SEARCH)
     return 'faceplates'
   }
 
@@ -1237,6 +1259,17 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
         })
         products = faceplateResult.products
         searchStrategy = `faceplates_${faceplateResult.searchStrategy}`
+        break
+
+      case 'surface_mount_box':
+        logger.info('Executing surface mount box search', {}, LogCategory.SEARCH)
+        const smbResult = await searchSurfaceMountBoxesImpl({
+          searchTerm: processedQuery.processedTerm,
+          aiAnalysis,
+          limit
+        })
+        products = smbResult.products
+        searchStrategy = `surface_mount_box_${smbResult.searchStrategy}`
         break
 
       case 'fiber_enclosures':

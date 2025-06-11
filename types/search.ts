@@ -213,6 +213,7 @@ export type ProductTable =
   | 'wall_mount_fiber_enclosures'
   | 'jack_modules'  // ADDED
   | 'faceplates'    // ADDED
+  | 'surface_mount_box'  // ADDED
   | 'multi_table'
 
 export interface TableInfo {

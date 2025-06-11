@@ -114,7 +114,7 @@ const normalizeJacketRating = (aiJacketRating?: string, textDetected?: string | 
 
     if (rating === 'CMP' || rating === 'PLENUM') {
       detectedType = 'PLENUM'
-    } else if (rating === 'CMR' || rating === 'RISER' || rating === 'NON_PLENUM' || rating === 'NON-PLENUM' || rating === 'NONPLENUM') {
+    } else if (rating === 'CMR' || rating === 'RISER' || rating === 'NON_PLENUM' || rating === 'NON-PLENUM' || rating === 'NONPLENUM'|| rating === 'PVC') {
       detectedType = 'RISER'
     } else if (rating === 'OSP' || rating === 'OUTDOOR') {
       detectedType = 'OUTDOOR'

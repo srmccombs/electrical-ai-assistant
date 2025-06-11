@@ -272,6 +272,84 @@ export const PRODUCT_TYPES: Record<string, ProductTypeConfig> = {
         filterLabel: 'Compatible Faceplates'
       }
     }
+  },
+
+  faceplates: {
+    tableName: 'faceplates',
+    displayName: 'Faceplate',
+    searchModule: () => import('@/search/faceplates/faceplateSearch'),
+    aiKeywords: [
+      'faceplate', 'face plate', 'wall plate', 'wallplate',
+      'gang plate', 'gang box', 'outlet frame', 'port plate',
+      'blank plate', 'keystone plate', 'modular plate'
+    ],
+    requiredColumns: ['part_number', 'brand', 'short_description'],
+    tablePrefix: 'fp',
+    category: 'Faceplate',
+    specialFields: {
+      numberOfPorts: {
+        dbColumn: 'number_of_ports',
+        filterLabel: 'Port Count'
+      },
+      numberGang: {
+        dbColumn: 'number_gang',
+        filterLabel: 'Gang Count'
+      },
+      color: {
+        dbColumn: 'color',
+        filterLabel: 'Colors',
+        filterType: 'color'
+      },
+      type: {
+        dbColumn: 'type',
+        filterLabel: 'Type'
+      },
+      compatibleJacks: {
+        dbColumn: 'compatible_jacks',
+        filterLabel: 'Compatible Jacks'
+      }
+    }
+  },
+
+  surface_mount_box: {
+    tableName: 'surface_mount_box',
+    displayName: 'Surface Mount Box',
+    searchModule: () => import('@/search/surfaceMountBoxes/surfaceMountBoxSearch'),
+    aiKeywords: [
+      'surface mount box', 'surface mount', 'surface box',
+      'mounting box', 'box mount', 'smb', 's.m.b', 'sm box',
+      'surface-mount', 'surfacemount', 's m b', 'biscuit box'
+    ],
+    requiredColumns: ['part_number', 'brand', 'short_description'],
+    tablePrefix: 'smb',
+    category: 'Surface Mount Box',
+    specialFields: {
+      numberOfPorts: {
+        dbColumn: 'number_of_ports',
+        filterLabel: 'Port Count'
+      },
+      numberGang: {
+        dbColumn: 'number_gang',
+        filterLabel: 'Gang Count'
+      },
+      color: {
+        dbColumn: 'color',
+        filterLabel: 'Colors',
+        filterType: 'color'
+      },
+      type: {
+        dbColumn: 'type',
+        filterLabel: 'Type'
+      },
+      mountingDepth: {
+        dbColumn: 'mounting_depth',
+        filterLabel: 'Mounting Depth'
+      },
+      compatibleJacks: {
+        dbColumn: 'compatible_jacks',
+        filterLabel: 'Compatible Jacks'
+      }
+    }
   }
 }
 

@@ -138,9 +138,12 @@ CRITICAL ROUTING RULES (follow these exactly):
 1. If query mentions "jack", "keystone", "RJ45 jack", "ethernet jack", "mini-com", or jack part numbers (CJ688, CJ5e88, CJ6X88):
    → searchStrategy: "jack_modules", productType: "JACK_MODULE"
 
-2. If query mentions "faceplate", "face plate", "wall plate", "wallplate", "surface mount box", "SMB", "S.M.B", "SM box":
+2. If query mentions "faceplate", "face plate", "wall plate", "wallplate":
    → searchStrategy: "faceplates", productType: "FACEPLATE"
-   IMPORTANT: "SMB" = Surface Mount Box, not a jack module!
+
+2a. If query mentions "surface mount box", "SMB", "S.M.B", "SM box", "surface box":
+   → searchStrategy: "surface_mount_box", productType: "SURFACE_MOUNT_BOX"
+   IMPORTANT: "SMB" = Surface Mount Box, a separate product from faceplates!
 
 3. If query mentions "connectors" + fiber type (LC, SC, ST, FC, MTP, MPO, OM1-5, OS1-2):
    → searchStrategy: "connectors", productType: "CONNECTOR"
@@ -170,12 +173,16 @@ JACK MODULE EXAMPLES (VERY IMPORTANT):
 FACEPLATE EXAMPLES (VERY IMPORTANT):
 - "2 port faceplate" → productType: "FACEPLATE", searchStrategy: "faceplates"
 - "single gang wall plate" → productType: "FACEPLATE", searchStrategy: "faceplates"
-- "4 port surface mount box" → productType: "FACEPLATE", searchStrategy: "faceplates"
 - "panduit faceplate white" → productType: "FACEPLATE", searchStrategy: "faceplates"
 - "blank faceplate" → productType: "FACEPLATE", searchStrategy: "faceplates"
-- "1 port SMB" → productType: "FACEPLATE", searchStrategy: "faceplates" (SMB = Surface Mount Box)
-- "10 SMB" → productType: "FACEPLATE", searchStrategy: "faceplates", requestedQuantity: 10
-- "2 port S.M.B" → productType: "FACEPLATE", searchStrategy: "faceplates"
+- "keystone faceplate" → productType: "FACEPLATE", searchStrategy: "faceplates"
+
+SURFACE MOUNT BOX EXAMPLES (VERY IMPORTANT):
+- "4 port surface mount box" → productType: "SURFACE_MOUNT_BOX", searchStrategy: "surface_mount_box"
+- "1 port SMB" → productType: "SURFACE_MOUNT_BOX", searchStrategy: "surface_mount_box"
+- "10 SMB" → productType: "SURFACE_MOUNT_BOX", searchStrategy: "surface_mount_box", requestedQuantity: 10
+- "2 port S.M.B" → productType: "SURFACE_MOUNT_BOX", searchStrategy: "surface_mount_box"
+- "surface box white" → productType: "SURFACE_MOUNT_BOX", searchStrategy: "surface_mount_box"
 
 OTHER EXAMPLES:
 - "lc connectors om4" → productType: "CONNECTOR", searchStrategy: "connectors" 
@@ -192,8 +199,8 @@ QUANTITY DETECTION (VERY IMPORTANT):
 
 RESPOND WITH ONLY JSON:
 {
-  "searchStrategy": "jack_modules|faceplates|connectors|cables|panels|enclosures|mixed",
-  "productType": "JACK_MODULE|FACEPLATE|CONNECTOR|CABLE|PANEL|ENCLOSURE|MIXED",
+  "searchStrategy": "jack_modules|faceplates|surface_mount_box|connectors|cables|panels|enclosures|mixed",
+  "productType": "JACK_MODULE|FACEPLATE|SURFACE_MOUNT_BOX|CONNECTOR|CABLE|PANEL|ENCLOSURE|MIXED",
   "confidence": 0.0-1.0,
   "detectedSpecs": {
     "fiberType": "OM3|OM4|OS1|OS2|singlemode|multimode or null",
@@ -262,15 +269,15 @@ RESPOND WITH ONLY JSON:
         searchAnalysis.reasoning = 'Force corrected to faceplates based on keyword detection'
       }
 
-      // ADDITIONAL FORCE FIX: If query contains SMB-related terms but AI said "CABLE", fix it
+      // ADDITIONAL FORCE FIX: If query contains SMB-related terms but AI said "CABLE" or "FACEPLATE", fix it
       if ((queryLower.includes('smb') || queryLower.includes('s.m.b') || 
-           queryLower.includes('sm box')) &&
-          (searchAnalysis.productType === 'CABLE' || searchAnalysis.productType === 'MIXED')) {
-        console.log('🔧 FORCE FIX: Correcting ' + searchAnalysis.productType + ' to FACEPLATE for SMB')
-        searchAnalysis.productType = 'FACEPLATE'
-        searchAnalysis.searchStrategy = 'faceplates'
+           queryLower.includes('sm box') || queryLower.includes('surface mount box')) &&
+          (searchAnalysis.productType === 'CABLE' || searchAnalysis.productType === 'MIXED' || searchAnalysis.productType === 'FACEPLATE')) {
+        console.log('🔧 FORCE FIX: Correcting ' + searchAnalysis.productType + ' to SURFACE_MOUNT_BOX for SMB')
+        searchAnalysis.productType = 'SURFACE_MOUNT_BOX'
+        searchAnalysis.searchStrategy = 'surface_mount_box'
         searchAnalysis.confidence = 0.95
-        searchAnalysis.reasoning = 'Force corrected to faceplates - SMB = Surface Mount Box'
+        searchAnalysis.reasoning = 'Force corrected to surface mount box - SMB = Surface Mount Box'
       }
 
       // FORCE FIX: If query contains "connectors" but AI said "MIXED", fix it
