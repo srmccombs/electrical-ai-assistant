@@ -169,6 +169,66 @@ const detectFiberCapacity = (searchTerm: string): number | undefined => {
 }
 
 /**
+ * Detect panel capacity from search term
+ * Examples: "2 panel", "4 panel enclosure", "6 panel fiber enclosure"
+ */
+const detectPanelCapacity = (searchTerm: string): number | undefined => {
+  const term = searchTerm.toLowerCase()
+  console.log(`[detectPanelCapacity] Searching in: "${term}"`)
+
+  // First, find all numbers in the search term
+  const numbers = term.match(/\d+/g)
+  if (!numbers) {
+    console.log(`[detectPanelCapacity] No numbers found in search term`)
+    return undefined
+  }
+  console.log(`[detectPanelCapacity] Found numbers:`, numbers)
+
+  // Look for panel-related keywords
+  const panelKeywords = ['panel', 'adapter', 'capacity', 'holds', 'slot', 'fap', 'cassette']
+  
+  // For each number, check if it's followed by a panel keyword
+  for (const num of numbers) {
+    const numValue = parseInt(num, 10)
+    
+    // Create a regex to find this specific number followed by panel keywords
+    const numPattern = new RegExp(`\\b${num}\\s*(${panelKeywords.join('|')})`, 'i')
+    console.log(`[detectPanelCapacity] Testing pattern for ${num}:`, numPattern)
+    
+    if (numPattern.test(term)) {
+      console.log(`[detectPanelCapacity] Pattern matched for ${num}!`)
+      if (numValue >= 1 && numValue <= 24) { // Reasonable panel range for wall mount
+        console.log(`📊 Detected panel capacity request: ${numValue} panels`)
+        return numValue
+      }
+    } else {
+      console.log(`[detectPanelCapacity] Pattern did NOT match for ${num}`)
+    }
+  }
+
+  // Fallback patterns for special cases
+  const patterns = [
+    /holds?\s*(\d+)\s*panel/i,
+    /capacity\s*(?:of\s*)?(\d+)/i,
+    /(\d+)\s*fap/i,
+    /(\d+)\s*cassette/i
+  ]
+
+  for (const pattern of patterns) {
+    const match = term.match(pattern)
+    if (match && match[1]) {
+      const panels = parseInt(match[1], 10)
+      if (panels >= 1 && panels <= 24) {
+        console.log(`📊 Detected panel capacity request: ${panels} panels (fallback pattern)`)
+        return panels
+      }
+    }
+  }
+
+  return undefined
+}
+
+/**
  * Check if any wall mount search term matches
  */
 const matchesWallMountSearchTerms = (searchTerm: string): boolean => {
@@ -193,31 +253,8 @@ export const searchWallMountFiberEnclosures = async (
   console.log('🤖 AI Analysis:', aiAnalysis)
 
   try {
-    // First, let's check if the table exists and has data
+    // First, let's check if the table exists
     console.log('📊 Checking wall mount table status...')
-    
-    // Try a simple select all first - NO filters at all
-    const simpleCheck = await supabase
-      .from('wall_mount_fiber_enclosures')
-      .select('*')
-    
-    console.log('📊 Simple check results:', {
-      error: simpleCheck.error,
-      dataLength: simpleCheck.data?.length,
-      firstRow: simpleCheck.data?.[0]
-    })
-    
-    // If we got data, let's use it!
-    if (!simpleCheck.error && simpleCheck.data && simpleCheck.data.length > 0) {
-      console.log('✅ Found wall mount enclosures! Returning all results.')
-      const endTime = performance.now()
-      return {
-        products: formatWallMountResults(simpleCheck.data, 'direct_table_access'),
-        searchStrategy: 'direct_table_access',
-        totalFound: simpleCheck.data.length,
-        searchTime: Math.round(endTime - startTime)
-      }
-    }
     
     const tableCheck = await supabase
       .from('wall_mount_fiber_enclosures')
@@ -226,8 +263,7 @@ export const searchWallMountFiberEnclosures = async (
 
     console.log(`📊 Wall mount table check:`, {
       error: tableCheck.error,
-      count: tableCheck.count,
-      hasData: tableCheck.data && tableCheck.data.length > 0
+      count: tableCheck.count
     })
 
     if (tableCheck.error) {
@@ -246,6 +282,12 @@ export const searchWallMountFiberEnclosures = async (
     const detectedMountType = detectMountType(searchTerm)
     const detectedPanelType = detectPanelType(searchTerm) || aiAnalysis?.detectedSpecs?.panelType
     const detectedFiberCapacity = detectFiberCapacity(searchTerm)
+    
+    // Debug panel capacity detection
+    console.log(`🔍 Detecting panel capacity for: "${searchTerm}"`)
+    const detectedPanelCapacity = detectPanelCapacity(searchTerm)
+    console.log(`🔍 Panel capacity detection result: ${detectedPanelCapacity}`)
+    
     const detectedBrandValue = detectBrand(searchTerm) || aiAnalysis?.detectedSpecs?.manufacturer
     const detectedColorValue = detectColor(searchTerm) || aiAnalysis?.detectedSpecs?.color
     const detectedEnvironmentValue = detectEnvironment(searchTerm) || aiAnalysis?.detectedSpecs?.environment
@@ -255,6 +297,7 @@ export const searchWallMountFiberEnclosures = async (
       mountType: detectedMountType,
       panelType: detectedPanelType,
       fiberCapacity: detectedFiberCapacity,
+      panelCapacity: detectedPanelCapacity,
       brand: detectedBrandValue,
       color: detectedColorValue,
       environment: detectedEnvironmentValue,
@@ -283,6 +326,71 @@ export const searchWallMountFiberEnclosures = async (
           products: formatWallMountResults(result.data, 'part_number_match'),
           searchStrategy: 'part_number_match',
           totalFound: result.data.length,
+          searchTime: Math.round(endTime - startTime)
+        }
+      }
+    }
+
+    // STRATEGY 0.5: Panel capacity search (e.g., "6 panel fiber enclosure") - MOVED UP!
+    if (detectedPanelCapacity) {
+      console.log(`📊 STRATEGY 0.5: Panel capacity search for ${detectedPanelCapacity} panels`)
+      
+      // First, try to find exact match
+      let query = supabase
+        .from('wall_mount_fiber_enclosures')
+        .select('*')
+        .eq('accepts_number_of_connector_housing_panels', detectedPanelCapacity)
+        .not('accepts_number_of_connector_housing_panels', 'is', null)
+        .limit(limit)
+
+      const exactResult = await query
+      console.log(`📊 Exact panel capacity search result:`, {
+        error: exactResult.error,
+        count: exactResult.data?.length
+      })
+
+      if (!exactResult.error && exactResult.data && exactResult.data.length > 0) {
+        const endTime = performance.now()
+        console.log(`✅ Found ${exactResult.data.length} enclosures with exactly ${detectedPanelCapacity} panels`)
+        return {
+          products: formatWallMountResults(exactResult.data, 'panel_capacity_exact'),
+          searchStrategy: 'panel_capacity_exact',
+          totalFound: exactResult.data.length,
+          searchTime: Math.round(endTime - startTime)
+        }
+      }
+      
+      // If no exact match, find the next size up
+      console.log(`⚠️ No exact match for ${detectedPanelCapacity} panels, looking for next size up...`)
+      
+      let nextSizeQuery = supabase
+        .from('wall_mount_fiber_enclosures')
+        .select('*')
+        .gt('accepts_number_of_connector_housing_panels', detectedPanelCapacity)
+        .not('accepts_number_of_connector_housing_panels', 'is', null)
+        .order('accepts_number_of_connector_housing_panels', { ascending: true })
+        .limit(limit)
+
+      const nextSizeResult = await nextSizeQuery as any
+      console.log(`📊 Next size up search result:`, {
+        error: nextSizeResult.error,
+        count: nextSizeResult.data?.length,
+        sizes: nextSizeResult.data?.map((item: any) => item.accepts_number_of_connector_housing_panels).slice(0, 5)
+      })
+
+      if (!nextSizeResult.error && nextSizeResult.data && nextSizeResult.data.length > 0) {
+        // Filter to only show the smallest size that's larger than requested
+        const nextSize = nextSizeResult.data[0].accepts_number_of_connector_housing_panels
+        const filteredResults = nextSizeResult.data.filter((item: any) => 
+          item.accepts_number_of_connector_housing_panels === nextSize
+        )
+        
+        const endTime = performance.now()
+        console.log(`✅ Found ${filteredResults.length} enclosures with ${nextSize} panels (next size up from ${detectedPanelCapacity})`)
+        return {
+          products: formatWallMountResults(filteredResults, 'panel_capacity_next_size'),
+          searchStrategy: 'panel_capacity_next_size',
+          totalFound: filteredResults.length,
           searchTime: Math.round(endTime - startTime)
         }
       }

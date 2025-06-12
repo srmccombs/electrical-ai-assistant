@@ -55,6 +55,7 @@ const detectRackUnits = (searchTerm: string): number | undefined => {
   return undefined
 }
 
+
 /**
  * Detect panel type with all variations
  * CCH and FAP are the main types that must match adapter panels
@@ -153,25 +154,49 @@ const detectBrand = (searchTerm: string): string | undefined => {
 }
 
 /**
- * Detect number of panels the enclosure can hold
- * Examples: "4 panel", "holds 6 panels", "12 adapter panels"
+ * Detect panel capacity from search term
+ * Examples: "2 panel", "4 panel enclosure", "6 panel fiber enclosure", "holds 6 panels"
  */
 const detectPanelCapacity = (searchTerm: string): number | undefined => {
   const term = searchTerm.toLowerCase()
 
+  // First, find all numbers in the search term
+  const numbers = term.match(/\d+/g)
+  if (!numbers) return undefined
+
+  // Look for panel-related keywords
+  const panelKeywords = ['panel', 'adapter', 'capacity', 'holds', 'slot']
+  
+  // For each number, check if it's followed by a panel keyword
+  for (const num of numbers) {
+    const numValue = parseInt(num, 10)
+    
+    // Create a regex to find this specific number followed by panel keywords
+    const numPattern = new RegExp(`\\b${num}\\s*(${panelKeywords.join('|')})`, 'i')
+    
+    if (numPattern.test(term)) {
+      if (numValue >= 1 && numValue <= 144) { // Reasonable panel range
+        console.log(`📊 Detected panel capacity request: ${numValue} panels`)
+        return numValue
+      }
+    }
+  }
+
+  // Fallback patterns for special cases
   const patterns = [
-    /(\d+)\s*(?:panel|adapter)/i,
-    /holds?\s*(\d+)/i,
-    /capacity\s*(?:of\s*)?(\d+)/i
+    /holds?\s*(\d+)\s*panel/i,
+    /capacity\s*(?:of\s*)?(\d+)/i,
+    /(\d+)\s*fap/i,
+    /(\d+)\s*cch/i
   ]
 
   for (const pattern of patterns) {
     const match = term.match(pattern)
     if (match && match[1]) {
-      const capacity = parseInt(match[1], 10)
-      if (capacity >= 1 && capacity <= 144) { // Reasonable capacity range
-        console.log(`📊 Detected panel capacity: ${capacity} panels`)
-        return capacity
+      const panels = parseInt(match[1], 10)
+      if (panels >= 1 && panels <= 144) {
+        console.log(`📊 Detected panel capacity request: ${panels} panels (fallback pattern)`)
+        return panels
       }
     }
   }
@@ -318,6 +343,71 @@ export const searchRackMountFiberEnclosures = async (
       }
     }
 
+    // STRATEGY 0.5: Panel capacity search (e.g., "6 panel fiber enclosure")
+    if (detectedPanelCapacity) {
+      console.log(`📊 STRATEGY 0.5: Panel capacity search for ${detectedPanelCapacity} panels`)
+      
+      // First, try to find exact match
+      let query = supabase
+        .from('rack_mount_fiber_enclosures')
+        .select('*')
+        .eq('accepts_number_of_connector_housing_panels', detectedPanelCapacity)
+        .eq('is_active', true)
+        .limit(limit)
+
+      const exactResult = await query
+      console.log(`📊 Exact panel capacity search result:`, {
+        error: exactResult.error,
+        count: exactResult.data?.length
+      })
+
+      if (!exactResult.error && exactResult.data && exactResult.data.length > 0) {
+        const endTime = performance.now()
+        console.log(`✅ Found ${exactResult.data.length} enclosures with exactly ${detectedPanelCapacity} panels`)
+        return {
+          products: formatEnclosureResults(exactResult.data, 'panel_capacity_exact'),
+          searchStrategy: 'panel_capacity_exact',
+          totalFound: exactResult.data.length,
+          searchTime: Math.round(endTime - startTime)
+        }
+      }
+      
+      // If no exact match, find the next size up
+      console.log(`⚠️ No exact match for ${detectedPanelCapacity} panels, looking for next size up...`)
+      
+      let nextSizeQuery = supabase
+        .from('rack_mount_fiber_enclosures')
+        .select('*')
+        .gt('accepts_number_of_connector_housing_panels', detectedPanelCapacity)
+        .eq('is_active', true)
+        .order('accepts_number_of_connector_housing_panels', { ascending: true })
+        .limit(limit)
+
+      const nextSizeResult = await nextSizeQuery as any
+      console.log(`📊 Next size up search result:`, {
+        error: nextSizeResult.error,
+        count: nextSizeResult.data?.length,
+        sizes: nextSizeResult.data?.map((item: any) => item.accepts_number_of_connector_housing_panels).slice(0, 5)
+      })
+
+      if (!nextSizeResult.error && nextSizeResult.data && nextSizeResult.data.length > 0) {
+        // Filter to only show the smallest size that's larger than requested
+        const nextSize = nextSizeResult.data[0].accepts_number_of_connector_housing_panels
+        const filteredResults = nextSizeResult.data.filter((item: any) => 
+          item.accepts_number_of_connector_housing_panels === nextSize
+        )
+        
+        const endTime = performance.now()
+        console.log(`✅ Found ${filteredResults.length} enclosures with ${nextSize} panels (next size up from ${detectedPanelCapacity})`)
+        return {
+          products: formatEnclosureResults(filteredResults, 'panel_capacity_next_size'),
+          searchStrategy: 'panel_capacity_next_size',
+          totalFound: filteredResults.length,
+          searchTime: Math.round(endTime - startTime)
+        }
+      }
+    }
+
     // STRATEGY 1: Brand search (e.g., "Corning")
     const queryLower = searchTerm.toLowerCase().trim()
     const brandKeywords = ['corning', 'siecor', 'panduit', 'leviton', 'dmsi']
@@ -383,10 +473,67 @@ export const searchRackMountFiberEnclosures = async (
       }
     }
 
-    // STRATEGY 2: General enclosure search
+    // STRATEGY 2: General enclosure search (but check for panel capacity first!)
     if (searchTerm.toLowerCase().includes('enclosure') || searchTerm.toLowerCase().includes('housing')) {
       console.log(`🏗️ STRATEGY 2: General enclosure search`)
+      
+      // If we detected panel capacity but haven't handled it yet, handle it now
+      if (detectedPanelCapacity) {
+        console.log(`📊 Panel capacity detected in general search: ${detectedPanelCapacity} panels`)
+        
+        // First try exact match
+        let exactQuery = supabase
+          .from('rack_mount_fiber_enclosures')
+          .select('*')
+          .eq('accepts_number_of_connector_housing_panels', detectedPanelCapacity)
+          .eq('is_active', true)
+          .limit(limit)
 
+        const exactResult = await exactQuery
+        
+        if (!exactResult.error && exactResult.data && exactResult.data.length > 0) {
+          const endTime = performance.now()
+          console.log(`✅ Found ${exactResult.data.length} enclosures with exactly ${detectedPanelCapacity} panels`)
+          return {
+            products: formatEnclosureResults(exactResult.data, 'panel_capacity_exact_general'),
+            searchStrategy: 'panel_capacity_exact_general',
+            totalFound: exactResult.data.length,
+            searchTime: Math.round(endTime - startTime)
+          }
+        }
+        
+        // No exact match, find next size up
+        console.log(`⚠️ No exact match for ${detectedPanelCapacity} panels in general search, looking for next size up...`)
+        
+        let nextSizeQuery = supabase
+          .from('rack_mount_fiber_enclosures')
+          .select('*')
+          .gt('accepts_number_of_connector_housing_panels', detectedPanelCapacity)
+          .eq('is_active', true)
+          .order('accepts_number_of_connector_housing_panels', { ascending: true })
+          .limit(limit)
+
+        const nextSizeResult = await nextSizeQuery as any
+        
+        if (!nextSizeResult.error && nextSizeResult.data && nextSizeResult.data.length > 0) {
+          // Filter to only show the smallest size that's larger than requested
+          const nextSize = nextSizeResult.data[0].accepts_number_of_connector_housing_panels
+          const filteredResults = nextSizeResult.data.filter((item: any) => 
+            item.accepts_number_of_connector_housing_panels === nextSize
+          )
+          
+          const endTime = performance.now()
+          console.log(`✅ Found ${filteredResults.length} enclosures with ${nextSize} panels (next size up from ${detectedPanelCapacity})`)
+          return {
+            products: formatEnclosureResults(filteredResults, 'panel_capacity_next_size_general'),
+            searchStrategy: 'panel_capacity_next_size_general',
+            totalFound: filteredResults.length,
+            searchTime: Math.round(endTime - startTime)
+          }
+        }
+      }
+
+      // Regular general enclosure search without panel capacity
       const query = await supabase
         .from('rack_mount_fiber_enclosures')
         .select('*')

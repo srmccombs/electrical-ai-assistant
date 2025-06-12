@@ -669,7 +669,7 @@ const PlecticAI: React.FC = () => {
     try {
       const endTimer = logger.startTimer('Search execution')
 
-      // Check if search is for faceplates, surface mount boxes, or jack modules
+      // Check if search is for faceplates, surface mount boxes, jack modules, or adapter panels
       const searchLower = originalInput.toLowerCase()
       const isSearchingForCompatibleProducts = 
         searchLower.includes('faceplate') || 
@@ -677,6 +677,9 @@ const PlecticAI: React.FC = () => {
         searchLower.includes('wall plate') ||
         searchLower.includes('surface mount') ||
         searchLower.includes('surface box') ||
+        searchLower.includes('adapter panel') ||
+        searchLower.includes('adapter panels') ||
+        searchLower.includes('fiber panel') ||
         searchLower.includes('mounting box') ||
         searchLower.includes('jack') ||
         searchLower.includes('keystone') ||
@@ -708,17 +711,35 @@ const PlecticAI: React.FC = () => {
             description: item.description
           }))
 
-        if (categoryCables.length > 0 || jackModules.length > 0) {
+        // Extract fiber enclosures from shopping list
+        const fiberEnclosures = productList
+          .filter(item => 
+            item.tableName === 'rack_mount_fiber_enclosures' || 
+            item.tableName === 'wall_mount_fiber_enclosures' ||
+            item.category === 'Fiber Enclosure' ||
+            item.productType?.includes('Fiber Enclosure')
+          )
+          .map(item => ({
+            partNumber: item.partNumber,
+            panelType: item.panelType || '',
+            brand: item.brand,
+            description: item.description,
+            tableName: item.tableName || ''
+          }))
+
+        if (categoryCables.length > 0 || jackModules.length > 0 || fiberEnclosures.length > 0) {
           shoppingListContext = {
             hasItems: true,
             categoryCables,
-            jackModules
+            jackModules,
+            fiberEnclosures
           }
           
           logger.info('Including shopping list context for compatibility', {
             searchType: isSearchingForCompatibleProducts ? 'compatible product' : 'standard',
             categoryCablesCount: categoryCables.length,
-            jackModulesCount: jackModules.length
+            jackModulesCount: jackModules.length,
+            fiberEnclosuresCount: fiberEnclosures.length
           }, LogCategory.SEARCH)
         }
       }

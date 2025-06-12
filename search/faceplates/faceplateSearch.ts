@@ -43,7 +43,7 @@ export async function searchFaceplates(
     
     // Extract values for logging
     let portsMatch: RegExpMatchArray | null = null;
-    let colorValue: string | undefined;
+    let colorValue: string | null = null;
     let brandValue: string | undefined;
     let productLineValue: string | undefined;
     
@@ -164,7 +164,7 @@ export async function searchFaceplates(
       logger.info('[Faceplate Search] Applied color filter directly', { color: colorValue });
     } else if (colorValue && (brandValue || productLineValue)) {
       // Need to post-filter color when we have compatibility filters
-      postFilterColor = colorValue;
+      postFilterColor = colorValue || undefined;
       needsPostFiltering = true;
       logger.info('[Faceplate Search] Will apply color filter in post-processing', { color: colorValue });
     }

@@ -9,10 +9,14 @@ This is an AI-powered electrical distribution assistant built with Next.js 14 an
 ### Current Status (Jan 2025)
 - ✅ Core search functionality complete
 - ✅ AI integration with GPT-4o-mini
-- ✅ Shopping list management
-- ✅ Analytics tracking foundation
+- ✅ Shopping list management with compatibility filtering
+- ✅ Analytics tracking foundation with dashboard
 - ✅ Error handling and debug mode
 - ✅ AI response caching
+- ✅ Cross-reference search functionality
+- ✅ Panel capacity search with "next size up" logic
+- ✅ Fiber enclosure & adapter panel compatibility
+- ✅ Surface mount box search implementation
 - 🚧 User authentication not implemented
 - 🚧 Quote generation not implemented
 - 🚧 Email integration not implemented
@@ -47,11 +51,14 @@ The search system (`/services/searchService.ts`) orchestrates:
 
 ### Specialized Search Implementations
 Located in `/search/` directory:
-- `categoryCables/` - Searches for ethernet cables (Cat5e, Cat6, etc.)
+- `categoryCables/` - Searches for ethernet cables (Cat5e, Cat6, etc.) with box quantity conversion
 - `fiberCables/` - Searches for fiber optic cables
 - `fiberConnectors/` - Searches for fiber connectors (LC, SC, ST, etc.)
-- `fiberadapterPanels/` - Searches for adapter panels
-- `fiberenclosure/` - Searches for both rack mount and wall mount fiber enclosures
+- `fiberadapterPanels/` - Searches for adapter panels with fiber enclosure compatibility
+- `fiberenclosure/` - Searches for both rack mount and wall mount fiber enclosures with panel capacity filtering
+- `jackModules/` - Searches for RJ45 jacks with faceplate/SMB compatibility
+- `faceplates/` - Searches for wall plates with jack compatibility
+- `surfaceMountBoxes/` - Searches for surface mount boxes (SMB) with jack compatibility
 - `shared/industryKnowledge.ts` - Contains business rules and electrical industry patterns
 - `shared/tableDiscoveryService.ts` - Dynamic table discovery for new product types
 
@@ -59,10 +66,13 @@ Located in `/search/` directory:
 Uses Supabase (PostgreSQL) with tables:
 - `category_cables` - Ethernet cables (Cat5e, Cat6, Cat6a)
 - `fiber_connectors` - LC, SC, ST, FC connectors
-- `adapter_panels` - Fiber adapter panels
-- `rack_mount_fiber_enclosures` - Rack mount enclosures
-- `wall_mount_fiber_enclosures` - Wall mount enclosures
+- `adapter_panels` - Fiber adapter panels with panel_type field
+- `rack_mount_fiber_enclosures` - Rack mount enclosures with panel capacity filtering
+- `wall_mount_fiber_enclosures` - Wall mount enclosures with panel capacity filtering
 - `fiber_cables` - Single mode and multimode fiber cables
+- `jack_modules` - RJ45 jacks with brand/product line compatibility
+- `faceplates` - Wall plates with compatible_jacks field
+- `surface_mount_box` - Surface mount boxes (SMB) with jack compatibility
 - Dynamic table discovery via `tableDiscoveryService.ts`
 
 Analytics tables:
@@ -73,13 +83,16 @@ Analytics tables:
 ### UI Components
 - `PlecticAI.tsx` - Main chat interface component with:
   - Real-time streaming responses
-  - Shopping list with quantity management
+  - Shopping list with quantity management and compatibility context
   - Smart filter generation
   - Debug mode toggle
   - Fiber type reference guide
   - Stock status indicators
+  - Cross-reference results display
+  - Product compatibility matching (jacks/faceplates, enclosures/panels)
 - `ErrorBoundary.tsx` - Graceful error handling wrapper
-- `app/analytics/page.tsx` - Analytics dashboard page (component pending)
+- `AnalyticsDashboard.tsx` - Complete analytics dashboard with charts and metrics
+- `app/analytics/page.tsx` - Analytics dashboard page
 
 ## Environment Variables Required
 
@@ -97,6 +110,12 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
    - CMP = Plenum
 3. **Brand-Only Searches**: Single brand name queries search across all product tables
 4. **Part Number Priority**: Direct part number matches take precedence over AI analysis
+5. **SMB Detection**: "SMB" and variations route to surface_mount_box table
+6. **Compatibility Matching**:
+   - Jack modules ↔ Faceplates/Surface Mount Boxes (brand + product line)
+   - Fiber Enclosures ↔ Adapter Panels (panel_type field)
+7. **Panel Capacity Search**: Shows exact match or next size up (e.g., request 6 panels → show 8, not 12)
+8. **Box Quantity Conversion**: Detects "box of X" and converts to feet for cables
 
 ## TypeScript Configuration
 
@@ -113,6 +132,11 @@ Strict mode is enabled. Key compiler options:
    - Specifications: "cat6 plenum blue 1000ft"
    - Brand searches: "corning", "panduit"
    - Fiber queries: "LC connectors OM4", "12 strand fiber cable"
+   - Jack searches: "cat6 jack panduit", "minicom jack modules"
+   - Faceplate searches: "2 port white faceplate"
+   - SMB searches: "20 2 port smb black"
+   - Cross-reference: "panduit alternative to corning cch-01u"
+   - Panel capacity: "6 panel fiber enclosure", "4 panel wall mount"
 
 2. The AI analysis can be enhanced in `searchService.ts` using the `enhanceAIAnalysis` function for cases where GPT misses specifications
 
@@ -127,19 +151,31 @@ Strict mode is enabled. Key compiler options:
 - ✅ Debug mode for development troubleshooting
 - ✅ Product types configuration centralized
 - ✅ AI response caching (1-hour TTL)
-- ✅ Search analytics tracking system
+- ✅ Search analytics tracking system with dashboard
 - ✅ Performance metrics collection
 - ✅ Popular searches tracking
+- ✅ Cross-reference search with multi-manufacturer support
+- ✅ Panel capacity filtering for fiber enclosures
+- ✅ Jack module search with compatibility matching
+- ✅ Faceplate search with color and port detection
+- ✅ Surface mount box (SMB) dedicated search
+- ✅ Fiber enclosure & adapter panel compatibility
+- ✅ Box quantity to feet conversion for cables
+- ✅ TypeScript strict mode compliance
 
 ### Services Added
 - `services/aiCache.ts` - Reduces API costs with intelligent caching
 - `services/analytics.ts` - Comprehensive analytics tracking
+- `services/crossReferenceService.ts` - Multi-manufacturer cross-reference search
+- `services/datasheetService.ts` - Product datasheet URL generation
 - `config/productTypes.ts` - Centralized product configuration
+- `config/constants.ts` - Application-wide constants
 
 ### Known Limitations
 - No user authentication system
 - No quote generation or saving
 - No email integration
 - No admin panel for product management
-- Analytics dashboard component not yet implemented
-- Limited to ~368 products (goal: 5,000+)
+- Limited product database (goal: 5,000+ products)
+- Surface mount box table needs to be created in database
+- Some fiber enclosures have NULL panel capacity values

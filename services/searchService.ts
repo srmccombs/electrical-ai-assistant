@@ -1222,7 +1222,8 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
         const panelResult = await searchAdapterPanelsImpl({
           searchTerm: processedQuery.processedTerm,
           aiAnalysis,
-          limit
+          limit,
+          shoppingListContext
         })
         products = panelResult.products
         searchStrategy = `adapter_panels_${panelResult.searchStrategy}`
@@ -1370,7 +1371,8 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
             const panelResults = await searchAdapterPanelsImpl({
               searchTerm: processedQuery.processedTerm,
               aiAnalysis,
-              limit: Math.floor((limit - products.length) / 3)
+              limit: Math.floor((limit - products.length) / 3),
+              shoppingListContext
             })
             products = [...products, ...panelResults.products]
           }

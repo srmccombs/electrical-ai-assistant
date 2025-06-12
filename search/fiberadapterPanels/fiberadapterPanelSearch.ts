@@ -14,6 +14,15 @@ export interface AdapterPanelSearchOptions {
   searchTerm: string
   aiAnalysis?: AISearchAnalysis | null
   limit?: number
+  shoppingListContext?: {
+    hasItems: boolean
+    fiberEnclosures?: Array<{
+      partNumber: string
+      panelType: string
+      brand: string
+      description: string
+    }>
+  }
 }
 
 export interface AdapterPanelSearchResult {
@@ -162,13 +171,25 @@ export const searchAdapterPanels = async (
   options: AdapterPanelSearchOptions
 ): Promise<AdapterPanelSearchResult> => {
   const startTime = performance.now()
-  const { searchTerm, aiAnalysis, limit = 50 } = options
+  const { searchTerm, aiAnalysis, limit = 50, shoppingListContext } = options
 
   console.log('🏠 ENHANCED ADAPTER PANELS SEARCH')
   console.log('🔍 Original search term:', searchTerm)
   console.log('🤖 AI Analysis:', aiAnalysis?.detectedSpecs)
+  console.log('🛒 Shopping list context:', shoppingListContext)
 
   try {
+    // Check for fiber enclosure compatibility from shopping list
+    let requiredPanelTypes: string[] = []
+    if (shoppingListContext?.hasItems && shoppingListContext.fiberEnclosures && shoppingListContext.fiberEnclosures.length > 0) {
+      // Get all unique panel types from fiber enclosures in shopping list
+      requiredPanelTypes = [...new Set(shoppingListContext.fiberEnclosures
+        .map(enc => enc.panelType)
+        .filter(pt => pt && pt.trim() !== ''))]
+      
+      console.log('🔗 COMPATIBILITY: Filtering for panel types from fiber enclosures:', requiredPanelTypes)
+    }
+
     // Enhanced detection with all the knowledge you provided
     const detectedFiberType = detectFiberType(searchTerm) || aiAnalysis?.detectedSpecs?.fiberType
     const detectedConnectorType = detectConnectorType(searchTerm) || aiAnalysis?.detectedSpecs?.connectorType
@@ -279,10 +300,16 @@ export const searchAdapterPanels = async (
       console.log(`🎨 Adding color filter: ${detectedColor}`)
     }
 
-    // 7. Panel type search
-    if (detectedPanelType) {
+    // 7. Panel type search (prioritize shopping list compatibility)
+    if (requiredPanelTypes.length > 0) {
+      // If we have fiber enclosures in shopping list, ONLY show compatible panels
+      const panelTypeConditions = requiredPanelTypes.map(pt => `panel_type.ilike.%${pt}%`)
+      searchConditions.push(...panelTypeConditions)
+      console.log(`🔗 Adding panel type filters from shopping list: ${requiredPanelTypes.join(', ')}`)
+    } else if (detectedPanelType) {
+      // Otherwise use detected panel type from search term
       searchConditions.push(`panel_type.ilike.%${detectedPanelType}%`)
-      console.log(`📦 Adding panel type filter: ${detectedPanelType}`)
+      console.log(`📦 Adding detected panel type filter: ${detectedPanelType}`)
     }
 
     // 8. Termination type search
@@ -338,6 +365,18 @@ export const searchAdapterPanels = async (
           return fiberCat.includes('os') || fiberCat.includes('sm') ||
                  desc.includes('single') || desc.includes('9/125')
         })
+      }
+      
+      // Apply compatibility filtering if we have fiber enclosures in shopping list
+      if (requiredPanelTypes.length > 0) {
+        console.log(`🔗 Post-filtering ${processedResults.length} results for panel type compatibility`)
+        processedResults = processedResults.filter((item: any) => {
+          const itemPanelType = item.panel_type?.toUpperCase() || ''
+          return requiredPanelTypes.some(reqType => 
+            itemPanelType.includes(reqType.toUpperCase())
+          )
+        })
+        console.log(`🔗 After compatibility filter: ${processedResults.length} results`)
       }
 
       const endTime = performance.now()

@@ -28,6 +28,13 @@ export interface SearchOptions {
       compatibleFaceplates: string
       description: string
     }>
+    fiberEnclosures?: Array<{
+      partNumber: string
+      panelType: string
+      brand: string
+      description: string
+      tableName: string
+    }>
   }
 }
 

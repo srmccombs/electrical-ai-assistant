@@ -5,7 +5,7 @@ import { logger } from '@/utils/logger';
 import { Tables } from '@/src/types/supabase';
 import { detectColor, detectQuantity } from '@/search/shared/industryKnowledge';
 
-type SurfaceMountBox = Tables<'surface_mount_box'>;
+// type SurfaceMountBox = Tables<'surface_mount_box'>; // Table not yet in database schema
 
 export interface SurfaceMountBoxSearchOptions {
   searchTerm: string
@@ -40,7 +40,7 @@ export async function searchSurfaceMountBoxes(
     
     // Extract values for detection
     let portsMatch: RegExpMatchArray | null = null;
-    let colorValue: string | undefined;
+    let colorValue: string | null = null;
     let brandValue: string | undefined;
     let productLineValue: string | undefined;
     
@@ -131,7 +131,7 @@ export async function searchSurfaceMountBoxes(
       logger.info('[SMB Search] Applied color filter directly', { color: colorValue });
     } else if (colorValue && (brandValue || productLineValue)) {
       // Need to post-filter color when we have compatibility filters
-      postFilterColor = colorValue;
+      postFilterColor = colorValue || undefined;
       needsPostFiltering = true;
       logger.info('[SMB Search] Will apply color filter in post-processing', { color: colorValue });
     }
