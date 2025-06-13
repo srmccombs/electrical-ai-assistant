@@ -35,6 +35,12 @@ export interface SearchOptions {
       description: string
       tableName: string
     }>
+    fiberCables?: Array<{
+      partNumber: string
+      fiberType: string
+      brand: string
+      description: string
+    }>
   }
 }
 
@@ -46,6 +52,9 @@ export interface SearchResult {
   redirectMessage?: string
   totalFound?: number
   smartFilters?: SmartFilters
+  autoApplyFilters?: {
+    [filterType: string]: string
+  }
   crossReferenceInfo?: {
     sourcePartNumber?: string
     targetBrand?: string

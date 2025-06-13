@@ -15,6 +15,8 @@ export interface Message {
   searchTime?: number
   aiAnalysis?: AISearchAnalysis | null
   smartFilters?: SmartFilters | null
+  redirectMessage?: string
+  autoApplyFilters?: { [filterType: string]: string }
 }
 
 export interface DebugInfo {

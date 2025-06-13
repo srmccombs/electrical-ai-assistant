@@ -458,6 +458,43 @@ export const detectBrand = (searchTerm: string): string | undefined => {
   return undefined
 }
 
+// NEW: Detect polish type for fiber connectors
+export const detectPolishType = (searchTerm: string): string | null => {
+  const query = searchTerm.toLowerCase()
+  
+  // Polish type variations
+  const polishMappings = [
+    { keywords: ['apc', 'angled polish', 'angled physical', 'angle polish', 'green connector'], polish: 'APC' },
+    { keywords: ['upc', 'ultra polish', 'ultra physical', 'blue connector'], polish: 'UPC' },
+    { keywords: ['pc', 'physical contact'], polish: 'PC' }, // Must check after APC/UPC
+    { keywords: ['spc', 'super polish', 'super physical'], polish: 'SPC' }
+  ]
+  
+  // Check APC/UPC first to avoid false positive with PC
+  for (const mapping of ['apc', 'upc', 'spc'].map(p => polishMappings.find(m => m.keywords[0] === p))) {
+    if (mapping) {
+      for (const keyword of mapping.keywords) {
+        if (query.includes(keyword)) {
+          console.log(`💎 Detected polish type: ${mapping.polish}`)
+          return mapping.polish
+        }
+      }
+    }
+  }
+  
+  // Then check PC (lower priority)
+  const pcMapping = polishMappings.find(m => m.keywords[0] === 'pc')
+  if (pcMapping) {
+    // Only match 'pc' if it's a separate word, not part of 'apc' or 'upc'
+    if (query.match(/\bpc\b/) && !query.includes('apc') && !query.includes('upc')) {
+      console.log(`💎 Detected polish type: PC`)
+      return 'PC'
+    }
+  }
+  
+  return null
+}
+
 // NEW: Detect cross-reference request
 export const detectCrossReferenceRequest = (searchTerm: string): { isCrossRequest: boolean, partNumber?: string, targetBrand?: string } => {
   const term = searchTerm.toLowerCase()

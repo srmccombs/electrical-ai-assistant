@@ -4,6 +4,7 @@ import { AISearchAnalysis } from '@/types/search';
 import { logger } from '@/utils/logger';
 import { Tables } from '@/src/types/supabase';
 import { detectColor, detectQuantity } from '@/search/shared/industryKnowledge';
+import { discoverSearchableTables, searchAllTablesForPartNumber } from '@/search/shared/tableDiscoveryService';
 
 // type SurfaceMountBox = Tables<'surface_mount_box'>; // Table not yet in database schema
 
@@ -18,6 +19,7 @@ export interface SurfaceMountBoxSearchResult {
   searchStrategy: string
   totalFound: number
   searchTime: number
+  message?: string  // Optional message for when table doesn't exist
 }
 
 export async function searchSurfaceMountBoxes(
@@ -26,6 +28,80 @@ export async function searchSurfaceMountBoxes(
   const startTime = performance.now()
   const { searchTerm, aiAnalysis, limit = 100 } = options
   logger.info('[SMB Search] Starting search', { searchTerm, aiAnalysis });
+
+  // Check if the surface_mount_box table exists
+  try {
+    const { tables } = await discoverSearchableTables();
+    const smbTableExists = tables.some(table => table.name === 'surface_mount_box');
+    
+    if (!smbTableExists) {
+      logger.warn('[SMB Search] surface_mount_box table not found in database', {
+        availableTables: tables.map(t => t.name)
+      });
+      
+      // Check if SMB data might exist in other tables
+      logger.info('[SMB Search] Checking for SMB data in other tables');
+      
+      try {
+        // Search for SMB-related part numbers across all tables
+        const smbPatterns = ['SMB', 'SURFACE MOUNT', 'SURFACE-MOUNT', 'SURFACEMOUNT'];
+        const smbResults = await searchAllTablesForPartNumber(smbPatterns, 10);
+        
+        if (smbResults.length > 0) {
+          logger.info('[SMB Search] Found SMB-related products in other tables', {
+            count: smbResults.length,
+            tables: [...new Set(smbResults.map(r => r._tableName))]
+          });
+          
+          // Transform the results to Product format
+          const products: Product[] = smbResults.map((item: any) => ({
+            id: `${item._tableName}-${item.id}`,
+            partNumber: item.part_number,
+            brand: item.brand || item.manufacturer || '',
+            description: item.short_description || item.description || `Surface Mount Box - ${item.part_number}`,
+            price: Math.random() * 30 + 10,
+            stockLocal: Math.floor(Math.random() * 100),
+            stockDistribution: 500,
+            leadTime: 'Ships Today',
+            category: 'Surface Mount Box',
+            tableName: item._tableName,
+            stockStatus: 'in_stock' as const,
+            stockColor: 'green' as const,
+            stockMessage: 'In stock - Ships today',
+            searchRelevance: 0.8
+          }));
+          
+          const endTime = performance.now();
+          const searchTime = Math.round(endTime - startTime);
+          
+          return {
+            products,
+            searchStrategy: 'cross_table_fallback',
+            totalFound: products.length,
+            searchTime,
+            message: `Surface mount box table not found, but ${products.length} related products found in other tables.`
+          };
+        }
+      } catch (error) {
+        logger.error('[SMB Search] Error searching other tables', { error });
+      }
+      
+      // Return a helpful message if no SMB data found anywhere
+      const endTime = performance.now();
+      const searchTime = Math.round(endTime - startTime);
+      
+      return {
+        products: [],
+        searchStrategy: 'table_not_found',
+        totalFound: 0,
+        searchTime,
+        message: 'Surface mount box data is not currently available. The product table has not been created yet. Please contact support to request this product category.'
+      };
+    }
+  } catch (error) {
+    logger.error('[SMB Search] Error checking table existence', { error });
+    // Continue with the search anyway in case it's just a discovery service issue
+  }
 
   try {
     // Build the query
@@ -147,8 +223,25 @@ export async function searchSurfaceMountBoxes(
       ];
       query = query.or(searchConditions.join(','));
     } else if (!brandValue && !productLineValue) {
-      // General search - use text search
-      query = query.textSearch('search_vector', searchTerm);
+      // General search - use ilike on multiple fields instead of text search
+      // to avoid tsquery syntax errors with numbers and special characters
+      const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(word => 
+        word.length > 2 && // Skip short words
+        !['the', 'and', 'for', 'need', 'want', 'smb', 'box', 'boxes'].includes(word) // Skip common words
+      );
+      
+      if (searchWords.length > 0) {
+        const searchConditions = searchWords.flatMap(word => [
+          `short_description.ilike.%${word}%`,
+          `part_number.ilike.%${word}%`,
+          `brand.ilike.%${word}%`,
+          `product_line.ilike.%${word}%`,
+          `common_terms.ilike.%${word}%`
+        ]);
+        
+        // Use OR for all conditions
+        query = query.or(searchConditions.join(','));
+      }
     }
 
     // Log the final query for debugging
@@ -167,6 +260,23 @@ export async function searchSurfaceMountBoxes(
 
     if (error) {
       logger.error('[SMB Search] Database error', { error });
+      
+      // Check if it's a table not found error
+      if (error.code === '42P01' || error.message?.includes('relation') && error.message?.includes('does not exist')) {
+        logger.warn('[SMB Search] surface_mount_box table does not exist', { errorCode: error.code, errorMessage: error.message });
+        
+        const endTime = performance.now();
+        const searchTime = Math.round(endTime - startTime);
+        
+        return {
+          products: [],
+          searchStrategy: 'table_not_found',
+          totalFound: 0,
+          searchTime,
+          message: 'Surface mount box data is not currently available. The database table has not been created yet. Please contact support to request this product category.'
+        };
+      }
+      
       throw error;
     }
 
@@ -235,62 +345,96 @@ export async function searchSurfaceMountBoxes(
       logger.info('[SMB Search] Found results', { count: 0 });
     }
 
-    // If no results with compatibility filters, try a broader search
+    // If no results with compatibility filters, get ALL SMBs and let UI prioritize
     if (surfaceMountBoxes.length === 0 && (brandValue || productLineValue)) {
-      logger.info('[SMB Search] No results with compatibility filters, trying broader search');
+      logger.info('[SMB Search] No exact matches with compatibility filters, getting all SMBs for UI filtering');
       
-      // Reset query
+      // Reset query to get ALL surface mount boxes
       query = supabase
         .from('surface_mount_box')
         .select('*')
         .eq('is_active', true);
       
-      // Apply only essential filters
+      // Apply only essential filters (like port count)
       if (portsMatch && portsMatch[1]) {
         const numberOfPorts = parseInt(portsMatch[1]);
         if (!isNaN(numberOfPorts)) {
           query = query.eq('number_of_ports', numberOfPorts);
+          logger.info('[SMB Search] Applying port filter in fallback search', { ports: numberOfPorts });
         }
       }
       
-      // Use text search for the term
-      query = query.textSearch('search_vector', searchTerm);
-      
+      // Get all SMBs without brand/product line filtering
       const fallbackResult = await query.limit(limit);
       if (!fallbackResult.error && fallbackResult.data) {
         surfaceMountBoxes = fallbackResult.data;
-        logger.info('[SMB Search] Fallback search found', { count: surfaceMountBoxes.length });
+        logger.info('[SMB Search] Fallback search returned all SMBs', { 
+          count: surfaceMountBoxes.length,
+          willPrioritizeBrand: brandValue,
+          note: 'UI will show all but prioritize matching brands'
+        });
       }
     }
 
     // Transform to Product format
-    const products: Product[] = surfaceMountBoxes.map((smb: any) => ({
-      id: `smb-${smb.id}`,
-      partNumber: smb.part_number,
-      brand: smb.brand,
-      description: smb.short_description || '',
-      price: Math.random() * 30 + 10, // Random price between 10-40
-      stockLocal: Math.floor(Math.random() * 100),
-      stockDistribution: 500,
-      leadTime: 'Ships Today',
-      category: 'Surface Mount Box',
-      // Additional properties
-      productLine: smb.product_line || undefined,
-      productType: 'Surface Mount Box',
-      color: smb.color || undefined,
-      numberOfPorts: smb.number_of_ports || undefined,
-      numberGang: smb.number_gang || undefined,
-      type: smb.type || undefined,
-      compatibleJacks: smb.compatible_jacks || undefined,
-      mountingDepth: smb.mounting_depth || undefined,
-      material: smb.material || undefined,
-      // Search properties
-      searchRelevance: 1.0,
-      tableName: 'surface_mount_box',
-      stockStatus: 'in_stock' as const,
-      stockColor: 'green' as const,
-      stockMessage: 'In stock - Ships today'
-    }));
+    const products: Product[] = surfaceMountBoxes.map((smb: any) => {
+      // Calculate relevance based on brand match from shopping list
+      let relevance = 1.0;
+      if (brandValue && smb.brand) {
+        const smbBrandLower = smb.brand.toLowerCase();
+        const targetBrandLower = brandValue.toLowerCase();
+        if (smbBrandLower === targetBrandLower || smbBrandLower.includes(targetBrandLower)) {
+          relevance = 1.5; // Boost relevance for matching brands
+        }
+      }
+      
+      return {
+        id: `smb-${smb.id}`,
+        partNumber: smb.part_number,
+        brand: smb.brand,
+        description: smb.short_description || '',
+        price: Math.random() * 30 + 10, // Random price between 10-40
+        stockLocal: Math.floor(Math.random() * 100),
+        stockDistribution: 500,
+        leadTime: 'Ships Today',
+        category: 'Surface Mount Box',
+        // Additional properties
+        productLine: smb.product_line || undefined,
+        productType: 'Surface Mount Box',
+        color: smb.color || undefined,
+        numberOfPorts: smb.number_of_ports || undefined,
+        numberGang: smb.number_gang || undefined,
+        type: smb.type || undefined,
+        compatibleJacks: smb.compatible_jacks || undefined,
+        mountingDepth: smb.mounting_depth || undefined,
+        material: smb.material || undefined,
+        // Search properties
+        searchRelevance: relevance,
+        tableName: 'surface_mount_box',
+        stockStatus: 'in_stock' as const,
+        stockColor: 'green' as const,
+        stockMessage: 'In stock - Ships today'
+      };
+    });
+    
+    // Sort products to prioritize brand matches when we have a brand from shopping list
+    if (brandValue) {
+      products.sort((a, b) => {
+        // First sort by relevance (brand matches will have higher relevance)
+        const aRelevance = a.searchRelevance ?? 1.0;
+        const bRelevance = b.searchRelevance ?? 1.0;
+        if (bRelevance !== aRelevance) {
+          return bRelevance - aRelevance;
+        }
+        // Then by part number for consistency
+        return a.partNumber.localeCompare(b.partNumber);
+      });
+      
+      logger.info('[SMB Search] Sorted products with brand priority', { 
+        brandFilter: brandValue,
+        topBrands: products.slice(0, 5).map(p => p.brand).join(', ')
+      });
+    }
 
     const endTime = performance.now();
     const searchTime = Math.round(endTime - startTime);

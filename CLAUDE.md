@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is an AI-powered electrical distribution assistant built with Next.js 14 and TypeScript. The application helps users search for electrical components (cables, fiber connectors, adapter panels, enclosures) using natural language queries powered by OpenAI GPT-4o-mini.
 
-### Current Status (Jan 2025)
+### Current Status (June 2025)
 - ✅ Core search functionality complete
 - ✅ AI integration with GPT-4o-mini
 - ✅ Shopping list management with compatibility filtering
@@ -17,6 +17,10 @@ This is an AI-powered electrical distribution assistant built with Next.js 14 an
 - ✅ Panel capacity search with "next size up" logic
 - ✅ Fiber enclosure & adapter panel compatibility
 - ✅ Surface mount box search implementation
+- ✅ Performance optimization with component extraction
+- ✅ Enhanced fiber cable filtering (count, jacket, type, application)
+- ✅ Smart filter auto-centering
+- ✅ Improved UI with 25% larger display
 - 🚧 User authentication not implemented
 - 🚧 Quote generation not implemented
 - 🚧 Email integration not implemented
@@ -162,6 +166,13 @@ Strict mode is enabled. Key compiler options:
 - ✅ Fiber enclosure & adapter panel compatibility
 - ✅ Box quantity to feet conversion for cables
 - ✅ TypeScript strict mode compliance
+- ✅ Component extraction for performance (FilterSection, ProductTable, SearchInput, ShoppingList)
+- ✅ React memoization throughout (React.memo, useMemo, useCallback)
+- ✅ Enhanced fiber cable filters (jacket rating, product type, application, fiber count)
+- ✅ Application filter parsing for bracketed lists
+- ✅ Smart filter auto-centering on search results
+- ✅ UI improvements (25% larger display, Clear Search button, conditional Clear List)
+- ✅ Fiber Type Reference only shows with 2+ fiber types
 
 ### Services Added
 - `services/aiCache.ts` - Reduces API costs with intelligent caching

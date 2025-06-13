@@ -70,6 +70,8 @@ export interface Product {
   // Surface Mount Box specific fields
   mountingDepth?: number
   compatibleJacks?: string
+  numberOfPorts?: number
+  numberGang?: number
   
   // Cross-reference UI field
   isSourceProduct?: boolean // Mark source product in cross-reference results

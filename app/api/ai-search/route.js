@@ -126,6 +126,29 @@ When searching for faceplates or surface mount boxes:
           productLines: jackProductLinesInCart
         })
       }
+      
+      // Handle fiber cables context
+      if (shoppingListContext?.fiberCables?.length > 0) {
+        const fiberTypesInCart = [...new Set(shoppingListContext.fiberCables.map(cable => cable.fiberType))].filter(Boolean)
+        const brandsInCart = [...new Set(shoppingListContext.fiberCables.map(cable => cable.brand))].filter(Boolean)
+        
+        compatibilityContext += `\n\nFIBER CABLE CONTEXT (for connector compatibility):
+- Customer has ${shoppingListContext.fiberCables.length} fiber cable(s) in their list
+- Fiber types in cart: ${fiberTypesInCart.join(', ') || 'Various'}
+- Brands in cart: ${brandsInCart.join(', ') || 'Various'}
+
+When searching for fiber connectors:
+- STRONGLY prioritize connectors matching fiber types: ${fiberTypesInCart.join(', ')}
+- Include in detectedSpecs: fiberType="${fiberTypesInCart[0] || ''}"
+- Filter results to show ${fiberTypesInCart.join(' or ')} compatible connectors first
+- Consider brand compatibility with ${brandsInCart.join(', ')}`
+        
+        console.log('🛒 Shopping list context detected (fiber cables):', {
+          fiberCablesInCart: shoppingListContext.fiberCables.length,
+          fiberTypes: fiberTypesInCart,
+          brands: brandsInCart
+        })
+      }
     }
 
     const aiPrompt = `You are an expert electrical distributor AI assistant with 35+ years of experience.
@@ -184,10 +207,19 @@ SURFACE MOUNT BOX EXAMPLES (VERY IMPORTANT):
 - "2 port S.M.B" → productType: "SURFACE_MOUNT_BOX", searchStrategy: "surface_mount_box"
 - "surface box white" → productType: "SURFACE_MOUNT_BOX", searchStrategy: "surface_mount_box"
 
+FIBER CONNECTOR EXAMPLES WITH POLISH:
+- "sc apc connectors" → productType: "CONNECTOR", searchStrategy: "connectors", connectorType: "SC", polish: "APC"
+- "lc upc connectors om4" → productType: "CONNECTOR", searchStrategy: "connectors", connectorType: "LC", polish: "UPC", fiberType: "OM4"
+- "48 fiber connectors sc apc" → productType: "CONNECTOR", searchStrategy: "connectors", connectorType: "SC", polish: "APC", requestedQuantity: 48
+- "angled polish sc connectors" → productType: "CONNECTOR", searchStrategy: "connectors", connectorType: "SC", polish: "APC"
+- "green sc connectors" → productType: "CONNECTOR", searchStrategy: "connectors", connectorType: "SC", polish: "APC" (green = APC)
+
 OTHER EXAMPLES:
-- "lc connectors om4" → productType: "CONNECTOR", searchStrategy: "connectors" 
-- "sc adapters multimode" → productType: "CONNECTOR", searchStrategy: "connectors"
-- "1000 ft om3 cable" → productType: "CABLE", searchStrategy: "cables"
+- "lc connectors om4" → productType: "CONNECTOR", searchStrategy: "connectors", fiberType: "OM4"
+- "sc adapters multimode" → productType: "CONNECTOR", searchStrategy: "connectors", fiberType: null
+- "1000 ft om3 cable" → productType: "CABLE", searchStrategy: "cables", fiberType: "OM3"
+- "300ft of 12 fiber" → productType: "CABLE", searchStrategy: "cables", fiberType: null, fiberCount: 12
+- "12 strand fiber cable" → productType: "CABLE", searchStrategy: "cables", fiberType: null, fiberCount: 12
 - "cat6 plenum blue" → productType: "CABLE", searchStrategy: "cables"
 - "fiber patch panel" → productType: "PANEL", searchStrategy: "panels"
 - "4RU enclosure" → productType: "ENCLOSURE", searchStrategy: "enclosures"
@@ -196,6 +228,24 @@ OTHER EXAMPLES:
 QUANTITY DETECTION (VERY IMPORTANT):
 - Extract any quantities: "10000 ft", "24 connectors", "12 LC", "48 adapters", "100 jacks"
 - Convert to numbers: "10,000 ft" → 10000, "24 LC" → 24
+
+FIBER TYPE MAPPING (CRITICAL for real-world usage):
+- User says "single mode", "singlemode", "SM", "sm", "Single Mode", "SINGLE MODE", "single-mode" → Map to: "OS2" 
+- User says "multimode", "MM", "mm", "Multi Mode", "MULTIMODE", "multi-mode" → Map to: null (show all multimode)
+- User says "50/125" → Map to: "OM3" or "OM4" (modern multimode)
+- User says "62.5/125" → Map to: "OM1" (legacy multimode)  
+- User says "9/125" → Map to: "OS2" (single mode)
+- IMPORTANT: Most users say "single mode" not "OS2", but database uses OS1/OS2
+- CRITICAL: Treat ALL case variations as equivalent (SM = sm = Sm = sM)
+- CRITICAL: If NO fiber type is specified (just "fiber" or "12 fiber"), set fiberType: null (show ALL fiber types)
+
+POLISH TYPE DETECTION (VERY IMPORTANT):
+- APC = Angled Physical Contact (8-degree angle, green color, lowest back reflection)
+- UPC = Ultra Physical Contact (blue color, standard for most applications)
+- PC = Physical Contact (older standard, rarely used)
+- SPC = Super Physical Contact (improved PC, rarely used)
+- IMPORTANT: If user says "APC" or "angled polish", set polish: "APC"
+- IMPORTANT: APC connectors are typically green and critical for high-performance applications
 
 RESPOND WITH ONLY JSON:
 {
@@ -213,7 +263,8 @@ RESPOND WITH ONLY JSON:
     "manufacturer": "CORNING|PANDUIT|etc or null",
     "color": "BLUE|WHITE|GRAY|RED|GREEN|YELLOW|ORANGE|BLACK or null",
     "productLine": "Mini-Com|etc or null",
-    "rackUnits": number or null
+    "rackUnits": number or null,
+    "polish": "APC|UPC|PC|SPC or null"
   },
   "searchTerms": ["primary_term"],
   "reasoning": "Brief explanation",

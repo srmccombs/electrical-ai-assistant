@@ -804,7 +804,7 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
 // BRAND SEARCH - NEW DEDICATED FUNCTION
 // ===================================================================
 
-const searchAllTablesByBrand = async (brand: string, limit: number): Promise<Product[]> => {
+const searchAllTablesByBrand = async (brand: string, limit: number, shoppingListContext?: SearchOptions['shoppingListContext']): Promise<Product[]> => {
   logger.info(`MULTI-TABLE BRAND SEARCH FOR: ${brand}`, {}, LogCategory.SEARCH)
   let allProducts: Product[] = []
 
@@ -886,7 +886,10 @@ const searchAllTablesByBrand = async (brand: string, limit: number): Promise<Pro
         timestamp: new Date().toISOString(),
         aiModel: 'enhanced'
       },
-      limit: Math.floor(limit / 5)
+      limit: Math.floor(limit / 5),
+      shoppingListContext: shoppingListContext ? {
+        fiberCables: shoppingListContext.fiberCables
+      } : undefined
     })
     // Filter to ensure only the requested brand
     const brandProducts = connectorResult.products.filter(p =>
@@ -1211,7 +1214,10 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
         const connectorResult = await searchFiberConnectorsImpl({
           searchTerm: processedQuery.processedTerm,
           aiAnalysis,
-          limit
+          limit,
+          shoppingListContext: shoppingListContext ? {
+            fiberCables: shoppingListContext.fiberCables
+          } : undefined
         })
         products = connectorResult.products
         searchStrategy = `fiber_connectors_${connectorResult.searchStrategy}`
@@ -1271,6 +1277,13 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
         })
         products = smbResult.products
         searchStrategy = `surface_mount_box_${smbResult.searchStrategy}`
+        
+        // Handle table not found message
+        if (smbResult.message && smbResult.searchStrategy === 'table_not_found') {
+          logger.warn('SMB table not found, returning with message', { message: smbResult.message }, LogCategory.SEARCH)
+          // Store the message to be returned
+          processedQuery.redirectMessage = smbResult.message
+        }
         break
 
       case 'fiber_enclosures':
@@ -1347,7 +1360,7 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
         const queryLower = processedQuery.processedTerm.toLowerCase().trim()
 
         if (brandKeywords.includes(queryLower)) {
-          products = await searchAllTablesByBrand(queryLower, limit)
+          products = await searchAllTablesByBrand(queryLower, limit, shoppingListContext)
           searchStrategy = 'multi_table_brand_search'
         } else {
           // Regular multi-table search
@@ -1362,7 +1375,10 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
             const connResults = await searchFiberConnectorsImpl({
               searchTerm: processedQuery.processedTerm,
               aiAnalysis,
-              limit: Math.floor((limit - products.length) / 4)
+              limit: Math.floor((limit - products.length) / 4),
+              shoppingListContext: shoppingListContext ? {
+                fiberCables: shoppingListContext.fiberCables
+              } : undefined
             })
             products = [...products, ...connResults.products]
           }
@@ -1427,6 +1443,110 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
 
     // Generate smart filters if we have products
     const smartFilters = products.length > 0 ? generateSmartFilters(products) : undefined
+    
+    // Generate auto-apply filters based on shopping list context
+    let autoApplyFilters: { [filterType: string]: string } | undefined
+    
+    // Check if we're searching for surface mount boxes and have jack modules in the shopping list
+    if (targetTable === 'surface_mount_box' && shoppingListContext?.jackModules && shoppingListContext.jackModules.length > 0) {
+      // Extract unique brands from jack modules in shopping list
+      const jackBrands = [...new Set(shoppingListContext.jackModules.map(jack => jack.brand).filter(Boolean))]
+      
+      if (jackBrands.length > 0 && smartFilters?.brands) {
+        // Find the first matching brand that exists in the available filters
+        for (const brand of jackBrands) {
+          const matchingBrand = smartFilters.brands.find(filterBrand => 
+            filterBrand.toLowerCase() === brand.toLowerCase()
+          )
+          
+          if (matchingBrand) {
+            autoApplyFilters = {
+              brand: matchingBrand
+            }
+            logger.info('Auto-applying brand filter for SMB based on jack modules in shopping list', { 
+              jackBrand: brand,
+              appliedBrand: matchingBrand,
+              availableBrands: smartFilters.brands
+            }, LogCategory.SEARCH)
+            break
+          }
+        }
+      }
+    }
+    
+    // Check if we're searching for fiber connectors and have fiber cables in the shopping list
+    if (targetTable === 'fiber_connectors' && shoppingListContext?.fiberCables && shoppingListContext.fiberCables.length > 0) {
+      // Extract unique fiber types from shopping list
+      const shoppingListFiberTypes = new Set<string>()
+      shoppingListContext.fiberCables.forEach(cable => {
+        if (cable.fiberType) {
+          // Handle multiple fiber types (e.g., "OM3, OM4")
+          const types = cable.fiberType.split(',').map(t => t.trim()).filter(t => t)
+          types.forEach(type => {
+            // Normalize fiber type (e.g., "OS2" -> "Singlemode", "OM3" -> "OM3")
+            if (type.toUpperCase().startsWith('OS')) {
+              shoppingListFiberTypes.add('Singlemode')
+              // Also add the original OS type in case it's used in the database
+              shoppingListFiberTypes.add(type.toUpperCase())
+            } else if (type.toUpperCase().match(/^OM[1-5]$/)) {
+              shoppingListFiberTypes.add(type.toUpperCase())
+            } else if (type.toLowerCase() === 'singlemode' || type.toLowerCase() === 'single mode') {
+              shoppingListFiberTypes.add('Singlemode')
+            } else if (type.toLowerCase() === 'multimode' || type.toLowerCase() === 'multi mode') {
+              shoppingListFiberTypes.add('Multimode')
+            }
+          })
+        }
+      })
+      
+      logger.info('Shopping list fiber types detected', {
+        shoppingListFiberTypes: Array.from(shoppingListFiberTypes),
+        smartFilterFiberTypes: smartFilters?.fiberTypes || []
+      }, LogCategory.SEARCH)
+      
+      // If we have fiber types from shopping list and they exist in the filter options
+      if (shoppingListFiberTypes.size > 0 && smartFilters?.fiberTypes) {
+        // Find the first matching fiber type that exists in the available filters
+        // Check both exact match and partial match (e.g., "OM4" in "Multimode, OM4")
+        for (const fiberType of shoppingListFiberTypes) {
+          // First try exact match (case-insensitive)
+          let matchingFilterType = smartFilters.fiberTypes.find(filterType => 
+            filterType.toLowerCase() === fiberType.toLowerCase()
+          )
+          
+          // If no exact match, try partial match (e.g., "OM4" within "Multimode, OM4")
+          if (!matchingFilterType) {
+            matchingFilterType = smartFilters.fiberTypes.find(filterType => 
+              filterType.toLowerCase().includes(fiberType.toLowerCase()) ||
+              fiberType.toLowerCase().includes(filterType.toLowerCase())
+            )
+          }
+          
+          if (matchingFilterType) {
+            autoApplyFilters = {
+              fiberType: matchingFilterType // Use the actual filter value, not our normalized one
+            }
+            logger.info('Auto-applying fiber type filter based on shopping list', { 
+              requestedType: fiberType,
+              appliedType: matchingFilterType,
+              matchType: matchingFilterType.toLowerCase() === fiberType.toLowerCase() ? 'exact' : 'partial',
+              shoppingListFiberTypes: Array.from(shoppingListFiberTypes),
+              availableFilterOptions: smartFilters.fiberTypes
+            }, LogCategory.SEARCH)
+            break
+          }
+        }
+        
+        // If no match found, log the actual values for debugging
+        if (!autoApplyFilters) {
+          logger.warn('No matching fiber type found in filter options', {
+            shoppingListTypes: Array.from(shoppingListFiberTypes),
+            availableTypes: smartFilters.fiberTypes,
+            note: 'Check if fiber types are stored differently (e.g., "Multimode, OM4" vs "OM4")'
+          }, LogCategory.SEARCH)
+        }
+      }
+    }
 
     const endTime = performance.now()
     const searchTime = Math.round(endTime - startTime)
@@ -1452,7 +1572,8 @@ export const searchProducts = async (options: SearchOptions): Promise<SearchResu
       aiAnalysis: aiAnalysis || undefined,
       redirectMessage: processedQuery.redirectMessage || undefined,
       totalFound: products.length,
-      smartFilters
+      smartFilters,
+      autoApplyFilters
     }
 
   } catch (error: unknown) {

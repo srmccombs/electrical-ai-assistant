@@ -39,6 +39,10 @@ export interface ActiveFilters {
   [key: string]: string
 }
 
+export interface AutoApplyFilters {
+  [filterType: string]: string[]
+}
+
 export interface FilterOption {
   value: string
   label: string

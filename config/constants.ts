@@ -104,6 +104,18 @@ export const BUSINESS_RULES = {
   MAX_QUERY_LENGTH: 200
 } as const
 
+// Fiber Type Compatibility Mapping
+export const FIBER_TYPE_MAPPING = {
+  'OM1': ['OM1', 'Multimode', '62.5/125'],
+  'OM2': ['OM2', 'Multimode', '50/125'],
+  'OM3': ['OM3', 'Multimode', '50/125', 'Aqua'],
+  'OM4': ['OM4', 'Multimode', '50/125', 'Aqua', 'Violet'],
+  'OM5': ['OM5', 'Multimode', '50/125', 'Lime Green'],
+  'OS1': ['OS1', 'OS2', 'Singlemode', '9/125', 'Single Mode'],
+  'OS2': ['OS2', 'OS1', 'Singlemode', '9/125', 'Single Mode']
+} as const
+
 export type ElectricalBrand = typeof ELECTRICAL_BRANDS[number]
 export type TableName = keyof typeof TABLE_CONFIG.NAMES
 export type StockStatusType = keyof typeof STOCK_STATUS
+export type FiberType = keyof typeof FIBER_TYPE_MAPPING

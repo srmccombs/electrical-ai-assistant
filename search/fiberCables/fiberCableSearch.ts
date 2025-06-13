@@ -77,13 +77,35 @@ export const searchFiberCables = async (
     let detectedSpecificType: string | undefined = specificFiberTypes.find(type => queryLower.includes(type))
     let detectedModeType: 'multimode' | 'singlemode' | undefined
 
-    // Check for multimode or single-mode
-    if (queryLower.includes('multimode') || queryLower.includes('multi-mode') || queryLower.includes('multi mode')) {
+    // Check for multimode or single-mode (including common abbreviations) - all case-insensitive
+    if (queryLower.includes('multimode') || queryLower.includes('multi-mode') || queryLower.includes('multi mode') || 
+        queryLower.match(/\bmm\b/i)) {  // Case-insensitive word boundary match for MM
       detectedModeType = 'multimode'
       console.log('🎯 MULTIMODE DETECTED - will exclude single-mode cables')
-    } else if (queryLower.includes('singlemode') || queryLower.includes('single-mode') || queryLower.includes('single mode')) {
+    } else if (queryLower.includes('singlemode') || queryLower.includes('single-mode') || queryLower.includes('single mode') ||
+               queryLower.match(/\bsm\b/i)) {  // Case-insensitive word boundary match for SM
       detectedModeType = 'singlemode'
       console.log('🎯 SINGLE-MODE DETECTED - will exclude multimode cables')
+      // If user says single mode but no specific OS type, default to OS2
+      if (!detectedSpecificType) {
+        detectedSpecificType = 'os2'
+        console.log('📍 Defaulting single mode to OS2')
+      }
+    }
+    
+    // Check for core diameter specifications
+    if (queryLower.includes('9/125')) {
+      detectedModeType = 'singlemode'
+      detectedSpecificType = 'os2'
+      console.log('🎯 9/125 detected - OS2 single mode')
+    } else if (queryLower.includes('50/125')) {
+      detectedModeType = 'multimode'
+      // Could be OM3 or OM4, let search be broader
+      console.log('🎯 50/125 detected - OM3/OM4 multimode')
+    } else if (queryLower.includes('62.5/125')) {
+      detectedSpecificType = 'om1'
+      detectedModeType = 'multimode'
+      console.log('🎯 62.5/125 detected - OM1 multimode')
     }
 
     // If AI detected a fiber type, use it
@@ -102,7 +124,7 @@ export const searchFiberCables = async (
     if (detectedSpecificType) {
       const specificType = detectedSpecificType.toUpperCase()
       console.log(`🎯 SPECIFIC FIBER TYPE DETECTED: ${specificType}`)
-      query = query.or(`short_description.ilike.%${specificType}%,fiber_type_standard.ilike.%${specificType}%`)
+      query = query.or(`short_description.ilike.%${specificType}%,fiber_category.ilike.%${specificType}%`)
     } else if (detectedModeType) {
       // For multimode/single-mode, search broadly for fiber cables
       const cableConditions = cableTerms.map(term =>
@@ -121,6 +143,12 @@ export const searchFiberCables = async (
         `short_description.ilike.%${type}%`
       ).join(',')
       query = query.or(`${cableConditions},${fiberConditions},short_description.ilike.%fiber%`)
+    }
+
+    // Add fiber count filter if strand count was detected
+    if (requestedStrandCount) {
+      query = query.eq('fiber_count', requestedStrandCount)
+      console.log(`🔢 Adding fiber count filter: ${requestedStrandCount}`)
     }
 
     const result = await query
@@ -252,8 +280,11 @@ const formatCableResults = (data: any[], searchType: string): Product[] => {
     stockDistribution: 100,
     leadTime: 'Ships Today',
     category: 'Fiber Optic Cable',
-    fiberType: extractFiberType(item.short_description) || 'Fiber',
-    fiberCount: extractFiberCount(item.short_description),
+    fiberType: extractFiberType(item.short_description) || item.fiber_type_standard || 'Fiber',
+    fiberCount: extractFiberCount(item.short_description) || item.fiber_count,
+    jacketRating: item.jacket_rating || extractJacketRating(item.short_description),
+    productType: item.product_type || 'Fiber Optic Cable',
+    application: item.applications || extractApplication(item.short_description),
     searchRelevance: 1.0,
     tableName: 'fiber_cables',
     stockStatus: 'not_in_stock',
@@ -298,6 +329,44 @@ const extractFiberCount = (description?: string): number | undefined => {
   return undefined
 }
 
+// Helper to extract jacket rating from description
+const extractJacketRating = (description?: string): string | undefined => {
+  if (!description) return undefined
+  
+  const desc = description.toUpperCase()
+  if (desc.includes('PLENUM') || desc.includes('CMP')) return 'Plenum'
+  if (desc.includes('RISER') || desc.includes('CMR')) return 'Riser'
+  if (desc.includes('OUTDOOR') || desc.includes('OUTSIDE')) return 'Outdoor'
+  if (desc.includes('INDOOR/OUTDOOR')) return 'Indoor/Outdoor'
+  if (desc.includes('DIRECT BURIAL') || desc.includes('BURIAL')) return 'Direct Burial'
+  
+  return undefined
+}
+
+// Helper to extract application from description - returns the full application string
+const extractApplication = (description?: string): string | undefined => {
+  if (!description) return undefined
+  
+  // Look for bracketed application lists
+  const bracketMatch = description.match(/\[(.*?)\]/g)
+  if (bracketMatch && bracketMatch.length > 0) {
+    // Return the full bracketed content
+    return bracketMatch[0]
+  }
+  
+  // Fallback to simple detection if no brackets found
+  const desc = description.toUpperCase()
+  if (desc.includes('BACKBONE')) return 'Backbone'
+  if (desc.includes('HORIZONTAL')) return 'Horizontal'
+  if (desc.includes('DISTRIBUTION')) return 'Distribution'
+  if (desc.includes('DATACENTER') || desc.includes('DATA CENTER')) return 'Data Center'
+  if (desc.includes('CAMPUS')) return 'Campus'
+  if (desc.includes('BUILDING')) return 'Building'
+  if (desc.includes('RISER')) return 'Riser'
+  
+  return undefined
+}
+
 export const generateFiberCableFilters = (products: Product[]) => {
   const filterString = (items: (string | undefined)[]): string[] =>
     Array.from(new Set(items.filter((item): item is string => Boolean(item))))
@@ -305,6 +374,9 @@ export const generateFiberCableFilters = (products: Product[]) => {
   return {
     brands: filterString(products.map(p => p.brand)).slice(0, 8),
     fiberTypes: filterString(products.map(p => p.fiberType)).slice(0, 6),
-    fiberCounts: filterString(products.map(p => p.fiberCount?.toString())).slice(0, 6)
+    fiberCounts: filterString(products.map(p => p.fiberCount?.toString())).slice(0, 6),
+    jacketRatings: filterString(products.map(p => p.jacketRating)).slice(0, 6),
+    productTypes: filterString(products.map(p => p.productType)).slice(0, 6),
+    applications: filterString(products.map(p => p.application)).slice(0, 6)
   }
 }
