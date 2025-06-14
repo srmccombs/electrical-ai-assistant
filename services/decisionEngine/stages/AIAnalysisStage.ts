@@ -4,7 +4,7 @@
 import { DecisionStage } from '../types'
 import { SearchDecision } from '../SearchDecision'
 import { logger } from '@/utils/logger'
-import { aiCache } from '@/services/aiCache'
+import { getCachedAIAnalysis } from '@/services/aiCache'
 import OpenAI from 'openai'
 import { PRODUCT_TYPES } from '@/config/productTypes'
 
@@ -47,21 +47,16 @@ export class AIAnalysisStage implements DecisionStage {
     logger.info(`AIAnalysisStage: Analyzing query "${decision.normalizedQuery}"`)
 
     try {
-      // Check cache first
-      const cached = await aiCache.get(decision.normalizedQuery)
-      if (cached) {
-        logger.info('AIAnalysisStage: Using cached analysis')
-        return this.applyAIAnalysis(decision, cached)
-      }
-
-      // Prepare context from hints
-      const contextInfo = this.buildContextFromHints(decision)
-
-      // Call OpenAI
-      const analysis = await this.analyzeWithAI(decision.normalizedQuery, contextInfo)
-      
-      // Cache the result
-      await aiCache.set(decision.normalizedQuery, analysis)
+      // Use cached AI analysis
+      const analysis = await getCachedAIAnalysis(
+        decision.normalizedQuery,
+        async (query) => {
+          // This function is called only if there's no cache hit
+          const contextInfo = this.buildContextFromHints(decision)
+          return await this.analyzeWithAI(query, contextInfo)
+        },
+        decision.context?.shoppingListContext
+      )
 
       // Apply the analysis
       return this.applyAIAnalysis(decision, analysis)
