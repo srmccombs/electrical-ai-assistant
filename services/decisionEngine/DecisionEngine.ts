@@ -46,7 +46,8 @@ export class DecisionEngine {
         
         // Process the stage
         const previousDecision = decision
-        decision = await stage.process(decision.setStage(stage.name))
+        const decisionWithStage = decision.setStage(stage.name)
+        decision = await stage.process(decisionWithStage)
         
         // Calculate stage duration
         const stageDuration = Date.now() - stageStart
