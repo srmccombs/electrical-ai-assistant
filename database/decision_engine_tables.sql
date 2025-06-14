@@ -59,6 +59,10 @@ CREATE TABLE IF NOT EXISTS performance_baselines (
 
 CREATE INDEX IF NOT EXISTS idx_baseline_metric ON performance_baselines(metric_name);
 
+-- Add unique constraint for metric_name
+ALTER TABLE performance_baselines
+ADD CONSTRAINT unique_metric_name UNIQUE (metric_name);
+
 -- 4. Regression Tests Table
 -- Stores critical queries that must always work
 CREATE TABLE IF NOT EXISTS regression_tests (
@@ -80,6 +84,10 @@ CREATE TABLE IF NOT EXISTS regression_tests (
 CREATE INDEX IF NOT EXISTS idx_regression_query ON regression_tests(query);
 CREATE INDEX IF NOT EXISTS idx_regression_priority ON regression_tests(priority);
 CREATE INDEX IF NOT EXISTS idx_regression_active ON regression_tests(active);
+
+-- Add unique constraint for query
+ALTER TABLE regression_tests
+ADD CONSTRAINT unique_regression_query UNIQUE (query);
 
 -- 5. Insert initial performance baselines
 INSERT INTO performance_baselines (metric_name, baseline_value, target_value, measurement_period, critical_queries)
@@ -121,7 +129,7 @@ BEGIN
         smc.divergence_type,
         COUNT(*) as count,
         AVG(ABS(smc.new_engine_time_ms - smc.old_engine_time_ms))::NUMERIC as avg_time_difference_ms,
-        ARRAY_AGG(DISTINCT smc.query ORDER BY smc.created_at DESC LIMIT 5) as example_queries
+        (ARRAY_AGG(DISTINCT smc.query ORDER BY smc.created_at DESC))[1:5] as example_queries
     FROM shadow_mode_comparisons smc
     WHERE smc.created_at > NOW() - time_window
     GROUP BY smc.divergence_type
