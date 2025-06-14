@@ -4,7 +4,7 @@ import { AISearchAnalysis } from '@/types/search';
 import { logger } from '@/utils/logger';
 import { Tables } from '@/src/types/supabase';
 import { detectColor, detectQuantity } from '@/search/shared/industryKnowledge';
-import { discoverSearchableTables, searchAllTablesForPartNumber } from '@/search/shared/tableDiscoveryService';
+// import { discoverSearchableTables } from '@/search/shared/tableDiscoveryService'; // No longer needed - table exists
 
 // type SurfaceMountBox = Tables<'surface_mount_box'>; // Table not yet in database schema
 
@@ -29,79 +29,8 @@ export async function searchSurfaceMountBoxes(
   const { searchTerm, aiAnalysis, limit = 100 } = options
   logger.info('[SMB Search] Starting search', { searchTerm, aiAnalysis });
 
-  // Check if the surface_mount_box table exists
-  try {
-    const { tables } = await discoverSearchableTables();
-    const smbTableExists = tables.some(table => table.name === 'surface_mount_box');
-    
-    if (!smbTableExists) {
-      logger.warn('[SMB Search] surface_mount_box table not found in database', {
-        availableTables: tables.map(t => t.name)
-      });
-      
-      // Check if SMB data might exist in other tables
-      logger.info('[SMB Search] Checking for SMB data in other tables');
-      
-      try {
-        // Search for SMB-related part numbers across all tables
-        const smbPatterns = ['SMB', 'SURFACE MOUNT', 'SURFACE-MOUNT', 'SURFACEMOUNT'];
-        const smbResults = await searchAllTablesForPartNumber(smbPatterns, 10);
-        
-        if (smbResults.length > 0) {
-          logger.info('[SMB Search] Found SMB-related products in other tables', {
-            count: smbResults.length,
-            tables: [...new Set(smbResults.map(r => r._tableName))]
-          });
-          
-          // Transform the results to Product format
-          const products: Product[] = smbResults.map((item: any) => ({
-            id: `${item._tableName}-${item.id}`,
-            partNumber: item.part_number,
-            brand: item.brand || item.manufacturer || '',
-            description: item.short_description || item.description || `Surface Mount Box - ${item.part_number}`,
-            price: Math.random() * 30 + 10,
-            stockLocal: Math.floor(Math.random() * 100),
-            stockDistribution: 500,
-            leadTime: 'Ships Today',
-            category: 'Surface Mount Box',
-            tableName: item._tableName,
-            stockStatus: 'in_stock' as const,
-            stockColor: 'green' as const,
-            stockMessage: 'In stock - Ships today',
-            searchRelevance: 0.8
-          }));
-          
-          const endTime = performance.now();
-          const searchTime = Math.round(endTime - startTime);
-          
-          return {
-            products,
-            searchStrategy: 'cross_table_fallback',
-            totalFound: products.length,
-            searchTime,
-            message: `Surface mount box table not found, but ${products.length} related products found in other tables.`
-          };
-        }
-      } catch (error) {
-        logger.error('[SMB Search] Error searching other tables', { error });
-      }
-      
-      // Return a helpful message if no SMB data found anywhere
-      const endTime = performance.now();
-      const searchTime = Math.round(endTime - startTime);
-      
-      return {
-        products: [],
-        searchStrategy: 'table_not_found',
-        totalFound: 0,
-        searchTime,
-        message: 'Surface mount box data is not currently available. The product table has not been created yet. Please contact support to request this product category.'
-      };
-    }
-  } catch (error) {
-    logger.error('[SMB Search] Error checking table existence', { error });
-    // Continue with the search anyway in case it's just a discovery service issue
-  }
+  // Table has been created - no need to check for existence anymore
+  logger.info('[SMB Search] Proceeding with surface_mount_box table search');
 
   try {
     // Build the query
@@ -218,8 +147,8 @@ export async function searchSurfaceMountBoxes(
         `part_number.ilike.%${cleanedTerm}%`,
         `part_number.ilike.${cleanedTerm}%`,
         `short_description.ilike.%${cleanedTerm}%`,
-        `common_terms.ilike.%${cleanedTerm}%`,
         `possible_cross.ilike.%${cleanedTerm}%`
+        // Removed common_terms as it's an array type
       ];
       query = query.or(searchConditions.join(','));
     } else if (!brandValue && !productLineValue) {
@@ -235,12 +164,15 @@ export async function searchSurfaceMountBoxes(
           `short_description.ilike.%${word}%`,
           `part_number.ilike.%${word}%`,
           `brand.ilike.%${word}%`,
-          `product_line.ilike.%${word}%`,
-          `common_terms.ilike.%${word}%`
+          `product_line.ilike.%${word}%`
+          // Removed common_terms as it's an array type
         ]);
         
         // Use OR for all conditions
         query = query.or(searchConditions.join(','));
+      } else {
+        // If no valid search words, just return all SMBs with the port filter
+        logger.info('[SMB Search] No valid search words after filtering, returning all SMBs with filters');
       }
     }
 
@@ -445,8 +377,24 @@ export async function searchSurfaceMountBoxes(
       totalFound: products.length,
       searchTime
     };
-  } catch (error) {
+  } catch (error: any) {
     logger.error('[SMB Search] Error', { error });
+    
+    // Check if it's a 404 error (table not found)
+    if (error?.code === '42P01' || error?.message?.includes('relation') || error?.status === 404) {
+      logger.warn('[SMB Search] Table does not exist, returning helpful message');
+      const endTime = performance.now();
+      const searchTime = Math.round(endTime - startTime);
+      
+      return {
+        products: [],
+        searchStrategy: 'table_not_found',
+        totalFound: 0,
+        searchTime,
+        message: '⚠️ Surface Mount Box products are not yet available in our system. The database table for SMBs is pending creation. In the meantime, you may want to search for faceplates instead.'
+      };
+    }
+    
     throw error;
   }
 }

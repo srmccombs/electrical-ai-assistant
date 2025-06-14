@@ -32,7 +32,9 @@ export async function searchFaceplates(
     let query = supabase
       .from('faceplates')
       .select('*')
-      .eq('is_active', true);
+      .eq('is_active', true)
+      // Exclude surface mount boxes from faceplate searches
+      .not('product_type', 'ilike', '%Surface Mount Box%');
 
     // Part number search (highest priority)
     const cleanedTerm = searchTerm.trim().toUpperCase();

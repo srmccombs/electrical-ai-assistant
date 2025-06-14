@@ -5,7 +5,7 @@ This document provides comprehensive documentation for the Plectic AI Supabase d
 
 ## Database Structure
 
-### Core Product Tables (8 active tables + 1 pending)
+### Core Product Tables (9 active tables)
 These tables store the main product catalog:
 
 #### Active Tables:
@@ -15,11 +15,13 @@ These tables store the main product catalog:
 4. **rack_mount_fiber_enclosures** - 1U-4U rack mount enclosures
 5. **wall_mount_fiber_enclosures** - Wall mount fiber enclosures
 6. **fiber_optic_cable** - Single/multimode fiber cables
-7. **faceplates** - Network faceplates
+7. **faceplates** - Network faceplates (Note: Contains both faceplates and some SMB products)
 8. **jack_modules** - Keystone jacks and modules
-
-#### Pending Creation:
-9. **surface_mount_box** - Surface mount boxes *(Table not yet created in database - search functionality will provide helpful message and check other tables for SMB products)*
+9. **surface_mount_box** - Surface mount boxes (Created June 2025)
+   - Compatible with jack modules via `compatible_jacks` JSON array field
+   - Contains Panduit Mini-Com and Hubbell ISTATION product lines
+   - Port configurations: 1, 2, 4, 6, 12 ports
+   - Note: `common_terms` is an array field, cannot use with ilike operators
 
 ### Stock Management Table
 

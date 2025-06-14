@@ -208,8 +208,8 @@ const PlecticAI: React.FC = () => {
     "Fiber Optic Enclosures",
     "Fiber Optic Adapter Panels",
     "Fiber Optic Connectors",
-    "CCH-02U",
-    "4RU fiber enclosure"
+    "Category Jacks",
+    "Face Plates",
   ])
   const [currentSearchTerm, setCurrentSearchTerm] = useState<string>('')
   const [messageFilters, setMessageFilters] = useState<Record<string, { activeFilters: ActiveFilters, filteredProducts: Product[] }>>({})
@@ -490,6 +490,7 @@ const PlecticAI: React.FC = () => {
         searchLower.includes('wall plate') ||
         searchLower.includes('surface mount') ||
         searchLower.includes('surface box') ||
+        searchLower.includes('smb') ||
         searchLower.includes('adapter panel') ||
         searchLower.includes('adapter panels') ||
         searchLower.includes('fiber panel') ||

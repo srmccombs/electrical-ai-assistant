@@ -178,7 +178,8 @@ const normalizeColor = (aiColor?: string, textDetected?: string | null): string 
 const searchByProductLine = async (
   productLine: string,
   detectedColor?: string | undefined,
-  detectedJacketCode?: string | undefined
+  detectedJacketCode?: string | undefined,
+  detectedShielding?: string | null
 ): Promise<Product[]> => {
   console.log(`📋 STRATEGY 1: Searching by product line: "${productLine}"`)
 
@@ -200,6 +201,12 @@ const searchByProductLine = async (
     console.log(`🧥 Adding jacket_code filter: ${detectedJacketCode}`)
   }
 
+  // Apply shielding filter at database level
+  if (detectedShielding) {
+    query = query.eq('Shielding_Type', detectedShielding)
+    console.log(`🛡️ Adding shielding filter: ${detectedShielding}`)
+  }
+
   const result = await query
   const products = result.data ? formatCableResults(result.data, 'product_line_match') : []
 
@@ -216,7 +223,8 @@ const searchByMultiCriteria = async (
   detectedProductLine?: string | null,
   detectedColor?: string | undefined,
   detectedJacketCode?: string | undefined,
-  detectedCategory?: string | undefined
+  detectedCategory?: string | undefined,
+  detectedShielding?: string | null
 ): Promise<Product[]> => {
   console.log(`🎯 STRATEGY 2: AI-Enhanced Targeted Search: "${searchTerm}"`)
   console.log(`🤖 AI Specs:`, aiAnalysis?.detectedSpecs)
@@ -260,6 +268,12 @@ const searchByMultiCriteria = async (
   if (detectedJacketCode) {
     query = query.eq('jacket_code', detectedJacketCode)
     console.log(`🧥 REQUIRED: Jacket code filter ${detectedJacketCode}`)
+  }
+
+  // Apply shielding filter at database level for better performance
+  if (detectedShielding) {
+    query = query.eq('Shielding_Type', detectedShielding)
+    console.log(`🛡️ REQUIRED: Shielding filter ${detectedShielding}`)
   }
 
   // Build search conditions for category
@@ -490,7 +504,7 @@ export const searchCategoryCables = async (
     // STRATEGY 1: Product Line Search
     if (detectedProductLine) {
       console.log(`🚀 STRATEGY 1: Product Line Search for "${detectedProductLine}"`)
-      products = await searchByProductLine(detectedProductLine, detectedColor, detectedJacketCode)
+      products = await searchByProductLine(detectedProductLine, detectedColor, detectedJacketCode, detectedShielding)
       if (products.length > 0) {
         searchStrategy = 'product_line_match'
         products = applyIntelligentFiltering(products, detectedCategory, detectedShielding, detectedJacketCode, aiAnalysis)
@@ -512,7 +526,8 @@ export const searchCategoryCables = async (
       detectedProductLine,
       detectedColor,
       detectedJacketCode,
-      detectedCategory
+      detectedCategory,
+      detectedShielding
     )
 
     if (products.length > 0) {
