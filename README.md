@@ -29,7 +29,7 @@ Plectic AI transforms how electrical distributors search for products by underst
 - **Type System**: Centralized type definitions in `/types`
 - **Logging**: Custom logger with performance tracking
 
-## Current Status (January 11, 2025)
+## Current Status (June 14, 2025)
 
 ### ✅ Implemented
 - Core search functionality across 9+ product categories
@@ -48,6 +48,12 @@ Plectic AI transforms how electrical distributors search for products by underst
 - Error handling and debug mode
 - Stock status indicators
 - Fiber type reference guides
+
+### 🚧 In Progress - Decision Engine Migration
+- New Decision Engine architecture to prevent cascading search failures
+- Shadow mode testing ready for deployment
+- Knowledge system tables created
+- Admin monitoring dashboard available at `/admin/decision-engine`
 - Complete TypeScript type system with centralized definitions
 - Environment variable validation
 - Enhanced logger with performance tracking
@@ -105,6 +111,9 @@ Add your keys to `.env.local`:
 OPENAI_API_KEY=your_openai_api_key
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# For Decision Engine (optional)
+USE_DECISION_ENGINE=shadow  # Options: disabled, shadow, production
 ```
 
 4. Run the development server:
@@ -144,12 +153,52 @@ Open [http://localhost:3000](http://localhost:3000) to see the application.
 /app              # Next.js app directory
   /api            # API routes
   /analytics      # Analytics dashboard
+  /admin          # Admin monitoring pages
 /components       # React components
 /services         # Business logic services
+  /decisionEngine # New Decision Engine implementation
 /search           # Product-specific search logic
 /config          # Configuration files
 /lib             # Utilities and clients
+/database         # SQL schemas and migrations
 ```
+
+## Decision Engine Migration
+
+The Decision Engine is a new architecture that solves cascading search failures when adding new product types.
+
+### Key Features
+- **Immutable Decision Pipeline**: Prevents functions from overriding each other
+- **Clear Precedence Rules**: Business Rules → Part Numbers → Context → AI → Text → Fallback
+- **Shadow Mode Testing**: Run both engines in parallel to verify no regressions
+- **Audit Trail**: Every decision is logged for debugging
+
+### Enabling the Decision Engine
+
+1. **Shadow Mode** (recommended first step):
+   ```bash
+   USE_DECISION_ENGINE=shadow
+   ```
+   - Runs both old and new engines
+   - Logs differences for analysis
+   - Returns old results (safe)
+
+2. **Monitor Shadow Mode**:
+   - Visit `/admin/decision-engine` to see reports
+   - Check API: `/api/admin/shadow-report`
+   - Review divergences and confidence scores
+
+3. **Production Mode** (after validation):
+   ```bash
+   USE_DECISION_ENGINE=production
+   ```
+
+### Database Setup
+Run the SQL in `/database/decision_engine_tables.sql` to create:
+- `search_decisions_audit` - Decision trail
+- `shadow_mode_comparisons` - Divergence tracking
+- `regression_tests` - Critical query tests
+- Performance monitoring tables
 
 ## Development
 

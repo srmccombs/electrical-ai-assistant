@@ -91,6 +91,12 @@ import { findCrossReferences } from '@/services/crossReferenceService'
 // Import datasheet service
 import { getDatasheetUrls } from '@/services/datasheetService'
 
+// Decision Engine Integration
+import { searchWithDecisionEngine } from './decisionEngine/integration'
+
+// Feature flag for Decision Engine
+const DECISION_ENGINE_MODE = process.env.USE_DECISION_ENGINE || 'disabled'
+
 // ===================================================================
 // AI INTEGRATION - ENHANCED WITH RACK UNIT DETECTION
 // ===================================================================
@@ -976,6 +982,57 @@ const searchAllTablesByBrand = async (brand: string, limit: number, shoppingList
 // ===================================================================
 
 export const searchProducts = async (options: SearchOptions): Promise<SearchResult> => {
+  // Decision Engine Integration
+  if (DECISION_ENGINE_MODE === 'shadow') {
+    // Shadow mode - run both engines and compare
+    try {
+      // Run the Decision Engine to get routing decision
+      const decisionResult = await searchWithDecisionEngine(
+        options.query,
+        options.shoppingListContext,
+        async (q, ctx) => {
+          // This function is called by shadow mode to get old results
+          return performOriginalSearch({ ...options, query: q, shoppingListContext: ctx })
+        }
+      )
+      
+      // In shadow mode, the adapter returns the old result
+      // So we can return it directly
+      return decisionResult
+    } catch (error) {
+      logger.error('Decision Engine shadow mode error, falling back:', error, LogCategory.SEARCH)
+      return performOriginalSearch(options)
+    }
+  } else if (DECISION_ENGINE_MODE === 'production') {
+    // Production mode - use Decision Engine for routing only
+    try {
+      // Get routing decision from Decision Engine
+      const routingDecision = await searchWithDecisionEngine(
+        options.query,
+        options.shoppingListContext
+      )
+      
+      // Use the routing decision to call the appropriate search
+      // This will be implemented after we verify shadow mode works
+      logger.info('Decision Engine production mode not fully implemented yet', 
+        { decision: routingDecision }, 
+        LogCategory.SEARCH
+      )
+      
+      // For now, fall back to original search
+      return performOriginalSearch(options)
+    } catch (error) {
+      logger.error('Decision Engine production mode error:', error, LogCategory.SEARCH)
+      return performOriginalSearch(options)
+    }
+  }
+
+  // Original search logic (when Decision Engine is disabled)
+  return performOriginalSearch(options)
+}
+
+// Extract original search logic into separate function
+const performOriginalSearch = async (options: SearchOptions): Promise<SearchResult> => {
   const startTime = performance.now()
   const endTimer = logger.startTimer('Total search execution')
 

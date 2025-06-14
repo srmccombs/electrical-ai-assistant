@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is an AI-powered electrical distribution assistant built with Next.js 14 and TypeScript. The application helps users search for electrical components (cables, fiber connectors, adapter panels, enclosures) using natural language queries powered by OpenAI GPT-4o-mini.
 
-### Current Status (June 2025)
+### Current Status (January 2025)
 - ✅ Core search functionality complete
 - ✅ AI integration with GPT-4o-mini
 - ✅ Shopping list management with compatibility filtering
@@ -21,6 +21,11 @@ This is an AI-powered electrical distribution assistant built with Next.js 14 an
 - ✅ Enhanced fiber cable filtering (count, jacket, type, application)
 - ✅ Smart filter auto-centering
 - ✅ Improved UI with 25% larger display
+- ✅ Auto-apply filters for brand compatibility (SMBs, connectors)
+- ✅ Fixed faceplate/SMB product separation
+- ✅ Database query optimization for shielding filters
+- 🚧 Decision Engine migration in progress (Shadow Mode)
+- 🚧 Knowledge System implementation pending
 - 🚧 User authentication not implemented
 - 🚧 Quote generation not implemented
 - 🚧 Email integration not implemented
@@ -76,7 +81,7 @@ Uses Supabase (PostgreSQL) with tables:
 - `fiber_cables` - Single mode and multimode fiber cables
 - `jack_modules` - RJ45 jacks with brand/product line compatibility
 - `faceplates` - Wall plates with compatible_jacks field
-- `surface_mount_box` - Surface mount boxes (SMB) with jack compatibility
+- `surface_mount_box` - Surface mount boxes (SMB) with jack compatibility ✅ Created June 2025
 - Dynamic table discovery via `tableDiscoveryService.ts`
 
 Analytics tables:
@@ -148,7 +153,7 @@ Strict mode is enabled. Key compiler options:
 
 4. Shopping list functionality stores items in browser localStorage with quantity tracking
 
-## Recent Updates (January 2025)
+## Recent Updates (June 2025)
 
 ### Completed Features
 - ✅ Error boundary for graceful error handling
@@ -162,7 +167,7 @@ Strict mode is enabled. Key compiler options:
 - ✅ Panel capacity filtering for fiber enclosures
 - ✅ Jack module search with compatibility matching
 - ✅ Faceplate search with color and port detection
-- ✅ Surface mount box (SMB) dedicated search
+- ✅ Surface mount box (SMB) dedicated search with database table
 - ✅ Fiber enclosure & adapter panel compatibility
 - ✅ Box quantity to feet conversion for cables
 - ✅ TypeScript strict mode compliance
@@ -173,6 +178,10 @@ Strict mode is enabled. Key compiler options:
 - ✅ Smart filter auto-centering on search results
 - ✅ UI improvements (25% larger display, Clear Search button, conditional Clear List)
 - ✅ Fiber Type Reference only shows with 2+ fiber types
+- ✅ Auto-apply brand filters for SMBs when jack modules in cart
+- ✅ Fixed faceplate searches excluding SMB products
+- ✅ Fixed SMB database query errors (removed array field from ilike)
+- ✅ Fixed Cat6 STP cable searches with proper shielding filters
 
 ### Services Added
 - `services/aiCache.ts` - Reduces API costs with intelligent caching
@@ -188,5 +197,60 @@ Strict mode is enabled. Key compiler options:
 - No email integration
 - No admin panel for product management
 - Limited product database (goal: 5,000+ products)
-- Surface mount box table needs to be created in database
 - Some fiber enclosures have NULL panel capacity values
+- Analytics tracking returns 406 errors (needs backend fix)
+
+## Decision Engine Migration (IN PROGRESS)
+
+### Overview
+We're migrating to a new Decision Engine architecture to solve cascading search failures when adding new product types. The engine uses an immutable decision pipeline with clear precedence rules.
+
+### Key Problems Being Solved
+1. **SMB vs Faceplate conflicts**: SMB detection now has highest priority
+2. **AI vs Text Detection conflicts**: Clear precedence order prevents overrides
+3. **Shopping list context**: Provides hints without forcing overrides
+4. **Regression prevention**: Every successful search becomes a test case
+
+### Migration Status
+- ✅ Decision Engine core implemented
+- ✅ All decision stages created (Business Rules, Part Number, Context, AI, Text Detection, Knowledge, Fallback)
+- ✅ Shadow mode adapter ready
+- ✅ Test suite complete
+- ✅ Migration guide documented
+- 🚧 Shadow mode deployment pending
+- 🚧 Production rollout pending
+
+### To Enable Shadow Mode
+1. Set environment variable: `USE_DECISION_ENGINE=shadow`
+2. Deploy and monitor for 1-2 weeks
+3. Check `/api/admin/shadow-report` for divergences
+4. When ready, switch to `USE_DECISION_ENGINE=production`
+
+### Critical Queries to Test
+- "cat6 plenum cable" → category_cables
+- "surface mount box" or "smb" → surface_mount_box
+- "2 port faceplate" → faceplates
+- "panduit jack cat6" → jack_modules
+- "CJ688TGBU" → multi_table (part number)
+
+See `DECISION_ENGINE_ARCHITECTURE.md` and `MIGRATION_GUIDE.md` for full details.
+
+## Knowledge System Design (PLANNED)
+
+### Overview
+Allow users to contribute electrical industry knowledge, creating a self-improving search that beats Google.
+
+### Key Features
+1. **Add Knowledge Buttons**: Context-sensitive throughout the app
+2. **Validation Framework**: Auto-approve trusted users, expert review for others
+3. **Gamification**: Company leaderboards, individual badges, impact metrics
+4. **Learning Algorithms**: Hourly synonym updates, daily pattern detection
+
+### Database Tables Created
+- `knowledge_contributions` - User submissions
+- `user_reputation` - Individual scores
+- `company_knowledge_stats` - Company rankings
+- `learning_patterns` - Detected patterns
+- `ab_test_results` - Test outcomes
+
+See `KNOWLEDGE_SYSTEM_DESIGN.md` for full implementation plan.
