@@ -87,7 +87,8 @@ export class KnowledgeStage implements DecisionStage {
       this.knowledgeCache.clear()
 
       // Group by original term for faster lookup
-      for (const entry of data || []) {
+      const entries = (data || []) as KnowledgeEntry[]
+      for (const entry of entries) {
         const key = entry.original_term.toLowerCase()
         
         if (!this.knowledgeCache.has(key)) {
