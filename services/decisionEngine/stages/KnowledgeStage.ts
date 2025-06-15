@@ -92,8 +92,8 @@ export class KnowledgeStage implements DecisionStage {
       // Clear and rebuild cache
       this.knowledgeCache.clear()
 
-      // Type assertion since we know the shape of our data
-      const entries = data as KnowledgeEntry[] | null
+      // Type assertion through unknown first (as TypeScript suggests)
+      const entries = data as unknown as KnowledgeEntry[] | null
 
       // Group by original term for faster lookup
       if (!entries || !Array.isArray(entries)) {
