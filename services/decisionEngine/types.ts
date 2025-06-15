@@ -63,6 +63,7 @@ export interface DecisionMetadata {
   originalAIAnalysis?: any
   textDetectionResults?: any
   businessRulesApplied?: string[]
+  specifications?: any
 }
 
 export interface ValidationResult {
