@@ -69,7 +69,7 @@ export class AIAnalysisStage implements DecisionStage {
         type: 'WARNING',
         priority: 'HINT',
         message: 'AI analysis unavailable, using keyword detection',
-        data: { error: error.message },
+        data: { error: error instanceof Error ? error.message : 'Unknown error' },
         source: 'AIAnalysisStage'
       })
     }
