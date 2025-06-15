@@ -129,10 +129,10 @@ export class DecisionEngine {
           productType: decision.productType,
           table: decision.table,
           strategy: decision.searchStrategy,
-          error: error?.message
+          error: error instanceof Error ? error.message : error ? String(error) : undefined
         },
         confidence_score: decision.confidence,
-        reason: error ? error.message : `Decision engine ${event.toLowerCase()}`,
+        reason: error instanceof Error ? error.message : error ? String(error) : `Decision engine ${event.toLowerCase()}`,
         is_final: decision.isFinal
       })
     } catch (logError) {

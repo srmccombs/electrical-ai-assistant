@@ -171,6 +171,30 @@ Strict mode is enabled. Key compiler options:
 - ✅ Fiber enclosure & adapter panel compatibility
 - ✅ Box quantity to feet conversion for cables
 - ✅ TypeScript strict mode compliance
+
+## TypeScript Best Practices
+
+When working with TypeScript in this project:
+
+1. **Error Handling**: Always type check errors in catch blocks
+   ```typescript
+   // Good
+   catch (error) {
+     const message = error instanceof Error ? error.message : String(error)
+   }
+   
+   // Bad
+   catch (error) {
+     console.log(error.message) // TypeScript error: 'error' is of type 'unknown'
+   }
+   ```
+
+2. **Decision Engine**: When extending SearchDecision functionality:
+   - Use public methods like `with()` for immutable updates
+   - Don't access private methods from outside the class
+   - Ensure all interface properties are defined in types.ts
+
+3. **ESLint Configuration**: Use `.eslintrc.json` with `"extends": "next/core-web-vitals"`
 - ✅ Component extraction for performance (FilterSection, ProductTable, SearchInput, ShoppingList)
 - ✅ React memoization throughout (React.memo, useMemo, useCallback)
 - ✅ Enhanced fiber cable filters (jacket rating, product type, application, fiber count)

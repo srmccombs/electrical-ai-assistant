@@ -46,7 +46,7 @@ export class SearchDecision implements ISearchDecision {
   }
 
   // Create a new decision with updated properties (immutability)
-  private with(updates: Partial<ISearchDecision>): SearchDecision {
+  public with(updates: Partial<ISearchDecision>): SearchDecision {
     const newAuditEntry: AuditEntry = {
       stage: this.stage,
       action: this.getActionFromUpdates(updates),

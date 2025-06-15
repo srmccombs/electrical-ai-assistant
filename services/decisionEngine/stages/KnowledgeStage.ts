@@ -55,7 +55,7 @@ export class KnowledgeStage implements DecisionStage {
         type: 'WARNING',
         priority: 'HINT',
         message: 'User knowledge unavailable',
-        data: { error: error.message },
+        data: { error: error instanceof Error ? error.message : String(error) },
         source: 'KnowledgeStage'
       })
     }
