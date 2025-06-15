@@ -1,13 +1,15 @@
 // Decision Engine Types
 // Central type definitions for the new search decision architecture
 
+import type { SearchDecision } from './SearchDecision'
+
 export interface DecisionStage {
   name: string
   priority: number
   process(decision: SearchDecision): Promise<SearchDecision>
 }
 
-export interface SearchDecision {
+export interface ISearchDecision {
   readonly id: string
   readonly query: string
   readonly normalizedQuery: string
