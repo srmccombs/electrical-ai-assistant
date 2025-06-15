@@ -211,6 +211,10 @@ export class KnowledgeStage implements DecisionStage {
     if (decision.normalizedQuery.includes(entry.original_term.toLowerCase())) {
       const suggestedType = entry.product_type || entry.mapped_term || entry.suggested_term
       
+      if (!suggestedType) {
+        return decision // No product type to set
+      }
+      
       return decision
         .setProductType(suggestedType)
         .setConfidence(entry.confidence_score)
