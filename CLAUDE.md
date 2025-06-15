@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is an AI-powered electrical distribution assistant built with Next.js 14 and TypeScript. The application helps users search for electrical components (cables, fiber connectors, adapter panels, enclosures) using natural language queries powered by OpenAI GPT-4o-mini.
 
-### Current Status (January 2025)
+### Current Status (June 14, 2025) - DECISION ENGINE DEPLOYED! 🎉
 - ✅ Core search functionality complete
 - ✅ AI integration with GPT-4o-mini
 - ✅ Shopping list management with compatibility filtering
@@ -24,11 +24,25 @@ This is an AI-powered electrical distribution assistant built with Next.js 14 an
 - ✅ Auto-apply filters for brand compatibility (SMBs, connectors)
 - ✅ Fixed faceplate/SMB product separation
 - ✅ Database query optimization for shielding filters
-- 🚧 Decision Engine migration in progress (Shadow Mode)
-- 🚧 Knowledge System implementation pending
+- ✅ **DECISION ENGINE DEPLOYED IN SHADOW MODE (June 14, 2025)**
+- ✅ **Knowledge System IMPLEMENTED AND ACTIVE**
 - 🚧 User authentication not implemented
 - 🚧 Quote generation not implemented
 - 🚧 Email integration not implemented
+
+## 🎉 MAJOR UPDATE: Decision Engine is Live!
+
+The Decision Engine is now deployed and running in shadow mode:
+- **Zero User Impact**: Returns existing search results while testing new engine
+- **Full Audit Trail**: Every decision is logged to database
+- **Admin Dashboard**: Monitor at `/admin/decision-engine`
+- **Knowledge System**: User contributions table active with 4 test entries
+
+### Next Steps (IMPORTANT):
+1. **Add Vercel Environment Variable**: `USE_DECISION_ENGINE=shadow`
+2. **Monitor Shadow Mode**: Check divergences daily for 1-2 weeks
+3. **Create Database Function**: `increment_knowledge_usage` (currently disabled)
+4. **Switch to Production**: After successful shadow testing
 
 ## Common Development Commands
 
@@ -133,6 +147,25 @@ Strict mode is enabled. Key compiler options:
 - Target: ES2017
 - Module: ESNext
 - JSX: preserve
+
+## Testing the Decision Engine
+
+1. **Shadow Mode Testing** (current state):
+   - Visit any search query - it will use BOTH engines
+   - Old engine results are shown to users
+   - New engine results are logged for comparison
+   - Check `/admin/decision-engine` for divergence reports
+
+2. **Knowledge System Testing**:
+   - Try "s.m.b" → should suggest "surface mount box"
+   - Try "cat 5" → should redirect to "cat5e"
+   - These use the knowledge_contributions table
+
+3. **Critical Queries to Test**:
+   - "smb" → Must go to surface_mount_box (not faceplates)
+   - "2 port faceplate" → Must go to faceplates (not SMB)
+   - "cat6 jack panduit" → Must go to jack_modules
+   - "fiber connector lc" → Must go to fiber_connectors
 
 ## Development Tips
 
