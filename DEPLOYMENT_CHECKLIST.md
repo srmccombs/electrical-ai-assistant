@@ -3,10 +3,17 @@
 ## Pre-Deployment Steps
 
 ### 1. Database Migration ✅
-Run the following SQL in your Supabase SQL Editor:
+Run the following SQL files in your Supabase SQL Editor IN ORDER:
 
+1. First, run the Decision Engine tables:
 ```sql
 -- File: /database/decision_engine_tables.sql
+-- Copy and paste the entire contents into Supabase SQL Editor
+```
+
+2. Then, run the Knowledge System tables:
+```sql
+-- File: /database/knowledge_system_tables.sql
 -- Copy and paste the entire contents into Supabase SQL Editor
 ```
 

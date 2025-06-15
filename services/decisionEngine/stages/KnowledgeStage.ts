@@ -10,10 +10,12 @@ interface KnowledgeEntry {
   id: string
   contribution_type: 'SYNONYM' | 'MAPPING' | 'CONTEXT' | 'CORRECTION' | 'RELATIONSHIP'
   original_term: string
-  suggested_term: string
+  suggested_term?: string
+  mapped_term?: string
   product_type?: string
   confidence_score: number
   context?: string
+  validation_status: string
 }
 
 export class KnowledgeStage implements DecisionStage {

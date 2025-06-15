@@ -7,6 +7,7 @@ import { PartNumberStage } from './stages/PartNumberStage'
 import { ContextualStage } from './stages/ContextualStage'
 import { AIAnalysisStage } from './stages/AIAnalysisStage'
 import { TextDetectionStage } from './stages/TextDetectionStage'
+import { KnowledgeStage } from './stages/KnowledgeStage'
 import { FallbackStage } from './stages/FallbackStage'
 import { SearchDecision } from './SearchDecision'
 import { logger } from '@/utils/logger'
@@ -39,6 +40,7 @@ export class DecisionEngineAdapter {
       new ContextualStage(),        // Priority 3
       new AIAnalysisStage(),        // Priority 4
       new TextDetectionStage(),     // Priority 5
+      new KnowledgeStage(),         // Priority 6
       new FallbackStage()           // Priority 100
     ])
 
