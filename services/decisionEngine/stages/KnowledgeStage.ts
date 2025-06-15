@@ -92,16 +92,17 @@ export class KnowledgeStage implements DecisionStage {
       // Clear and rebuild cache
       this.knowledgeCache.clear()
 
+      // Type assertion since we know the shape of our data
+      const entries = data as KnowledgeEntry[] | null
+
       // Group by original term for faster lookup
-      if (!data || !Array.isArray(data)) {
+      if (!entries || !Array.isArray(entries)) {
         logger.warn('KnowledgeStage: No data returned from knowledge_contributions table')
         return
       }
 
-      for (const entry of data) {
-        // Type guard to ensure entry has required properties
-        if (!entry.original_term || typeof entry.original_term !== 'string') continue
-        
+      for (const entry of entries) {
+        // Now TypeScript knows entry is KnowledgeEntry
         const key = entry.original_term.toLowerCase()
         
         if (!this.knowledgeCache.has(key)) {
@@ -179,7 +180,7 @@ export class KnowledgeStage implements DecisionStage {
     // Replace the original term with the suggested term
     const updatedQuery = decision.normalizedQuery.replace(
       new RegExp(`\\b${entry.original_term}\\b`, 'gi'),
-      entry.suggested_term
+      entry.suggested_term || entry.mapped_term || ''
     )
 
     if (updatedQuery === decision.normalizedQuery) {
@@ -191,7 +192,7 @@ export class KnowledgeStage implements DecisionStage {
       .addHint({
         type: 'HINT',
         priority: 'SUGGEST',
-        message: `Users often search for "${entry.suggested_term}" when looking for "${entry.original_term}"`,
+        message: `Users often search for "${entry.suggested_term || entry.mapped_term}" when looking for "${entry.original_term}"`,
         data: {
           original: entry.original_term,
           suggested: entry.suggested_term,
@@ -208,7 +209,7 @@ export class KnowledgeStage implements DecisionStage {
   private applyMapping(decision: SearchDecision, entry: KnowledgeEntry): SearchDecision {
     // If the query contains the original term, suggest the product type
     if (decision.normalizedQuery.includes(entry.original_term.toLowerCase())) {
-      const suggestedType = entry.suggested_term // For mappings, suggested_term is the product type
+      const suggestedType = entry.product_type || entry.mapped_term || entry.suggested_term
       
       return decision
         .setProductType(suggestedType)
