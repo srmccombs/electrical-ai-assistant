@@ -282,6 +282,10 @@ export class KnowledgeStage implements DecisionStage {
   }
 
   private async trackKnowledgeUsage(entryId: string, query: string): Promise<void> {
+    // TODO: Implement usage tracking when increment_knowledge_usage function is added to database
+    logger.info(`Knowledge entry ${entryId} used for query: ${query}`)
+    
+    /* Disabled until database function is created
     try {
       // Update usage metrics (fire and forget)
       await supabase.rpc('increment_knowledge_usage', {
@@ -296,6 +300,7 @@ export class KnowledgeStage implements DecisionStage {
       // Don't let tracking failures affect search
       logger.error('Knowledge tracking error:', error)
     }
+    */
   }
 
   // Force cache refresh (useful after new contributions)
