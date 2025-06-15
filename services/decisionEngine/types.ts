@@ -64,6 +64,7 @@ export interface DecisionMetadata {
   textDetectionResults?: any
   businessRulesApplied?: string[]
   specifications?: any
+  partNumbers?: string[]
 }
 
 export interface ValidationResult {
