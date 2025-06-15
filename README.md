@@ -29,7 +29,7 @@ Plectic AI transforms how electrical distributors search for products by underst
 - **Type System**: Centralized type definitions in `/types`
 - **Logging**: Custom logger with performance tracking
 
-## Current Status (June 14, 2025)
+## Current Status (June 14, 2025) - Decision Engine Added
 
 ### ✅ Implemented
 - Core search functionality across 9+ product categories
