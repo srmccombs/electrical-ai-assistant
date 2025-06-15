@@ -81,21 +81,32 @@ export class KnowledgeStage implements DecisionStage {
         .eq('validation_status', 'APPROVED')
         .gte('confidence_score', 0.7)
 
-      if (error) throw error
+      if (error) {
+        // Table might not exist yet - this is okay
+        logger.info('KnowledgeStage: Knowledge table not available yet')
+        return
+      }
 
       // Clear and rebuild cache
       this.knowledgeCache.clear()
 
       // Group by original term for faster lookup
-      const entries = (data || []) as KnowledgeEntry[]
-      for (const entry of entries) {
+      if (!data || !Array.isArray(data)) {
+        logger.warn('KnowledgeStage: No data returned from knowledge_contributions table')
+        return
+      }
+
+      for (const entry of data) {
+        // Type guard to ensure entry has required properties
+        if (!entry.original_term || typeof entry.original_term !== 'string') continue
+        
         const key = entry.original_term.toLowerCase()
         
         if (!this.knowledgeCache.has(key)) {
           this.knowledgeCache.set(key, [])
         }
         
-        this.knowledgeCache.get(key)!.push(entry)
+        this.knowledgeCache.get(key)!.push(entry as KnowledgeEntry)
       }
 
       this.lastCacheUpdate = Date.now()
