@@ -32,19 +32,31 @@ export class AIAnalysisStage implements DecisionStage {
   name = 'AIAnalysisStage'
   priority = 4 // Fourth priority - after context
 
-  private openai: OpenAI
+  private openai: OpenAI | null = null
 
   constructor() {
-    const apiKey = process.env.OPENAI_API_KEY
-    if (!apiKey) {
-      throw new Error('OPENAI_API_KEY is required for AI Analysis')
+    // Only initialize OpenAI if we have an API key
+    // This allows the stage to work in environments without the key
+    try {
+      const apiKey = process.env.OPENAI_API_KEY
+      if (apiKey) {
+        this.openai = new OpenAI({ apiKey })
+      } else {
+        logger.warn('AIAnalysisStage: No OPENAI_API_KEY found, AI analysis will be skipped')
+      }
+    } catch (error) {
+      logger.warn('AIAnalysisStage: Could not initialize OpenAI client', error)
     }
-    
-    this.openai = new OpenAI({ apiKey })
   }
 
   async process(decision: SearchDecision): Promise<SearchDecision> {
     logger.info(`AIAnalysisStage: Analyzing query "${decision.normalizedQuery}"`)
+
+    // Skip if OpenAI is not available
+    if (!this.openai) {
+      logger.info('AIAnalysisStage: Skipping - OpenAI client not initialized')
+      return decision
+    }
 
     try {
       // Use cached AI analysis
@@ -103,6 +115,9 @@ export class AIAnalysisStage implements DecisionStage {
   }
 
   private async analyzeWithAI(query: string, context: string): Promise<AISearchAnalysis> {
+    if (!this.openai) {
+      throw new Error('OpenAI client not initialized')
+    }
     const productTypesList = Object.entries(PRODUCT_TYPES)
       .map(([key, config]) => `- ${key}: ${config.displayName} (keywords: ${config.aiKeywords.join(', ')})`)
       .join('\n')
