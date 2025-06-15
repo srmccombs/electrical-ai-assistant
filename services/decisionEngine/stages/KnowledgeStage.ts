@@ -195,7 +195,7 @@ export class KnowledgeStage implements DecisionStage {
         message: `Users often search for "${entry.suggested_term || entry.mapped_term}" when looking for "${entry.original_term}"`,
         data: {
           original: entry.original_term,
-          suggested: entry.suggested_term,
+          suggested: entry.suggested_term || entry.mapped_term,
           confidence: entry.confidence_score
         },
         source: 'KnowledgeStage'
@@ -235,9 +235,10 @@ export class KnowledgeStage implements DecisionStage {
 
   private applyCorrection(decision: SearchDecision, entry: KnowledgeEntry): SearchDecision {
     // Apply spelling/terminology corrections
+    const replacement = entry.suggested_term || entry.mapped_term || entry.original_term
     const correctedQuery = decision.normalizedQuery.replace(
       new RegExp(entry.original_term, 'gi'),
-      entry.suggested_term
+      replacement
     )
 
     if (correctedQuery === decision.normalizedQuery) {
@@ -245,7 +246,7 @@ export class KnowledgeStage implements DecisionStage {
     }
 
     return decision
-      .redirect(correctedQuery, `Corrected "${entry.original_term}" to "${entry.suggested_term}"`)
+      .redirect(correctedQuery, `Corrected "${entry.original_term}" to "${replacement}"`)
       .addMetadata('appliedKnowledge', {
         type: 'CORRECTION',
         entry: entry.id
@@ -257,9 +258,9 @@ export class KnowledgeStage implements DecisionStage {
     return decision.addHint({
       type: 'SUGGEST',
       priority: 'SUGGEST',
-      message: `Customers who search for "${entry.original_term}" also need "${entry.suggested_term}"`,
+      message: `Customers who search for "${entry.original_term}" also need "${entry.suggested_term || entry.mapped_term}"`,
       data: {
-        relatedProduct: entry.suggested_term,
+        relatedProduct: entry.suggested_term || entry.mapped_term,
         confidence: entry.confidence_score
       },
       source: 'KnowledgeStage'
