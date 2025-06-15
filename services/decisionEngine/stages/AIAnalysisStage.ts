@@ -55,7 +55,7 @@ export class AIAnalysisStage implements DecisionStage {
           const contextInfo = this.buildContextFromHints(decision)
           return await this.analyzeWithAI(query, contextInfo)
         },
-        decision.context?.shoppingListContext
+        decision.context?.shoppingList
       )
 
       // Apply the analysis
