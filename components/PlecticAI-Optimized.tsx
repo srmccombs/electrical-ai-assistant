@@ -845,7 +845,7 @@ const PlecticAI: React.FC = () => {
               ) : (
                 <>
                   
-                  {messages.map((message) => {
+                  {messages.map((message, index) => {
                     const currentFilters = messageFilters[message.id] || { 
                       activeFilters: {}, 
                       filteredProducts: message.products || [] 
@@ -931,7 +931,7 @@ const PlecticAI: React.FC = () => {
                                   <div className="border border-gray-200 rounded-lg p-8 text-center bg-gray-50">
                                     <p className="text-gray-600 mb-4">No products found. Try adjusting your search or clearing filters.</p>
                                     <SearchFeedbackButton 
-                                      searchQuery={message.role === 'user' ? message.content : (messages[index - 1]?.content || '')}
+                                      searchQuery={index > 0 ? messages[index - 1].content : ''}
                                       resultCount={0}
                                     />
                                   </div>
