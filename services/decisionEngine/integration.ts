@@ -44,7 +44,7 @@ export async function checkProductionReadiness(): Promise<{
     .not('confidence_score', 'is', null)
   
   const avgConfidence = confidenceData && confidenceData.length > 0
-    ? confidenceData.reduce((sum, row) => sum + (row.confidence_score || 0), 0) / confidenceData.length
+    ? confidenceData.reduce((sum, row) => sum + ((row as any).confidence_score || 0), 0) / confidenceData.length
     : 0
   
   const ready = (decisionCount || 0) >= 100 && avgConfidence >= 0.75
