@@ -241,7 +241,7 @@ export async function searchFaceplates(
         const simpleResult = await simpleQuery.limit(100);
         
         if (!simpleResult.error && simpleResult.data) {
-          faceplates = simpleResult.data;
+          faceplates = simpleResult.data as Faceplate[];
           strategy = 'simple_search_fallback';
         } else {
           throw error;
