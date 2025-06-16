@@ -4,6 +4,7 @@ import { AISearchAnalysis } from '@/types/search';
 import { logger } from '@/utils/logger';
 import { Tables } from '@/src/types/supabase';
 import { detectColor, detectSurfaceMountBox, detectFaceplateType } from '@/search/shared/industryKnowledge';
+import { sanitizeForTsquery } from '@/search/shared/searchUtils';
 
 type Faceplate = Tables<'faceplates'>;
 
@@ -188,7 +189,8 @@ export async function searchFaceplates(
       query = query.or(searchConditions.join(','));
     } else if (!brandValue && !productLineValue && searchConditions.length === 0) {
       // No conditions at all - use text search
-      query = query.textSearch('search_vector', searchTerm.trim());
+      const sanitizedTerm = sanitizeForTsquery(searchTerm);
+      query = query.textSearch('search_vector', sanitizedTerm);
     }
     // If we have brand/product line filters, they've already been applied above
 
@@ -318,7 +320,8 @@ export async function searchFaceplates(
       }
       
       // Use text search for the term
-      query = query.textSearch('search_vector', searchTerm.trim());
+      const sanitizedTerm = sanitizeForTsquery(searchTerm);
+      query = query.textSearch('search_vector', sanitizedTerm);
       
       const fallbackResult = await query.limit(100);
       if (!fallbackResult.error && fallbackResult.data) {
