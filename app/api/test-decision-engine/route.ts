@@ -19,7 +19,7 @@ export async function GET() {
       success: true,
       message: 'Test search completed',
       resultCount: result.products?.length || 0,
-      targetTable: result.targetTable,
+      filters: result.filters || [],
       timestamp: new Date().toISOString()
     })
   } catch (error) {
