@@ -557,11 +557,17 @@ const generateSmartFilters = (products: Product[]): SmartFilters => {
   const rackUnits = filterString(products.map(p => p.rackUnits?.toString()))
   const environments = filterString(products.map(p => p.environment))
   const mountTypes = filterString(products.map(p => p.mountType))
+  
+  // Faceplate and SMB specific filters
+  const numberOfPorts = filterString(products.map(p => p.numberOfPorts?.toString()))
+  const numberGang = filterString(products.map(p => p.numberGang?.toString()))
 
   // Check what types of products we have
   const hasAdapterPanels = products.some(p => p.tableName === 'adapter_panels')
   const hasFiberEnclosures = products.some(p => p.tableName === 'rack_mount_fiber_enclosures')
   const hasJackModules = products.some(p => p.tableName === 'jack_modules')
+  const hasFaceplates = products.some(p => p.tableName === 'faceplates')
+  const hasSurfaceMountBoxes = products.some(p => p.tableName === 'surface_mount_box')
 
   return {
     brands: brands, // Show all brands
@@ -599,6 +605,11 @@ const generateSmartFilters = (products: Product[]): SmartFilters => {
     ...(hasJackModules && {
       installationTools: filterString(products.map(p => p.installationToolsRequired)).slice(0, 4),
       compatibleFaceplates: filterString(products.map(p => p.compatibleFaceplates)).slice(0, 6)
+    }),
+    // Add faceplate and SMB filters
+    ...((hasFaceplates || hasSurfaceMountBoxes) && {
+      ports: numberOfPorts,
+      gang: numberGang
     })
 
   }

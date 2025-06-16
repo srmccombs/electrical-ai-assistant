@@ -385,6 +385,8 @@ const PlecticAI: React.FC = () => {
           case 'adapterColor': return product.adapterColor === filterValue
           case 'mountType': return product.mountType === filterValue
           case 'fiberCount': return product.fiberCount?.toString() === filterValue
+          case 'ports': return product.numberOfPorts?.toString() === filterValue
+          case 'gang': return product.numberGang?.toString() === filterValue
           default: return true
         }
       })
@@ -451,6 +453,8 @@ const PlecticAI: React.FC = () => {
           case 'adapterColor': return product.adapterColor === filterValue
           case 'mountType': return product.mountType === filterValue
           case 'fiberCount': return product.fiberCount?.toString() === filterValue
+          case 'ports': return product.numberOfPorts?.toString() === filterValue
+          case 'gang': return product.numberGang?.toString() === filterValue
           default: return true
         }
       })

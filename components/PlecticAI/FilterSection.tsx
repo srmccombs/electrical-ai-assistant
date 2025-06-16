@@ -157,6 +157,14 @@ const getDynamicFilterOptions = (products: Product[], filterType: string): strin
       // Sort fiber counts numerically
       const counts = filterString(products.map(p => p.fiberCount?.toString()))
       return counts.sort((a, b) => parseInt(a) - parseInt(b))
+    case 'ports':
+      // Sort port counts numerically
+      const ports = filterString(products.map(p => p.numberOfPorts?.toString()))
+      return ports.sort((a, b) => parseInt(a) - parseInt(b))
+    case 'gang':
+      // Sort gang counts numerically
+      const gangs = filterString(products.map(p => p.numberGang?.toString()))
+      return gangs.sort((a, b) => parseInt(a) - parseInt(b))
     default:
       return []
   }
@@ -503,21 +511,7 @@ export const FilterSection = memo<FilterSectionProps>(({
         />
       )}
 
-      {/* Show product type for all products that have it */}
-      {products.some(p => p.productType) && (
-        <DynamicFilterSection
-          messageId={messageId}
-          filterType="productType"
-          label="Product Types"
-          activeColor="bg-violet-600 text-white"
-          inactiveColor="bg-white border border-violet-300 text-violet-700 hover:bg-violet-100"
-          products={products}
-          filteredProducts={filteredProducts}
-          activeFilters={activeFilters}
-          onApplyFilter={onApplyFilter}
-          onClearFilter={onClearFilter}
-        />
-      )}
+      {/* Product Types filter removed to save space per user request */}
 
       {smartFilters.technologies && (
         <DynamicFilterSection
@@ -681,6 +675,38 @@ export const FilterSection = memo<FilterSectionProps>(({
           label="Mount Types"
           activeColor="bg-sky-600 text-white"
           inactiveColor="bg-white border border-sky-300 text-sky-700 hover:bg-sky-100"
+          products={products}
+          filteredProducts={filteredProducts}
+          activeFilters={activeFilters}
+          onApplyFilter={onApplyFilter}
+          onClearFilter={onClearFilter}
+        />
+      )}
+
+      {smartFilters.ports && (
+        <DynamicFilterSection
+          messageId={messageId}
+          filterType="ports"
+          label="Ports"
+          activeColor="bg-teal-600 text-white"
+          inactiveColor="bg-white border border-teal-300 text-teal-700 hover:bg-teal-100"
+          icon="🔌"
+          products={products}
+          filteredProducts={filteredProducts}
+          activeFilters={activeFilters}
+          onApplyFilter={onApplyFilter}
+          onClearFilter={onClearFilter}
+        />
+      )}
+
+      {smartFilters.gang && (
+        <DynamicFilterSection
+          messageId={messageId}
+          filterType="gang"
+          label="Gang"
+          activeColor="bg-amber-600 text-white"
+          inactiveColor="bg-white border border-amber-300 text-amber-700 hover:bg-amber-100"
+          icon="📏"
           products={products}
           filteredProducts={filteredProducts}
           activeFilters={activeFilters}

@@ -31,6 +31,9 @@ export interface SmartFilters {
   // Jack Module filters
   installationTools?: string[]
   compatibleFaceplates?: string[]
+  // Faceplate and SMB filters
+  ports?: string[]
+  gang?: string[]
 }
 
 export type FilterType = keyof SmartFilters
