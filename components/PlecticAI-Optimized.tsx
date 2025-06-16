@@ -931,7 +931,7 @@ const PlecticAI: React.FC = () => {
                                   <div className="border border-gray-200 rounded-lg p-8 text-center bg-gray-50">
                                     <p className="text-gray-600 mb-4">No products found. Try adjusting your search or clearing filters.</p>
                                     <SearchFeedbackButton 
-                                      searchQuery={message.query || ''}
+                                      searchQuery={message.role === 'user' ? message.content : (messages[index - 1]?.content || '')}
                                       resultCount={0}
                                     />
                                   </div>

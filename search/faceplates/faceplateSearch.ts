@@ -213,6 +213,8 @@ export async function searchFaceplates(
     // Execute query
     const { data, error } = await query.limit(100);
 
+    let faceplates: Faceplate[] = [];
+    
     if (error) {
       logger.error('[Faceplate Search] Database error', { error });
       
