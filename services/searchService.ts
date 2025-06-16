@@ -982,9 +982,13 @@ const searchAllTablesByBrand = async (brand: string, limit: number, shoppingList
 // ===================================================================
 
 export const searchProducts = async (options: SearchOptions): Promise<SearchResult> => {
+  // Log Decision Engine mode for debugging
+  logger.info('Decision Engine Mode:', { mode: DECISION_ENGINE_MODE }, LogCategory.SEARCH)
+  
   // Decision Engine Integration
   if (DECISION_ENGINE_MODE === 'shadow') {
     // Shadow mode - run both engines and compare
+    logger.info('Running in shadow mode', { query: options.query }, LogCategory.SEARCH)
     try {
       // Run the Decision Engine to get routing decision
       const decisionResult = await searchWithDecisionEngine(
