@@ -358,7 +358,7 @@ export async function searchFaceplates(
       
       const fallbackResult = await query.limit(100);
       if (!fallbackResult.error && fallbackResult.data) {
-        faceplates = fallbackResult.data;
+        faceplates = (fallbackResult.data as unknown as Faceplate[]) || [];
         
         // Log fallback result summary
         if (faceplates.length > 0) {
