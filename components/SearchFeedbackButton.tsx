@@ -21,22 +21,31 @@ export const SearchFeedbackButton: React.FC<SearchFeedbackButtonProps> = ({
     if (!feedback.trim()) return;
 
     try {
-      // Store feedback in localStorage for now (can be sent to database later)
+      // Send to API endpoint
+      const response = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          searchQuery,
+          resultCount,
+          feedback: feedback.trim()
+        })
+      });
+
+      if (!response.ok) {
+        console.error('Failed to submit feedback');
+      }
+
+      // Also store in localStorage as backup
       const feedbackData = {
         searchQuery,
         resultCount,
         feedback: feedback.trim(),
-        timestamp: new Date().toISOString(),
-        userAgent: navigator.userAgent
+        timestamp: new Date().toISOString()
       };
-
-      // Get existing feedback or create new array
       const existingFeedback = JSON.parse(localStorage.getItem('searchFeedback') || '[]');
       existingFeedback.push(feedbackData);
       localStorage.setItem('searchFeedback', JSON.stringify(existingFeedback));
-
-      // Log to console for debugging
-      console.log('Search Feedback:', feedbackData);
 
       // Call parent callback if provided
       if (onFeedbackSubmit) {

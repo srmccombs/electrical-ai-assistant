@@ -250,7 +250,7 @@ export async function searchFaceplates(
         throw error;
       }
     } else {
-      faceplates = data || [];
+      faceplates = (data as unknown as Faceplate[]) || [];
     }
     
     // Apply post-query filtering for complex AND conditions
