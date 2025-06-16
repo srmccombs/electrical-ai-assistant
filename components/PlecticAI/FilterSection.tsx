@@ -294,15 +294,17 @@ export const FilterSection = memo<FilterSectionProps>(({
         )
       })()}
 
-      {/* Product Line Filters - Only show when jack modules are present */}
+      {/* Product Line Filters - Show for jack modules, faceplates, and surface mount boxes */}
       {(() => {
-        const hasJackModules = products.some(p => 
+        const hasProductLinesProducts = products.some(p => 
           p.tableName === 'jack_modules' || 
           p.productType === 'Jack Module' ||
-          p.category === 'Jack Module'
+          p.category === 'Jack Module' ||
+          p.tableName === 'faceplates' ||
+          p.tableName === 'surface_mount_box'
         )
         
-        if (!hasJackModules) return null
+        if (!hasProductLinesProducts) return null
         
         const currentProducts = filteredProducts
         const availableProductLines = getDynamicFilterOptions(currentProducts, 'productLine')
