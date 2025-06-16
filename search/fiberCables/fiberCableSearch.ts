@@ -5,6 +5,7 @@
 import { supabase } from '@/lib/supabase'
 import type { Product } from '@/types/product'
 import type { AISearchAnalysis } from '@/types/search'
+import { detectAndConvertPairToFiber } from '@/search/shared/searchUtils'
 
 // ===================================================================
 // TYPE DEFINITIONS - Fiber Cable Specific
@@ -62,28 +63,41 @@ export const searchFiberCables = async (
 
     const queryLower = searchTerm.toLowerCase()
 
-    // Check for strand patterns (e.g., "12 strand")
-    const strandMatch = queryLower.match(/\b(\d+)\s*strand/i)
-    const requestedStrandCount = strandMatch && strandMatch[1]
-      ? parseInt(strandMatch[1], 10)
-      : aiAnalysis?.detectedSpecs?.fiberCount
+    // Check for pair-to-fiber conversion
+    const pairConversion = detectAndConvertPairToFiber(searchTerm)
+    let effectiveSearchTerm = searchTerm
+    let requestedStrandCount: number | undefined
+
+    if (pairConversion.detectedPairs && pairConversion.fiberCount) {
+      // Use the converted fiber count
+      requestedStrandCount = pairConversion.fiberCount
+      effectiveSearchTerm = pairConversion.normalizedTerm
+      console.log(`🔄 Using pair-to-fiber conversion: ${pairConversion.pairCount} pairs = ${pairConversion.fiberCount} fibers`)
+    } else {
+      // Check for strand patterns (e.g., "12 strand")
+      const strandMatch = queryLower.match(/\b(\d+)\s*strand/i)
+      requestedStrandCount = strandMatch && strandMatch[1]
+        ? parseInt(strandMatch[1], 10)
+        : aiAnalysis?.detectedSpecs?.fiberCount
+    }
 
     if (requestedStrandCount) {
       console.log(`🧶 Strand count detected: ${requestedStrandCount}`)
     }
 
-    // Enhanced fiber type detection
+    // Enhanced fiber type detection - use the effective search term after pair conversion
+    const effectiveQueryLower = effectiveSearchTerm.toLowerCase()
     const specificFiberTypes = ['om1', 'om2', 'om3', 'om4', 'om5', 'os1', 'os2']
-    let detectedSpecificType: string | undefined = specificFiberTypes.find(type => queryLower.includes(type))
+    let detectedSpecificType: string | undefined = specificFiberTypes.find(type => effectiveQueryLower.includes(type))
     let detectedModeType: 'multimode' | 'singlemode' | undefined
 
     // Check for multimode or single-mode (including common abbreviations) - all case-insensitive
-    if (queryLower.includes('multimode') || queryLower.includes('multi-mode') || queryLower.includes('multi mode') || 
-        queryLower.match(/\bmm\b/i)) {  // Case-insensitive word boundary match for MM
+    if (effectiveQueryLower.includes('multimode') || effectiveQueryLower.includes('multi-mode') || effectiveQueryLower.includes('multi mode') || 
+        effectiveQueryLower.match(/\bmm\b/i)) {  // Case-insensitive word boundary match for MM
       detectedModeType = 'multimode'
       console.log('🎯 MULTIMODE DETECTED - will exclude single-mode cables')
-    } else if (queryLower.includes('singlemode') || queryLower.includes('single-mode') || queryLower.includes('single mode') ||
-               queryLower.match(/\bsm\b/i)) {  // Case-insensitive word boundary match for SM
+    } else if (effectiveQueryLower.includes('singlemode') || effectiveQueryLower.includes('single-mode') || effectiveQueryLower.includes('single mode') ||
+               effectiveQueryLower.match(/\bsm\b/i)) {  // Case-insensitive word boundary match for SM
       detectedModeType = 'singlemode'
       console.log('🎯 SINGLE-MODE DETECTED - will exclude multimode cables')
       // If user says single mode but no specific OS type, default to OS2
@@ -94,15 +108,15 @@ export const searchFiberCables = async (
     }
     
     // Check for core diameter specifications
-    if (queryLower.includes('9/125')) {
+    if (effectiveQueryLower.includes('9/125')) {
       detectedModeType = 'singlemode'
       detectedSpecificType = 'os2'
       console.log('🎯 9/125 detected - OS2 single mode')
-    } else if (queryLower.includes('50/125')) {
+    } else if (effectiveQueryLower.includes('50/125')) {
       detectedModeType = 'multimode'
       // Could be OM3 or OM4, let search be broader
       console.log('🎯 50/125 detected - OM3/OM4 multimode')
-    } else if (queryLower.includes('62.5/125')) {
+    } else if (effectiveQueryLower.includes('62.5/125')) {
       detectedSpecificType = 'om1'
       detectedModeType = 'multimode'
       console.log('🎯 62.5/125 detected - OM1 multimode')
@@ -217,8 +231,17 @@ export const searchFiberCables = async (
 
         // Filter by strand count if requested
         if (requestedStrandCount) {
-          const fiberCountMatch = description.match(/(\d+)\s*fiber/i)
-          const actualFiberCount = fiberCountMatch && fiberCountMatch[1] ? parseInt(fiberCountMatch[1], 10) : null
+          // Check for pair terminology first
+          const pairConversion = detectAndConvertPairToFiber(description)
+          let actualFiberCount: number | null = null
+
+          if (pairConversion.detectedPairs && pairConversion.fiberCount) {
+            actualFiberCount = pairConversion.fiberCount
+          } else {
+            // Check for direct fiber count
+            const fiberCountMatch = description.match(/(\d+)\s*fiber/i)
+            actualFiberCount = fiberCountMatch && fiberCountMatch[1] ? parseInt(fiberCountMatch[1], 10) : null
+          }
 
           if (actualFiberCount && actualFiberCount !== requestedStrandCount) {
             return false
@@ -321,6 +344,13 @@ const extractFiberType = (description?: string): string | undefined => {
 const extractFiberCount = (description?: string): number | undefined => {
   if (!description) return undefined
 
+  // First check for pair terminology and convert
+  const pairConversion = detectAndConvertPairToFiber(description)
+  if (pairConversion.detectedPairs && pairConversion.fiberCount) {
+    return pairConversion.fiberCount
+  }
+
+  // Then check for direct fiber/strand count
   const match = description.match(/(\d+)\s*(?:fiber|strand)/i)
   if (match && match[1]) {
     return parseInt(match[1], 10)

@@ -227,6 +227,10 @@ OTHER EXAMPLES:
 - "1000 ft om3 cable" → productType: "CABLE", searchStrategy: "cables", fiberType: "OM3"
 - "300ft of 12 fiber" → productType: "CABLE", searchStrategy: "cables", fiberType: null, fiberCount: 12
 - "12 strand fiber cable" → productType: "CABLE", searchStrategy: "cables", fiberType: null, fiberCount: 12
+- "6 pair fiber cable" → productType: "CABLE", searchStrategy: "cables", fiberType: null, fiberCount: 12
+- "12pr om4" → productType: "CABLE", searchStrategy: "cables", fiberType: "OM4", fiberCount: 24
+- "3-pare singlemode" → productType: "CABLE", searchStrategy: "cables", fiberType: "OS2", fiberCount: 6
+- "6 piar multimode" → productType: "CABLE", searchStrategy: "cables", fiberType: null, fiberCount: 12
 - "cat6 plenum blue" → productType: "CABLE", searchStrategy: "cables"
 - "fiber patch panel" → productType: "PANEL", searchStrategy: "panels"
 - "4RU enclosure" → productType: "ENCLOSURE", searchStrategy: "enclosures"
@@ -245,6 +249,20 @@ FIBER TYPE MAPPING (CRITICAL for real-world usage):
 - IMPORTANT: Most users say "single mode" not "OS2", but database uses OS1/OS2
 - CRITICAL: Treat ALL case variations as equivalent (SM = sm = Sm = sM)
 - CRITICAL: If NO fiber type is specified (just "fiber" or "12 fiber"), set fiberType: null (show ALL fiber types)
+
+FIBER PAIR-TO-COUNT CONVERSION (VERY IMPORTANT - "these guys can't spell"):
+- 1 pair = 2 fibers (1 pr = 2 fibers)
+- 3 pair = 6 fibers (3 pr = 6 fibers) 
+- 6 pair = 12 fibers (6 pr = 12 fibers)
+- 12 pair = 24 fibers (12 pr = 24 fibers)
+- Common misspellings: "pr", "prs", "pare", "pares", "piar", "piars", "par", "pars"
+- Formats: "3pair", "3 pair", "3-pair", "3pr", "3 pr", "3-pr", "3 pare", "3-pare"
+- ALWAYS convert pair count to fiber count for fiberCount field (multiply by 2)
+- Examples:
+  - "12 pair fiber" → fiberCount: 24
+  - "6pr cable" → fiberCount: 12
+  - "3 pare om4" → fiberCount: 6, fiberType: "OM4"
+  - "12-pr singlemode" → fiberCount: 24, fiberType: "OS2"
 
 POLISH TYPE DETECTION (VERY IMPORTANT):
 - APC = Angled Physical Contact (8-degree angle, green color, lowest back reflection)

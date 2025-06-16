@@ -37,3 +37,57 @@ export function extractQuantity(searchTerm: string): number | undefined {
   const match = searchTerm.match(/\b(\d+)\s*(port|ports|gang|gangs)?\b/i);
   return match ? parseInt(match[1]) : undefined;
 }
+
+/**
+ * Converts pair count to fiber count and detects pair terminology
+ * Handles common misspellings like "pr", "pare", "piar", "par", "prs"
+ * @param searchTerm The search term to analyze
+ * @returns Object with original pair count, converted fiber count, and whether pairs were detected
+ */
+export function detectAndConvertPairToFiber(searchTerm: string): {
+  detectedPairs: boolean;
+  pairCount?: number;
+  fiberCount?: number;
+  normalizedTerm: string;
+} {
+  const lowerTerm = searchTerm.toLowerCase();
+  
+  // Regex pattern to match pair terminology with common misspellings
+  // Matches: pair, pairs, pr, prs, pare, pares, piar, piars, par, pars
+  // With or without spaces/hyphens between number and term
+  const pairPattern = /\b(\d+)\s*[-]?\s*(pair|pairs|pr|prs|pare|pares|piar|piars|par|pars)\b/i;
+  
+  const match = lowerTerm.match(pairPattern);
+  
+  if (match) {
+    const pairCount = parseInt(match[1], 10);
+    const fiberCount = pairCount * 2;
+    
+    // Replace the pair terminology with fiber count for normalized search
+    const normalizedTerm = searchTerm.replace(pairPattern, `${fiberCount} fiber`);
+    
+    console.log(`🔄 Pair-to-fiber conversion: ${pairCount} pair(s) = ${fiberCount} fibers`);
+    
+    return {
+      detectedPairs: true,
+      pairCount,
+      fiberCount,
+      normalizedTerm
+    };
+  }
+  
+  // Check if the term contains pair terminology without a number
+  const pairTermsOnly = /\b(pair|pairs|pr|prs|pare|pares|piar|piars|par|pars)\b/i;
+  if (pairTermsOnly.test(lowerTerm)) {
+    console.log(`🔍 Pair terminology detected but no count specified`);
+    return {
+      detectedPairs: true,
+      normalizedTerm: searchTerm
+    };
+  }
+  
+  return {
+    detectedPairs: false,
+    normalizedTerm: searchTerm
+  };
+}
