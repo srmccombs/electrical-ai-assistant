@@ -583,7 +583,7 @@ const generateSmartFilters = (products: Product[]): SmartFilters => {
     conductorGauges: conductorGauges.slice(0, 4),
     applications: applications.slice(0, 4),
     productType: products[0]?.category || 'MIXED',
-    productTypes: productTypes, // Show all product types
+    // productTypes removed per user request to save space
     technologies: technologies.slice(0, 6),
     polishTypes: polishTypes.slice(0, 4),
     housingColors: housingColors.slice(0, 6),
