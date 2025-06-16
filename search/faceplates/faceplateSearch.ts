@@ -238,10 +238,10 @@ export async function searchFaceplates(
           simpleQuery = simpleQuery.ilike('color', `%${colorValue}%`);
         }
         
-        const { data: simpleData, error: simpleError } = await simpleQuery.limit(100);
+        const simpleResult = await simpleQuery.limit(100);
         
-        if (!simpleError && simpleData) {
-          faceplates = simpleData;
+        if (!simpleResult.error && simpleResult.data) {
+          faceplates = simpleResult.data;
           strategy = 'simple_search_fallback';
         } else {
           throw error;
