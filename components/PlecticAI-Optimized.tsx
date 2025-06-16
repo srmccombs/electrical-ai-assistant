@@ -210,7 +210,7 @@ const PlecticAI: React.FC = () => {
     "Fiber Optic Adapter Panels",
     "Fiber Optic Connectors",
     "Category Jacks",
-    "Face Plates",
+    "Datacom Face Plates",
   ])
   const [currentSearchTerm, setCurrentSearchTerm] = useState<string>('')
   const [messageFilters, setMessageFilters] = useState<Record<string, { activeFilters: ActiveFilters, filteredProducts: Product[] }>>({})
