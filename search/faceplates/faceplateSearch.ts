@@ -215,10 +215,41 @@ export async function searchFaceplates(
 
     if (error) {
       logger.error('[Faceplate Search] Database error', { error });
-      throw error;
+      
+      // If tsquery error, try simpler search
+      if (error.message?.includes('syntax error in tsquery')) {
+        logger.info('[Faceplate Search] Retrying with simpler search due to tsquery error');
+        
+        // Build a simpler query without text search
+        let simpleQuery = supabase
+          .from('faceplates')
+          .select('*')
+          .eq('is_active', true)
+          .not('product_type', 'ilike', '%Surface Mount Box%');
+        
+        // Apply filters
+        if (portsMatch) {
+          const portCount = parseInt(portsMatch[1]);
+          simpleQuery = simpleQuery.eq('number_of_ports', portCount);
+        }
+        if (colorValue) {
+          simpleQuery = simpleQuery.ilike('color', `%${colorValue}%`);
+        }
+        
+        const { data: simpleData, error: simpleError } = await simpleQuery.limit(100);
+        
+        if (!simpleError && simpleData) {
+          faceplates = simpleData;
+          strategy = 'simple_search_fallback';
+        } else {
+          throw error;
+        }
+      } else {
+        throw error;
+      }
+    } else {
+      faceplates = data || [];
     }
-
-    let faceplates = data || [];
     
     // Apply post-query filtering for complex AND conditions
     if (needsPostFiltering && faceplates.length > 0) {

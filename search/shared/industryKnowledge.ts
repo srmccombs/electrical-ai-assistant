@@ -347,15 +347,16 @@ export const detectSurfaceMountBox = (searchTerm: string): boolean => {
   
   // Comprehensive surface mount box variations
   const surfaceMountVariations = [
+    // Abbreviations FIRST (higher priority)
+    "smb", "s.m.b", "s.m.b.", "s m b",
     // Full terms
     "surface mount box", "surface mount boxes",
     "surface mounting box", "surface mounting boxes",
     "surface-mount box", "surface-mount boxes",
     "surface box", "surface boxes",
     
-    // Abbreviated terms - MOST COMMON
-    "smb", "s.m.b.", "s-m-b", "sm.b",
-    "sm box", "sm boxes", "s m b",
+    // Other abbreviated variations
+    "s-m-b", "sm.b", "sm box", "sm boxes",
     "smbs", "smb's", "smb box", "smb boxes",
     
     // With common modifiers
