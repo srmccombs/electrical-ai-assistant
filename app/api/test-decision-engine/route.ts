@@ -19,7 +19,8 @@ export async function GET() {
       success: true,
       message: 'Test search completed',
       resultCount: result.products?.length || 0,
-      filters: result.filters || [],
+      searchType: result.searchType,
+      hasProducts: result.products && result.products.length > 0,
       timestamp: new Date().toISOString()
     })
   } catch (error) {
