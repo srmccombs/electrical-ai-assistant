@@ -242,7 +242,7 @@ export async function searchFaceplates(
         
         if (!simpleResult.error && simpleResult.data) {
           faceplates = simpleResult.data as unknown as Faceplate[];
-          strategy = 'simple_search_fallback';
+          // Note: Used fallback search due to tsquery error
         } else {
           throw error;
         }
