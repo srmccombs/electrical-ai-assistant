@@ -118,7 +118,7 @@ export class DecisionEngine {
     error?: any
   ): Promise<void> {
     try {
-      await supabase.from('search_decisions_audit').insert({
+      const insertData = {
         query_id: decision.id,
         original_query: decision.query,
         normalized_query: decision.normalizedQuery,
@@ -134,9 +134,23 @@ export class DecisionEngine {
         confidence_score: decision.confidence,
         reason: error instanceof Error ? error.message : error ? String(error) : `Decision engine ${event.toLowerCase()}`,
         is_final: decision.isFinal
+      }
+      
+      logger.info('Attempting to save decision to database:', { 
+        event, 
+        query: decision.query,
+        queryId: decision.id 
       })
+      
+      const { error: dbError } = await supabase.from('search_decisions_audit').insert(insertData)
+      
+      if (dbError) {
+        logger.error('Database error saving decision:', { error: dbError, data: insertData })
+      } else {
+        logger.info('Decision saved successfully:', { queryId: decision.id, event })
+      }
     } catch (logError) {
-      logger.error('Failed to log decision:', logError)
+      logger.error('Failed to log decision:', { error: logError, event, query: decision.query })
     }
   }
 

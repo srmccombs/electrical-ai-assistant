@@ -75,12 +75,19 @@ export class DecisionEngineAdapter {
     context: SearchContext, 
     originalContext: any
   ): Promise<SearchServiceResult> {
+    logger.info('Shadow mode search started', { query })
+    
     try {
       // Run both engines in parallel
       const [oldResult, newDecision] = await Promise.allSettled([
         this.oldSearchFunction!(query, originalContext),
         this.engine.decide(query, context)
       ])
+      
+      logger.info('Shadow mode engines completed', { 
+        oldStatus: oldResult.status,
+        newStatus: newDecision.status 
+      })
 
       // Extract results
       const oldSuccess = oldResult.status === 'fulfilled' ? oldResult.value : null
