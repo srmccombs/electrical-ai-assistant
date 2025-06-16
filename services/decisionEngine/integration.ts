@@ -29,36 +29,57 @@ export async function checkProductionReadiness(): Promise<{
   ready: boolean
   report: string
 }> {
-  const readiness = await decisionAdapter.checkReadiness()
+  // Import supabase here to check actual database
+  const { supabase } = await import('@/lib/supabase')
+  
+  // Get actual decision count from database
+  const { count: decisionCount } = await supabase
+    .from('search_decisions_audit')
+    .select('*', { count: 'exact', head: true })
+  
+  // Get confidence scores
+  const { data: confidenceData } = await supabase
+    .from('search_decisions_audit')
+    .select('confidence_score')
+    .not('confidence_score', 'is', null)
+  
+  const avgConfidence = confidenceData && confidenceData.length > 0
+    ? confidenceData.reduce((sum, row) => sum + (row.confidence_score || 0), 0) / confidenceData.length
+    : 0
+  
+  const ready = (decisionCount || 0) >= 100 && avgConfidence >= 0.75
   
   let report = `Decision Engine Production Readiness Report\n`
   report += `=========================================\n\n`
-  report += `Status: ${readiness.ready ? '✅ READY' : '❌ NOT READY'}\n\n`
+  report += `Status: ${ready ? '✅ READY' : '❌ NOT READY'}\n\n`
+  report += `Metrics:\n`
+  report += `- Total Decisions: ${decisionCount || 0}\n`
+  report += `- Average Confidence: ${avgConfidence.toFixed(2)}\n`
   
-  if (readiness.metrics) {
-    report += `Metrics:\n`
-    report += `- Total Decisions: ${readiness.metrics.totalDecisions}\n`
-    report += `- Average Confidence: ${readiness.metrics.confidenceDistribution?.average?.toFixed(2) || 'N/A'}\n`
-    report += `- Product Type Distribution:\n`
-    
-    if (readiness.metrics.productTypeDistribution) {
+  // Try to get metrics from adapter too
+  try {
+    const readiness = await decisionAdapter.checkReadiness()
+    if (readiness.metrics?.productTypeDistribution) {
+      report += `- Product Type Distribution:\n`
       Object.entries(readiness.metrics.productTypeDistribution).forEach(([type, count]) => {
         report += `  - ${type}: ${count}\n`
       })
     }
+  } catch (e) {
+    // Ignore adapter errors
   }
   
-  if (readiness.issues.length > 0) {
+  if (!ready) {
     report += `\nIssues to Address:\n`
-    readiness.issues.forEach(issue => {
-      report += `- ${issue}\n`
-    })
+    if ((decisionCount || 0) < 100) {
+      report += `- Need more test data (${decisionCount}/100 decisions)\n`
+    }
+    if (avgConfidence < 0.75) {
+      report += `- Average confidence too low (${avgConfidence.toFixed(2)}/0.75)\n`
+    }
   }
   
-  return {
-    ready: readiness.ready,
-    report
-  }
+  return { ready, report }
 }
 
 // Function to switch to production mode
