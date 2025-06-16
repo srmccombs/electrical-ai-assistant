@@ -437,7 +437,7 @@ export const searchWallMountFiberEnclosures = async (
       const vectorQuery = supabase
         .from('wall_mount_fiber_enclosures')
         .select('*')
-        .textSearch('search_vector', searchTerm, {
+        .textSearch('search_vector', searchTerm.trim(), {
           type: 'websearch',
           config: 'english'
         })

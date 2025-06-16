@@ -188,7 +188,7 @@ export async function searchFaceplates(
       query = query.or(searchConditions.join(','));
     } else if (!brandValue && !productLineValue && searchConditions.length === 0) {
       // No conditions at all - use text search
-      query = query.textSearch('search_vector', searchTerm);
+      query = query.textSearch('search_vector', searchTerm.trim());
     }
     // If we have brand/product line filters, they've already been applied above
 
@@ -318,7 +318,7 @@ export async function searchFaceplates(
       }
       
       // Use text search for the term
-      query = query.textSearch('search_vector', searchTerm);
+      query = query.textSearch('search_vector', searchTerm.trim());
       
       const fallbackResult = await query.limit(100);
       if (!fallbackResult.error && fallbackResult.data) {
