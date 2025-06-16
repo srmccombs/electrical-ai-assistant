@@ -9,7 +9,9 @@ export async function GET() {
     // Run a test search
     const result = await searchProducts({
       query: 'cat6 cable test',
-      shoppingListContext: {}
+      shoppingListContext: {
+        hasItems: false
+      }
     })
     
     // Check if Decision Engine is in the logs
