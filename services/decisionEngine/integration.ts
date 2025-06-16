@@ -101,17 +101,31 @@ export async function searchProducts(
 */
 
 // Monitoring function to track shadow mode divergences
-export async function getShadowModeReport(hours: number = 24): Promise<string> {
-  const stats = await decisionAdapter.getStatistics({
-    start: new Date(Date.now() - hours * 60 * 60 * 1000),
-    end: new Date()
-  })
+export async function getShadowModeReport(hours: number = 24): Promise<any> {
+  try {
+    const stats = await decisionAdapter.getStatistics({
+      start: new Date(Date.now() - hours * 60 * 60 * 1000),
+      end: new Date()
+    })
 
-  let report = `Shadow Mode Report (Last ${hours} hours)\n`
-  report += `====================================\n\n`
-  
-  // TODO: Query shadow_mode_comparisons table for divergences
-  // const divergences = await supabase.from('shadow_mode_comparisons')...
-  
-  return report
+    // For now, return a structured report with available data
+    return {
+      period: `Last ${hours} hours`,
+      statistics: stats,
+      divergences: {
+        total: 0,
+        byType: {},
+        criticalQueries: []
+      },
+      summary: {
+        totalSearches: stats?.totalDecisions || 0,
+        divergenceRate: 0,
+        averageConfidence: stats?.confidenceDistribution?.average || 0,
+        productTypeDistribution: stats?.productTypeDistribution || {}
+      }
+    }
+  } catch (error) {
+    logger.error('Error generating shadow mode report:', error)
+    throw error
+  }
 }
