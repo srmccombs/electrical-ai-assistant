@@ -95,7 +95,8 @@ import { getDatasheetUrls } from '@/services/datasheetService'
 import { searchWithDecisionEngine } from './decisionEngine/integration'
 
 // Feature flag for Decision Engine
-const DECISION_ENGINE_MODE = process.env.USE_DECISION_ENGINE || 'disabled'
+// Temporarily hardcode shadow mode for testing
+const DECISION_ENGINE_MODE = 'shadow' // process.env.USE_DECISION_ENGINE || 'disabled'
 
 // ===================================================================
 // AI INTEGRATION - ENHANCED WITH RACK UNIT DETECTION
