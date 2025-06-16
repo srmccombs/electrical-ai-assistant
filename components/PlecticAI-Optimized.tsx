@@ -13,6 +13,7 @@ import { logger, LogCategory } from '../utils/logger'
 
 // Import extracted components
 import { FilterSection, ProductTable, SearchInput, ShoppingList } from './PlecticAI/index'
+import { SearchFeedbackButton } from './SearchFeedbackButton'
 
 // Import all types
 import type {
@@ -928,7 +929,11 @@ const PlecticAI: React.FC = () => {
                                   />
                                 ) : (
                                   <div className="border border-gray-200 rounded-lg p-8 text-center bg-gray-50">
-                                    <p className="text-gray-600">No products found. Try adjusting your search or clearing filters.</p>
+                                    <p className="text-gray-600 mb-4">No products found. Try adjusting your search or clearing filters.</p>
+                                    <SearchFeedbackButton 
+                                      searchQuery={message.query || ''}
+                                      resultCount={0}
+                                    />
                                   </div>
                                 )}
                               </div>

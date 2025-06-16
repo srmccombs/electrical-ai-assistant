@@ -168,8 +168,9 @@ CRITICAL ROUTING RULES (follow these exactly):
    → searchStrategy: "surface_mount_box", productType: "SURFACE_MOUNT_BOX"
    IMPORTANT: "SMB" = Surface Mount Box, a separate product from faceplates!
 
-3. If query mentions "connectors" + fiber type (LC, SC, ST, FC, MTP, MPO, OM1-5, OS1-2):
+3. If query mentions "connectors", "fiber ends", "fiber end", "fibre ends", "fibre end" + fiber type (LC, SC, ST, FC, MTP, MPO, OM1-5, OS1-2):
    → searchStrategy: "connectors", productType: "CONNECTOR"
+   Note: "fiber ends" is a common industry term for fiber connectors
 
 4. If query mentions cable length (ft, feet, meters) + fiber type:
    → searchStrategy: "cables", productType: "CABLE"
@@ -213,6 +214,12 @@ FIBER CONNECTOR EXAMPLES WITH POLISH:
 - "48 fiber connectors sc apc" → productType: "CONNECTOR", searchStrategy: "connectors", connectorType: "SC", polish: "APC", requestedQuantity: 48
 - "angled polish sc connectors" → productType: "CONNECTOR", searchStrategy: "connectors", connectorType: "SC", polish: "APC"
 - "green sc connectors" → productType: "CONNECTOR", searchStrategy: "connectors", connectorType: "SC", polish: "APC" (green = APC)
+
+FIBER ENDS EXAMPLES (common industry term for fiber connectors):
+- "fiber ends lc" → productType: "CONNECTOR", searchStrategy: "connectors", connectorType: "LC"
+- "20 fiber ends sc apc" → productType: "CONNECTOR", searchStrategy: "connectors", connectorType: "SC", polish: "APC", requestedQuantity: 20
+- "singlemode fiber ends" → productType: "CONNECTOR", searchStrategy: "connectors", fiberType: "OS2"
+- "om4 fiber ends" → productType: "CONNECTOR", searchStrategy: "connectors", fiberType: "OM4"
 
 OTHER EXAMPLES:
 - "lc connectors om4" → productType: "CONNECTOR", searchStrategy: "connectors", fiberType: "OM4"

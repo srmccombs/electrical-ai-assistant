@@ -65,7 +65,7 @@ export const PRODUCT_TYPES: Record<string, ProductTypeConfig> = {
     tableName: 'fiber_connectors',
     displayName: 'Fiber Connector',
     searchModule: () => import('@/search/fiberConnectors/fiberConnectorSearch'),
-    aiKeywords: ['connector', 'connectors', 'lc', 'sc', 'st', 'fc', 'mtp', 'mpo', 'fiber connector'],
+    aiKeywords: ['connector', 'connectors', 'lc', 'sc', 'st', 'fc', 'mtp', 'mpo', 'fiber connector', 'fiber connectors', 'fiber end', 'fiber ends', 'fibre end', 'fibre ends'],
     requiredColumns: ['part_number', 'brand', 'short_description'],
     tablePrefix: 'conn',
     category: 'Connector',
