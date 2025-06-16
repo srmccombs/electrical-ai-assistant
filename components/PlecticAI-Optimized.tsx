@@ -938,6 +938,27 @@ const PlecticAI: React.FC = () => {
                                 )}
                               </div>
 
+                              {/* Stock Status Legend - Only show when products are displayed */}
+                              {displayProducts.length > 0 && (
+                                <div className="bg-gray-50 border-t border-gray-200 p-3 mt-4 rounded-b-lg">
+                                  <h4 className="text-xs font-medium text-gray-700 mb-2">Stock Status Legend:</h4>
+                                  <div className="flex flex-wrap gap-4 text-xs">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-3 h-3 bg-green-600 rounded-full"></div>
+                                      <span>In Stock - Same Day (Branch/DC)</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                                      <span>Available - Other Locations</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-3 h-3 bg-red-600 rounded-full"></div>
+                                      <span>Special Order</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
                               {/* Fiber Type Reference */}
                               {shouldShowFiberReference(message.id) && <FiberTypeReference />}
 
