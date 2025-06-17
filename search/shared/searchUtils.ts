@@ -10,24 +10,48 @@ export function sanitizeForTsquery(searchTerm: string): string {
   let sanitized = searchTerm.trim();
   
   // Remove common words that might cause issues in tsquery
-  const problemWords = ['need', 'want', 'get', 'find', 'looking', 'for'];
+  const problemWords = ['i', 'need', 'want', 'get', 'find', 'looking', 'for', 'the', 'a', 'an'];
   const words = sanitized.toLowerCase().split(/\s+/);
   
-  // Filter out problem words and numbers at the beginning
+  // Filter out problem words but keep meaningful content
   const filteredWords = words.filter(word => {
-    // Keep the word if it's not a problem word and not just a number
-    return !problemWords.includes(word) && !/^\d+$/.test(word);
+    // Keep the word if:
+    // 1. It's not a problem word
+    // 2. It's not a single character (unless it's a letter-number combo like "6a")
+    // 3. It has some alphanumeric content
+    return !problemWords.includes(word) && 
+           (word.length > 1 || /[a-z]\d|\d[a-z]/i.test(word)) &&
+           /[a-zA-Z0-9]/.test(word);
   });
   
-  // If we filtered out everything, use the original term without numbers
+  // If we filtered out everything, try to extract meaningful terms
   if (filteredWords.length === 0) {
-    sanitized = sanitized.replace(/\b\d+\b/g, '').replace(/\s+/g, ' ').trim();
+    // Look for product-related terms in the original
+    const productTerms = sanitized.match(/\b(faceplate|plate|port|gang|keystone|wall|mount|box|jack|module|cat\d+[a-z]?|fiber|cable|connector|panel|enclosure)\b/gi);
+    if (productTerms && productTerms.length > 0) {
+      sanitized = productTerms.join(' ');
+    } else {
+      // Last resort - try to keep any word with 2+ characters
+      const anyWords = sanitized.split(/\s+/).filter(w => w.length >= 2 && /[a-zA-Z]/.test(w));
+      sanitized = anyWords.length > 0 ? anyWords.join(' ') : 'faceplate';
+    }
   } else {
+    // Join filtered words, but ensure we don't start with just a number
     sanitized = filteredWords.join(' ');
+    // If it starts with just a number, add a default term
+    if (/^\d+\s*$/.test(sanitized)) {
+      sanitized = 'faceplate';
+    }
   }
   
-  // If still empty, return a safe default
-  return sanitized || 'product';
+  // Clean up any special characters that might cause tsquery issues
+  sanitized = sanitized
+    .replace(/[^\w\s-]/g, ' ')  // Replace non-word chars (except hyphens) with space
+    .replace(/\s+/g, ' ')       // Collapse multiple spaces
+    .trim();
+  
+  // If still empty or too short, return a safe default
+  return sanitized.length > 0 ? sanitized : 'faceplate';
 }
 
 /**

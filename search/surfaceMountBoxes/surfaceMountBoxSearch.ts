@@ -12,6 +12,17 @@ export interface SurfaceMountBoxSearchOptions {
   searchTerm: string
   aiAnalysis?: AISearchAnalysis | null
   limit?: number
+  shoppingListContext?: {
+    hasItems: boolean
+    jackModules?: Array<{
+      partNumber: string
+      categoryRating: string
+      brand: string
+      productLine: string
+      compatibleFaceplates: string
+      description: string
+    }>
+  }
 }
 
 export interface SurfaceMountBoxSearchResult {
@@ -26,8 +37,8 @@ export async function searchSurfaceMountBoxes(
   options: SurfaceMountBoxSearchOptions
 ): Promise<SurfaceMountBoxSearchResult> {
   const startTime = performance.now()
-  const { searchTerm, aiAnalysis, limit = 100 } = options
-  logger.info('[SMB Search] Starting search', { searchTerm, aiAnalysis });
+  const { searchTerm, aiAnalysis, limit = 100, shoppingListContext } = options
+  logger.info('[SMB Search] Starting search', { searchTerm, aiAnalysis, hasShoppingListContext: !!shoppingListContext });
 
   // Table has been created - no need to check for existence anymore
   logger.info('[SMB Search] Proceeding with surface_mount_box table search');

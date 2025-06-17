@@ -12,6 +12,17 @@ export interface FaceplateSearchOptions {
   searchTerm: string
   aiAnalysis?: AISearchAnalysis | null
   limit?: number
+  shoppingListContext?: {
+    hasItems: boolean
+    jackModules?: Array<{
+      partNumber: string
+      categoryRating: string
+      brand: string
+      productLine: string
+      compatibleFaceplates: string
+      description: string
+    }>
+  }
 }
 
 export interface FaceplateSearchResult {
@@ -25,10 +36,68 @@ export async function searchFaceplates(
   options: FaceplateSearchOptions
 ): Promise<FaceplateSearchResult> {
   const startTime = performance.now()
-  const { searchTerm, aiAnalysis, limit = 100 } = options
-  logger.info('[Faceplate Search] Starting search', { searchTerm, aiAnalysis });
+  const { searchTerm, aiAnalysis, limit = 100, shoppingListContext } = options
+  logger.info('[Faceplate Search] Starting search', { searchTerm, aiAnalysis, hasShoppingListContext: !!shoppingListContext });
 
   try {
+    // Extract compatibility info from shopping list context
+    let contextBrands: string[] = [];
+    let contextProductLines: string[] = [];
+    
+    if (shoppingListContext?.hasItems && shoppingListContext.jackModules && shoppingListContext.jackModules.length > 0) {
+      // Get unique brands and product lines from jack modules in cart
+      const brands = new Set<string>();
+      const productLines = new Set<string>();
+      const compatibleFaceplateValues = new Set<string>();
+      
+      shoppingListContext.jackModules.forEach(jack => {
+        if (jack.brand) {
+          brands.add(jack.brand);
+        }
+        if (jack.productLine) {
+          productLines.add(jack.productLine);
+        }
+        
+        // IMPORTANT: Also extract compatible faceplate values
+        if (jack.compatibleFaceplates) {
+          // Handle various formats: "Keystone", "{Keystone}", "Keystone, Mini-Com", etc.
+          const cleanValue = jack.compatibleFaceplates
+            .replace(/[{}]/g, '') // Remove curly braces if present
+            .trim();
+          
+          // Split by comma if multiple values
+          if (cleanValue.includes(',')) {
+            cleanValue.split(',').forEach(val => {
+              const trimmed = val.trim();
+              if (trimmed) {
+                compatibleFaceplateValues.add(trimmed);
+              }
+            });
+          } else if (cleanValue) {
+            compatibleFaceplateValues.add(cleanValue);
+          }
+        }
+      });
+      
+      contextBrands = Array.from(brands);
+      contextProductLines = Array.from(productLines);
+      
+      // Add compatible faceplate values to product lines
+      compatibleFaceplateValues.forEach(value => {
+        contextProductLines.push(value);
+      });
+      
+      // Remove duplicates
+      contextProductLines = [...new Set(contextProductLines)];
+      
+      logger.info('[Faceplate Search] Extracted compatibility info from shopping list', {
+        contextBrands,
+        contextProductLines,
+        compatibleFaceplateValues: Array.from(compatibleFaceplateValues),
+        jackCount: shoppingListContext.jackModules.length
+      });
+    }
+
     // Build the query
     let query = supabase
       .from('faceplates')
@@ -114,6 +183,39 @@ export async function searchFaceplates(
           cleaned: productLineValue 
         });
       }
+      
+      // IMPORTANT: Check if AI detected brand matches jack brands in context
+      // If so, this is likely a compatibility search, not a brand search
+      const isCompatibilitySearch = brandValue && contextBrands.includes(brandValue) && contextProductLines.length > 0;
+      
+      if (isCompatibilitySearch) {
+        logger.info('[Faceplate Search] Detected compatibility search - using product line only', {
+          detectedBrand: brandValue,
+          contextBrands,
+          contextProductLines
+        });
+        // Clear the brand to prevent filtering by jack brand
+        brandValue = undefined;
+        // Use compatibility product lines instead
+        productLineValue = contextProductLines.join(',');
+      }
+      
+      // If no brand/product line from AI, use shopping list context
+      else if (!brandValue && !productLineValue && contextBrands.length > 0) {
+        logger.info('[Faceplate Search] No brand/product line from AI, using shopping list context', {
+          contextBrands,
+          contextProductLines
+        });
+        
+        // Use context values as fallback
+        if (contextProductLines.length > 0) {
+          productLineValue = contextProductLines.join(',');
+          logger.info('[Faceplate Search] Using context product lines', { productLineValue });
+        }
+        
+        // Don't force brand from context - let product line be the main filter
+        // This allows Keystone faceplates to show regardless of jack brand
+      }
 
       // Use AI-detected color if available and different from text-detected
       if (aiAnalysis.detectedSpecs?.color && aiAnalysis.detectedSpecs.color !== colorValue) {
@@ -154,8 +256,28 @@ export async function searchFaceplates(
           logger.info('[Faceplate Search] Searching for product line match only', { productLines });
           
           if (productLines.length > 0) {
-            const plConditions = productLines.map(pl => `product_line.ilike.%${pl}%`).join(',');
-            query = query.or(plConditions);
+            // Check both product_line and type fields for compatibility
+            // Some faceplates might have "Keystone" in type instead of product_line
+            const plConditions: string[] = [];
+            productLines.forEach(pl => {
+              plConditions.push(`product_line.ilike.%${pl}%`);
+              // Also check type field for keystone compatibility
+              if (pl.toLowerCase().includes('keystone')) {
+                plConditions.push(`type.ilike.%keystone%`);
+                plConditions.push(`product_type.ilike.%keystone%`);
+              }
+            });
+            
+            // Combine all conditions including array check
+            // For arrays in Supabase, we use 'cs' (contains) with curly braces
+            productLines.forEach(pl => {
+              // Check if the array contains this value
+              plConditions.push(`compatible_jacks.cs.{${pl}}`);
+            });
+            
+            if (plConditions.length > 0) {
+              query = query.or(plConditions.join(','));
+            }
           }
         }
       }
@@ -178,6 +300,32 @@ export async function searchFaceplates(
       // we'll rely on the port and color filters already applied
       // and use text search for the main query
       logger.info('[Faceplate Search] No AI analysis - using simplified search');
+      
+      // Check if we should apply shopping list context filters
+      if (contextBrands.length > 0 && !brandValue && !productLineValue) {
+        logger.info('[Faceplate Search] Applying shopping list context filters for non-AI search', {
+          contextBrands,
+          contextProductLines
+        });
+        
+        // Apply brand filter from context
+        if (contextBrands.length === 1) {
+          // Single brand - direct filter
+          query = query.or(`brand.ilike.%${contextBrands[0]}%,brand_normalized.ilike.%${contextBrands[0]}%`);
+        } else {
+          // Multiple brands - OR condition
+          const brandConditions = contextBrands.map(brand => 
+            `brand.ilike.%${brand}%,brand_normalized.ilike.%${brand}%`
+          ).join(',');
+          query = query.or(brandConditions);
+        }
+        
+        // Mark for post-filtering if we have product lines
+        if (contextProductLines.length > 0) {
+          needsPostFiltering = true;
+          postFilterProductLines = contextProductLines;
+        }
+      }
       
       // Don't add many search conditions - let text search handle it
       // This prevents the extremely long OR conditions
@@ -262,24 +410,33 @@ export async function searchFaceplates(
         hasColorFilter: !!postFilterColor
       });
       
-      // Apply product line filter
+      // Apply product line filter - check BOTH product_line AND compatible_jacks
       if (postFilterProductLines.length > 0) {
         faceplates = faceplates.filter((faceplate: any) => {
-          if (!faceplate.product_line) return false;
-          
-          // Normalize the faceplate's product line for comparison
-          const faceplateProductLine = faceplate.product_line.toLowerCase().replace(/\s+/g, '').trim();
-          
-          // Check if the faceplate's product line matches any of the required product lines
-          return postFilterProductLines.some(requiredPL => {
-            // Normalize the required product line for comparison
-            const normalizedRequired = requiredPL.toLowerCase().replace(/\s+/g, '').trim();
+          // First check if product_line matches
+          if (faceplate.product_line) {
+            const faceplateProductLine = faceplate.product_line.toLowerCase().replace(/\s+/g, '').trim();
             
-            // Check for exact match or containment
-            return faceplateProductLine === normalizedRequired || 
-                   faceplateProductLine.includes(normalizedRequired) ||
-                   normalizedRequired.includes(faceplateProductLine);
-          });
+            const productLineMatches = postFilterProductLines.some(requiredPL => {
+              const normalizedRequired = requiredPL.toLowerCase().replace(/\s+/g, '').trim();
+              
+              return faceplateProductLine === normalizedRequired || 
+                     faceplateProductLine.includes(normalizedRequired) ||
+                     normalizedRequired.includes(faceplateProductLine);
+            });
+            
+            if (productLineMatches) return true;
+          }
+          
+          // Also check if any required product line is in compatible_jacks array
+          if (faceplate.compatible_jacks && Array.isArray(faceplate.compatible_jacks)) {
+            return postFilterProductLines.some(requiredPL => {
+              // Check if this product line exists in the compatible_jacks array
+              return faceplate.compatible_jacks.includes(requiredPL);
+            });
+          }
+          
+          return false;
         });
       }
       
@@ -352,9 +509,26 @@ export async function searchFaceplates(
         }
       }
       
-      // Use text search for the term
-      const sanitizedTerm = sanitizeForTsquery(searchTerm);
-      query = query.textSearch('search_vector', sanitizedTerm);
+      // Try a simpler approach for the fallback - just get all faceplates
+      // and let the port filter do the work
+      // Don't use text search in fallback as it's causing issues
+      
+      // If we have context product lines (like Keystone), search for those
+      if (contextProductLines.length > 0) {
+        const plConditions: string[] = [];
+        contextProductLines.forEach(pl => {
+          plConditions.push(`product_line.ilike.%${pl}%`);
+          plConditions.push(`type.ilike.%${pl}%`);
+          plConditions.push(`product_type.ilike.%${pl}%`);
+          plConditions.push(`common_terms.ilike.%${pl}%`);
+          // Check compatible_jacks array using contains operator
+          plConditions.push(`compatible_jacks.cs.{${pl}}`);
+        });
+        query = query.or(plConditions.join(','));
+      } else {
+        // Just get all active faceplates with the port filter
+        // No additional conditions needed
+      }
       
       const fallbackResult = await query.limit(100);
       if (!fallbackResult.error && fallbackResult.data) {

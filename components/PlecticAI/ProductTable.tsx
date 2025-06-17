@@ -195,9 +195,9 @@ export const ProductTable = memo<ProductTableProps>(({ products, onAddToList, is
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-100">
-              {products.map(product => (
+              {products.map((product, index) => (
                 <ProductRow
-                  key={`${product.tableName}-${product.partNumber}`}
+                  key={`${product.tableName}-${product.partNumber}-${index}`}
                   product={product}
                   onAddToList={onAddToList}
                 />

@@ -1334,7 +1334,8 @@ const performOriginalSearch = async (options: SearchOptions): Promise<SearchResu
         const faceplateResult = await searchFaceplatesImpl({
           searchTerm: processedQuery.processedTerm,
           aiAnalysis,
-          limit
+          limit,
+          shoppingListContext
         })
         products = faceplateResult.products
         searchStrategy = `faceplates_${faceplateResult.searchStrategy}`
@@ -1345,7 +1346,8 @@ const performOriginalSearch = async (options: SearchOptions): Promise<SearchResu
         const smbResult = await searchSurfaceMountBoxesImpl({
           searchTerm: processedQuery.processedTerm,
           aiAnalysis,
-          limit
+          limit,
+          shoppingListContext
         })
         products = smbResult.products
         searchStrategy = `surface_mount_box_${smbResult.searchStrategy}`
