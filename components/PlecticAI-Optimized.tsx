@@ -14,6 +14,7 @@ import { logger, LogCategory } from '../utils/logger'
 // Import extracted components
 import { FilterSection, ProductTable, SearchInput, ShoppingList } from './PlecticAI/index'
 import { SearchFeedbackButton } from './SearchFeedbackButton'
+import { Toast } from './Toast'
 
 // Import all types
 import type {
@@ -219,6 +220,12 @@ const PlecticAI: React.FC = () => {
   // Debug mode states
   const [debugMode, setDebugMode] = useState<boolean>(false)
   const [lastSearchDebug, setLastSearchDebug] = useState<DebugInfo | null>(null)
+  
+  // Toast state
+  const [toastMessage, setToastMessage] = useState<string>('')
+  const [showToast, setShowToast] = useState<boolean>(false)
+  const [toastPosition, setToastPosition] = useState<{ x: number; y: number } | undefined>(undefined)
+  const [toastAlign, setToastAlign] = useState<'center' | 'left' | 'right'>('center')
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -297,19 +304,106 @@ const PlecticAI: React.FC = () => {
   }, [])
 
   const sendList = useCallback((): void => {
-    alert('List sent! (This would email/text the list in production)')
+    // Format the product list for email
+    const header = 'Qty - Part Number - Brand - Description'
+    const productLines = productList.map(item => 
+      `${item.quantity} - ${item.partNumber} - ${item.brand} - ${item.description}`
+    ).join('\n')
+    
+    const emailBody = `${header}\n\n${productLines}`
+    
+    // Create mailto link
+    const mailtoLink = `mailto:?body=${encodeURIComponent(emailBody)}`
+    
+    // Open email client
+    window.location.href = mailtoLink
+    
     logger.track('list_sent', {
       itemCount: productList.length,
       totalQuantity: totalItems
     })
-  }, [productList.length, totalItems])
+  }, [productList, totalItems])
 
-  const copyToClipboard = useCallback((text: string): void => {
+  const copyToClipboard = useCallback((text: string, position?: { x: number; y: number }): void => {
     navigator.clipboard.writeText(text).then(() => {
       logger.info('Copied to clipboard', { text }, LogCategory.UI)
+      setToastMessage(`Part number ${text} copied!`)
+      setToastPosition(position)
+      setToastAlign('center')
+      setShowToast(true)
     }).catch(err => {
       logger.error('Failed to copy', err, LogCategory.UI)
+      setToastMessage('Failed to copy to clipboard')
+      setToastPosition(position)
+      setToastAlign('center')
+      setShowToast(true)
     })
+  }, [])
+  
+  const copyList = useCallback((position?: { x: number; y: number }): void => {
+    if (productList.length === 0) {
+      setToastMessage('No items in list to copy')
+      setToastPosition(position)
+      setToastAlign('left')
+      setShowToast(true)
+      return
+    }
+    
+    // Format the product list - same format as email
+    const header = 'Qty - Part Number - Brand - Description'
+    const productLines = productList.map(item => 
+      `${item.quantity} - ${item.partNumber} - ${item.brand} - ${item.description}`
+    ).join('\n')
+    
+    const listContent = `${header}\n\n${productLines}`
+    
+    // Copy to clipboard with error handling
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(listContent).then(() => {
+        logger.info('List copied to clipboard', { itemCount: productList.length }, LogCategory.UI)
+        setToastMessage('Full list copied!')
+        setToastPosition(position)
+        setToastAlign('left')
+        setShowToast(true)
+      }).catch(err => {
+        logger.error('Failed to copy list', err, LogCategory.UI)
+        // Fallback method
+        fallbackCopyTextToClipboard(listContent, position)
+      })
+    } else {
+      // Fallback for older browsers
+      fallbackCopyTextToClipboard(listContent, position)
+    }
+  }, [productList])
+  
+  const fallbackCopyTextToClipboard = useCallback((text: string, position?: { x: number; y: number }): void => {
+    const textArea = document.createElement("textarea")
+    textArea.value = text
+    textArea.style.position = "fixed"
+    textArea.style.left = "-999999px"
+    document.body.appendChild(textArea)
+    textArea.focus()
+    textArea.select()
+    
+    try {
+      document.execCommand('copy')
+      setToastMessage('Full list copied!')
+      setToastPosition(position)
+      setToastAlign('left')
+      setShowToast(true)
+    } catch (err) {
+      setToastMessage('Failed to copy list')
+      setToastPosition(position)
+      setToastAlign('left')
+      setShowToast(true)
+    }
+    
+    document.body.removeChild(textArea)
+  }, [])
+  
+  const clearList = useCallback((): void => {
+    setProductList([])
+    logger.info('Product list cleared', {}, LogCategory.UI)
   }, [])
 
   const scrollToBottom = useCallback((): void => {
@@ -369,7 +463,13 @@ const PlecticAI: React.FC = () => {
               : product.fiberType.toString()
             // Clean both the product fiber type and filter value for comparison
             const cleanProductType = fiberTypeStr.replace(/\[|\]/g, '').toLowerCase()
-            const cleanFilterValue = filterValue.replace(/\[|\]/g, '').toLowerCase()
+            // Handle the new OS1/OS2 Single-mode format
+            let cleanFilterValue = filterValue.replace(/\[|\]/g, '').toLowerCase()
+            if (filterValue === 'OS1 Single-mode') {
+              cleanFilterValue = 'os1'
+            } else if (filterValue === 'OS2 Single-mode') {
+              cleanFilterValue = 'os2'
+            }
             return cleanProductType.includes(cleanFilterValue)
           case 'connectorType': return product.connectorType === filterValue
           case 'productType': return product.productType === filterValue
@@ -437,7 +537,13 @@ const PlecticAI: React.FC = () => {
               : product.fiberType.toString()
             // Clean both the product fiber type and filter value for comparison
             const cleanProductType = fiberTypeStr.replace(/\[|\]/g, '').toLowerCase()
-            const cleanFilterValue = filterValue.replace(/\[|\]/g, '').toLowerCase()
+            // Handle the new OS1/OS2 Single-mode format
+            let cleanFilterValue = filterValue.replace(/\[|\]/g, '').toLowerCase()
+            if (filterValue === 'OS1 Single-mode') {
+              cleanFilterValue = 'os1'
+            } else if (filterValue === 'OS2 Single-mode') {
+              cleanFilterValue = 'os2'
+            }
             return cleanProductType.includes(cleanFilterValue)
           case 'connectorType': return product.connectorType === filterValue
           case 'productType': return product.productType === filterValue
@@ -769,17 +875,9 @@ const PlecticAI: React.FC = () => {
         </div>
         <div className="flex items-center gap-4">
           {hasListItems && (
-            <>
-              <button
-                onClick={() => setProductList([])}
-                className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg transition-colors text-base font-medium shadow-md"
-              >
-                Clear List
-              </button>
-              <div className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">
-                {totalItems.toLocaleString()} items in list
-              </div>
-            </>
+            <div className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">
+              {totalItems.toLocaleString()} items in list
+            </div>
           )}
         </div>
       </header>
@@ -1005,11 +1103,22 @@ const PlecticAI: React.FC = () => {
           onRemoveItem={removeFromList}
           onSendList={sendList}
           onCopyPartNumber={copyToClipboard}
+          onCopyList={copyList}
+          onClearList={clearList}
         />
       </div>
 
       {/* Loading Overlay */}
       {isLoading && <AISearchLoading searchTerm={currentSearchTerm} />}
+      
+      {/* Toast Notification */}
+      <Toast 
+        message={toastMessage}
+        isVisible={showToast}
+        onClose={() => setShowToast(false)}
+        position={toastPosition}
+        align={toastAlign}
+      />
     </div>
   )
 }

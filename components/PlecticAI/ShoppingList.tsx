@@ -7,7 +7,9 @@ interface ShoppingListProps {
   onUpdateQuantity: (id: string, delta: number) => void
   onRemoveItem: (id: string) => void
   onSendList: () => void
-  onCopyPartNumber: (partNumber: string) => void
+  onCopyPartNumber: (partNumber: string, position?: { x: number; y: number }) => void
+  onCopyList: (position?: { x: number; y: number }) => void
+  onClearList: () => void
 }
 
 const ShoppingListItem = memo<{
@@ -15,7 +17,7 @@ const ShoppingListItem = memo<{
   index: number
   onUpdateQuantity: (id: string, delta: number) => void
   onRemoveItem: (id: string) => void
-  onCopyPartNumber: (partNumber: string) => void
+  onCopyPartNumber: (partNumber: string, position?: { x: number; y: number }) => void
 }>(({ item, index, onUpdateQuantity, onRemoveItem, onCopyPartNumber }) => {
   const handleDecrement = useCallback(() => {
     onUpdateQuantity(item.id, -1)
@@ -29,8 +31,13 @@ const ShoppingListItem = memo<{
     onRemoveItem(item.id)
   }, [item.id, onRemoveItem])
 
-  const handleCopy = useCallback(() => {
-    onCopyPartNumber(item.partNumber)
+  const handleCopy = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const position = {
+      x: rect.left + rect.width / 2,
+      y: rect.top
+    }
+    onCopyPartNumber(item.partNumber, position)
   }, [item.partNumber, onCopyPartNumber])
 
   const itemTotal = useMemo(() => 
@@ -108,7 +115,9 @@ export const ShoppingList = memo<ShoppingListProps>(({
   onUpdateQuantity,
   onRemoveItem,
   onSendList,
-  onCopyPartNumber
+  onCopyPartNumber,
+  onCopyList,
+  onClearList
 }) => {
   const totalItems = useMemo(() => 
     productList.reduce((sum, item) => sum + item.quantity, 0),
@@ -125,7 +134,31 @@ export const ShoppingList = memo<ShoppingListProps>(({
   return (
     <div className="w-2/5 border-l border-gray-200 bg-white flex flex-col">
       <div className="bg-gray-50 border-b border-gray-200 p-4">
-        <h2 className="text-lg font-semibold text-gray-900">Product List</h2>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-lg font-semibold text-gray-900">Product List</h2>
+          <div className="flex gap-2">
+            <button
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect()
+                const position = {
+                  x: rect.left + rect.width / 2,
+                  y: rect.top
+                }
+                onCopyList(position)
+              }}
+              className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm font-medium transition-colors flex items-center gap-1"
+            >
+              <Copy size={14} />
+              Copy List
+            </button>
+            <button
+              onClick={onClearList}
+              className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-medium transition-colors"
+            >
+              Clear List
+            </button>
+          </div>
+        </div>
         <p className="text-sm text-gray-600">
           {productList.length} items • {totalItems.toLocaleString()} total qty
         </p>
@@ -135,7 +168,12 @@ export const ShoppingList = memo<ShoppingListProps>(({
         <table className="w-full">
           <thead className="bg-gray-100 sticky top-0">
             <tr className="text-xs text-gray-700">
-              <th className="px-3 py-2 text-left">Part Number</th>
+              <th className="px-3 py-2 text-left">
+                <div className="flex items-center justify-between">
+                  <span>Part Number</span>
+                  <span className="text-xs font-normal text-gray-500">Copy</span>
+                </div>
+              </th>
               <th className="px-3 py-2 text-center">Qty</th>
               <th className="px-3 py-2 text-left">Description</th>
               <th className="px-3 py-2 text-right">Price</th>
@@ -170,7 +208,7 @@ export const ShoppingList = memo<ShoppingListProps>(({
           className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2"
         >
           <Send size={16} />
-          Send List for Quote
+          Email List
         </button>
       </div>
     </div>

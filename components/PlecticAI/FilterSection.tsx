@@ -96,10 +96,17 @@ const getDynamicFilterOptions = (products: Product[], filterType: string): strin
           const types = fiberTypeStr.split(',').map(t => t.trim()).filter(t => t.length > 0)
           types.forEach(type => {
             // Clean up fiber types by removing brackets and other artifacts
-            const cleanType = type
+            let cleanType = type
               .replace(/\[/g, '')  // Remove opening brackets
               .replace(/\]/g, '')  // Remove closing brackets
               .trim()
+            
+            // Add "Single-mode" label to OS1 and OS2
+            if (cleanType === 'OS1') {
+              cleanType = 'OS1 Single-mode'
+            } else if (cleanType === 'OS2') {
+              cleanType = 'OS2 Single-mode'
+            }
             
             if (cleanType.length > 0 && cleanType !== '-') {
               allFiberTypes.add(cleanType)
