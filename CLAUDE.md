@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is an AI-powered electrical distribution assistant built with Next.js 14 and TypeScript. The application helps users search for electrical components (cables, fiber connectors, adapter panels, enclosures) using natural language queries powered by OpenAI GPT-4o-mini.
 
-### Current Status (June 14, 2025) - DECISION ENGINE DEPLOYED! 🎉
+### Current Status (June 16, 2025) - DECISION ENGINE DEPLOYED! 🎉
 - ✅ Core search functionality complete
 - ✅ AI integration with GPT-4o-mini
 - ✅ Shopping list management with compatibility filtering
@@ -26,9 +26,16 @@ This is an AI-powered electrical distribution assistant built with Next.js 14 an
 - ✅ Database query optimization for shielding filters
 - ✅ **DECISION ENGINE DEPLOYED IN SHADOW MODE (June 14, 2025)**
 - ✅ **Knowledge System IMPLEMENTED AND ACTIVE**
+- ✅ **Search Feedback Button for failed searches (June 16, 2025)**
+- ✅ **Ports and Gang filters for Faceplates/SMB (June 16, 2025)**
+- ✅ **Product Line filter enabled for Faceplates/SMB (June 16, 2025)**
+- ✅ **Stock Status Legend restored (June 16, 2025)**
+- ✅ **Toast notifications for copy actions (June 17, 2025)**
+- ✅ **Copy List functionality with full product details (June 17, 2025)**
+- ✅ **Email List with brand included in format (June 17, 2025)**
+- ✅ **OS1/OS2 labeled as "Single-mode" in filters (June 17, 2025)**
 - 🚧 User authentication not implemented
 - 🚧 Quote generation not implemented
-- 🚧 Email integration not implemented
 
 ## 🎉 MAJOR UPDATE: Decision Engine is Live!
 
@@ -76,12 +83,12 @@ The search system (`/services/searchService.ts`) orchestrates:
 Located in `/search/` directory:
 - `categoryCables/` - Searches for ethernet cables (Cat5e, Cat6, etc.) with box quantity conversion
 - `fiberCables/` - Searches for fiber optic cables
-- `fiberConnectors/` - Searches for fiber connectors (LC, SC, ST, etc.)
+- `fiberConnectors/` - Searches for fiber connectors (LC, SC, ST, etc.) - includes "fiber ends" synonym
 - `fiberadapterPanels/` - Searches for adapter panels with fiber enclosure compatibility
 - `fiberenclosure/` - Searches for both rack mount and wall mount fiber enclosures with panel capacity filtering
 - `jackModules/` - Searches for RJ45 jacks with faceplate/SMB compatibility
-- `faceplates/` - Searches for wall plates with jack compatibility
-- `surfaceMountBoxes/` - Searches for surface mount boxes (SMB) with jack compatibility
+- `faceplates/` - Searches for wall plates with jack compatibility - includes Ports and Gang filters
+- `surfaceMountBoxes/` - Searches for surface mount boxes (SMB) with jack compatibility - includes Ports and Gang filters
 - `shared/industryKnowledge.ts` - Contains business rules and electrical industry patterns
 - `shared/tableDiscoveryService.ts` - Dynamic table discovery for new product types
 
@@ -113,6 +120,10 @@ Analytics tables:
   - Stock status indicators
   - Cross-reference results display
   - Product compatibility matching (jacks/faceplates, enclosures/panels)
+  - Toast notifications for copy confirmations
+  - Copy List button to copy entire shopping list
+  - Email List button with brand included in format
+- `Toast.tsx` - Toast notification component with dynamic positioning
 - `ErrorBoundary.tsx` - Graceful error handling wrapper
 - `AnalyticsDashboard.tsx` - Complete analytics dashboard with charts and metrics
 - `app/analytics/page.tsx` - Analytics dashboard page
@@ -139,6 +150,9 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
    - Fiber Enclosures ↔ Adapter Panels (panel_type field)
 7. **Panel Capacity Search**: Shows exact match or next size up (e.g., request 6 panels → show 8, not 12)
 8. **Box Quantity Conversion**: Detects "box of X" and converts to feet for cables
+9. **Fiber Terminology**: "fiber ends" is synonym for "fiber connectors"
+10. **Fiber Pair Conversion**: Automatically converts fiber pairs to fiber count (3 pair = 6 fiber)
+11. **Popular Searches Update**: "Face Plates" changed to "Datacom Face Plates"
 
 ## TypeScript Configuration
 
@@ -205,6 +219,31 @@ Strict mode is enabled. Key compiler options:
 - ✅ Box quantity to feet conversion for cables
 - ✅ TypeScript strict mode compliance
 
+### June 16, 2025 Updates
+- ✅ Fixed TypeScript errors in faceplateSearch.ts
+- ✅ Added "fiber ends" as synonym for "fiber connectors"
+- ✅ Implemented fiber pair-to-fiber count conversion (3 pair = 6 fiber)
+- ✅ Added SearchFeedbackButton component for failed searches
+- ✅ Created /api/feedback endpoint to save feedback to database
+- ✅ Created FEEDBACK_BUTTON_GUIDE.md documentation
+- ✅ Changed "Face Plates" to "Datacom Face Plates" in popular searches
+- ✅ Re-added Stock Status Legend to product display
+- ✅ Added Ports and Gang filters for Faceplates and Surface Mount Boxes
+- ✅ Removed emoji icons from Ports and Gang filters
+- ✅ Enabled Product Line filter for Faceplates and SMB
+- ✅ Removed Product Types filter to save space
+
+### June 17, 2025 Updates
+- ✅ Added Toast notification component with dynamic positioning
+- ✅ Implemented copy confirmation notifications for part numbers
+- ✅ Added "Copy List" button to copy entire shopping list
+- ✅ Enhanced Email List functionality to include Brand field
+- ✅ Updated list format: "Qty - Part Number - Brand - Description"
+- ✅ Added "Copy" label above copy icons in shopping list header
+- ✅ Updated fiber type filters: OS1/OS2 now show as "Single-mode"
+- ✅ Removed duplicate orange Clear List button from main header
+- ✅ All changes TypeScript strict mode compliant
+
 ## TypeScript Best Practices
 
 When working with TypeScript in this project:
@@ -239,6 +278,9 @@ When working with TypeScript in this project:
 - ✅ Fixed faceplate searches excluding SMB products
 - ✅ Fixed SMB database query errors (removed array field from ilike)
 - ✅ Fixed Cat6 STP cable searches with proper shielding filters
+- ✅ Search Feedback Button - Allows users to report failed searches
+- ✅ Ports/Gang filters - Enhanced filtering for faceplates and SMBs
+- ✅ Product Line filter - Enabled for better product matching
 
 ### Services Added
 - `services/aiCache.ts` - Reduces API costs with intelligent caching

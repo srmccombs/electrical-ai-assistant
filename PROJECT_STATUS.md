@@ -30,7 +30,7 @@ Plectic AI is a functioning AI-powered search application for electrical distrib
 - [x] Fallback handling for AI failures
 - [x] Enhanced analysis for edge cases
 
-#### 3. User Interface (95% Complete)
+#### 3. User Interface (98% Complete)
 - [x] Modern, responsive design
 - [x] Real-time search with loading states
 - [x] Shopping list with quantity management
@@ -40,6 +40,12 @@ Plectic AI is a functioning AI-powered search application for electrical distrib
 - [x] Fiber type reference guide (contextual help)
 - [x] Debug mode for development
 - [x] Error boundary for graceful failures
+- [x] Search feedback button for failed searches (June 16, 2025)
+- [x] Stock Status Legend restored (June 16, 2025)
+- [x] Enhanced filters: Ports/Gang for faceplates and SMBs (June 16, 2025)
+- [x] Toast notifications for copy confirmations (June 17, 2025)
+- [x] Copy List button with full product details (June 17, 2025)
+- [x] Email List functionality with brand included (June 17, 2025)
 - [ ] Loading skeleton screens (planned)
 
 #### 4. Product Search Modules (100% Complete)
@@ -209,9 +215,9 @@ After generating initial revenue, add:
 
 Current technical debt is minimal:
 - Test coverage needed
-- Surface mount box table needs to be created in database
 - Some fiber enclosures have NULL panel capacity values
-- Documentation updates for new features needed
+- Need to create database function: `increment_knowledge_usage`
+- Need to add Vercel environment variable: `USE_DECISION_ENGINE=shadow`
 
 ### ✅ RECENT UPDATES (January 2025)
 
@@ -235,6 +241,31 @@ Current technical debt is minimal:
 - Enhanced box quantity to feet conversion for cables
 - Fixed all TypeScript strict mode compliance issues
 
+**June 16, 2025 Updates:**
+- Fixed TypeScript errors in faceplateSearch.ts
+- Added "fiber ends" as synonym for "fiber connectors" in multiple places
+- Implemented fiber pair-to-fiber count conversion (3 pair = 6 fiber, etc.)
+- Added SearchFeedbackButton component for failed searches
+- Created /api/feedback endpoint to save feedback to database
+- Created FEEDBACK_BUTTON_GUIDE.md documentation
+- Changed "Face Plates" to "Datacom Face Plates" in popular searches
+- Re-added Stock Status Legend to product display
+- Added Ports and Gang filters for Faceplates and Surface Mount Boxes
+- Removed emoji icons from Ports and Gang filters
+- Enabled Product Line filter for Faceplates and SMB
+- Removed Product Types filter to save space
+
+**June 17, 2025 Updates:**
+- Added Toast notification component with dynamic positioning
+- Implemented copy confirmation notifications for part numbers
+- Added "Copy List" button to copy entire shopping list to clipboard
+- Enhanced Email List functionality to include Brand field
+- Updated list format: "Qty - Part Number - Brand - Description"
+- Added "Copy" label above copy icons in shopping list header
+- Updated fiber type filters: OS1/OS2 now display as "Single-mode"
+- Removed duplicate orange Clear List button from main header
+- All changes are TypeScript strict mode compliant
+
 ### 🏆 PROJECT STRENGTHS
 
 1. **Excellent Search UX** - Natural language understanding works remarkably well
@@ -254,7 +285,7 @@ Current technical debt is minimal:
 3. **No Authentication** - Can't track users or provide customer pricing
 4. **Manual Processes** - Product updates require database access
 5. **Single Tenant** - No multi-company support
-6. **Missing Table** - Surface mount box table not yet created in database
+6. **Missing Features** - No database function for knowledge usage tracking
 
 ### 💡 RECOMMENDATIONS
 
@@ -273,7 +304,9 @@ Current technical debt is minimal:
 
 ---
 
-**Last Updated**: January 11, 2025
+**Last Updated**: June 17, 2025
 **Phase 1 Completion**: TypeScript refactoring and type system implementation
 **Phase 2 Completion**: Analytics dashboard, cross-reference search, compatibility matching
+**June 16 Updates**: Search feedback button, enhanced filters, fiber terminology improvements
+**June 17 Updates**: Toast notifications, Copy/Email List enhancements, UI refinements
 **Next Review**: After implementing authentication
