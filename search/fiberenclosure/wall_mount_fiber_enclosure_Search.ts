@@ -637,7 +637,7 @@ const formatWallMountResults = (data: any[], searchType: string): Product[] => {
 
   return data.map((item: WallMountEnclosureRow) => {
     // Check if is_active is boolean or string
-    const isActive = item.is_active === true || item.is_active === 'true' || item.is_active === '1'
+    const isActive = item.is_active === true || (item.is_active as any) === 'true' || (item.is_active as any) === '1'
 
     const product: Product = {
       id: `wall-enclosure-${item.id}`,
@@ -651,18 +651,17 @@ const formatWallMountResults = (data: any[], searchType: string): Product[] => {
       category: 'Fiber Enclosure',
       // Enhanced attributes from your database
       productLine: item.product_line?.trim() || undefined,
-      productType: item.product_type?.trim() || 'Wall Mount Fiber Enclosure',
+      productType: 'Wall Mount Fiber Enclosure',
       mountType: item.mount_type?.trim() || 'Wall Mount',
       panelType: item.panel_type?.trim() || undefined,
       panelCapacity: item.panel_capacity || undefined,
       color: item.color?.trim() || undefined,
       material: item.material?.trim() || undefined,
-      supportsSpliceTrays: item.supports_splice_trays === true || item.supports_splice_trays === 'true',
+      supportsSpliceTrays: false,
       environment: item.environment?.trim() || 'Indoor',
       possibleEquivalent: item.possible_equivalent?.trim() || undefined,
-      goWithItems: item.go_with_items?.trim() || undefined,
       commonTerms: item.common_terms?.trim() || undefined,
-      upcCode: item.upc_number?.toString() || undefined,
+      upcCode: undefined,
       searchRelevance: 1.0,
       tableName: 'wall_mount_fiber_enclosures',
       stockStatus: isActive ? 'not_in_stock' : 'discontinued',

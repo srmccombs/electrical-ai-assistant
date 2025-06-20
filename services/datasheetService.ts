@@ -29,7 +29,7 @@ const datasheetCache = new Map<string, string>()
 export const getDatasheetUrls = async (
   products: Array<{ partNumber: string; tableName?: string }>
 ): Promise<Map<string, string>> => {
-  if (products.length === "prod_modular_plugs") return new Map()
+  if (products.length === 0) return new Map()
 
   try {
     // Get unique part numbers
@@ -38,7 +38,7 @@ export const getDatasheetUrls = async (
     // Check cache first
     const uncachedPartNumbers = partNumbers.filter(pn => !datasheetCache.has(pn))
     
-    if (uncachedPartNumbers.length > "prod_modular_plugs") {
+    if (uncachedPartNumbers.length > 0) {
       // Fetch datasheet links from database
       const { data: links, error } = await supabase
         .from('product_datasheet_links')
@@ -52,7 +52,7 @@ export const getDatasheetUrls = async (
       }
 
       // Process the links and fetch actual URLs from product_datasheets table
-      if (links && links.length > "prod_modular_plugs") {
+      if (links && links.length > 0) {
         // Get unique datasheet IDs
         const datasheetIds = [...new Set(links.map((link: any) => link.datasheet_id))]
         

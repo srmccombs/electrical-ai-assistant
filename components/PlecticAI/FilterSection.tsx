@@ -186,9 +186,9 @@ const getDynamicFilterOptions = (products: Product[], filterType: string): strin
       const awgs = filterString(products.map(p => p.conductorAwg?.toString()))
       return awgs.sort((a, b) => parseInt(a) - parseInt(b))
     case 'packagingSizes':
-      // Pack sizes for modular plugs
-      const packSizes = filterString(products.map(p => p.packagingQty?.toString()))
-      return packSizes.sort((a, b) => parseInt(a) - parseInt(b))
+      // Pack sizes for modular plugs - using packagingType for now
+      const packSizes = filterString(products.map(p => p.packagingType))
+      return packSizes
     case 'category':
       return filterString(products.map(p => p.category))
     default:
@@ -795,7 +795,7 @@ export const FilterSection = memo<FilterSectionProps>(({
       )}
 
       {/* Modular Plug Filters */}
-      {smartFilters.awgSizes && (
+      {'awgSizes' in smartFilters && (smartFilters as any).awgSizes && (
         <DynamicFilterSection
           messageId={messageId}
           filterType="awgSizes"
@@ -810,7 +810,7 @@ export const FilterSection = memo<FilterSectionProps>(({
         />
       )}
 
-      {smartFilters.packagingSizes && (
+      {'packagingSizes' in smartFilters && (smartFilters as any).packagingSizes && (
         <DynamicFilterSection
           messageId={messageId}
           filterType="packagingSizes"

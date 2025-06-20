@@ -93,7 +93,7 @@ export default function TestSearchPerformance() {
           <div className="space-y-4">
             {results.map((result, idx) => (
               <div key={idx} className="bg-white p-4 rounded-lg shadow border">
-                <h3 className="font-semibold text-lg mb-2">"{result.searchTerm}"</h3>
+                <h3 className="font-semibold text-lg mb-2">&quot;{result.searchTerm}&quot;</h3>
                 
                 {result.error ? (
                   <p className="text-red-500">Error: {result.error}</p>
@@ -116,7 +116,7 @@ export default function TestSearchPerformance() {
                       </p>
                       {!result.resultsMatch && (
                         <p className="text-yellow-600 text-center mt-1">
-                          ⚠️ Result counts don't match - needs investigation
+                          ⚠️ Result counts don&apos;t match - needs investigation
                         </p>
                       )}
                     </div>

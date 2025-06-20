@@ -367,7 +367,7 @@ const formatConnectorResults = (data: any[], searchType: string, priorityFiberTy
     productLine: item.product_line?.trim() || undefined,
     connectorType: item.connector_type?.trim() || undefined,
     fiberType: Array.isArray(item.fiber_category) ? item.fiber_category.join(', ') : item.fiber_category?.trim(),
-    fiberCount: item.fiber_count || undefined,
+    fiberCount: undefined,
     productType: item.product_type?.trim() || undefined,
     technology: item.technology?.trim() || undefined,
     polish: item.polish?.trim() || undefined,

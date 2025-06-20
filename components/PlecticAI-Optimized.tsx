@@ -130,7 +130,7 @@ const AISearchLoading = memo<AISearchLoadingProps>(({ searchTerm }) => {
             <Brain className="w-8 h-8 text-white" />
           </div>
           <h2 className="text-xl font-bold text-gray-900">Plectic AI Working</h2>
-          <p className="text-sm text-gray-600 mt-1">Searching for: "{searchTerm}"</p>
+          <p className="text-sm text-gray-600 mt-1">Searching for: &quot;{searchTerm}&quot;</p>
         </div>
       </div>
     </div>
@@ -344,6 +344,31 @@ const PlecticAI: React.FC = () => {
     })
   }, [])
   
+  const fallbackCopyTextToClipboard = useCallback((text: string, position?: { x: number; y: number }): void => {
+    const textArea = document.createElement("textarea")
+    textArea.value = text
+    textArea.style.position = "fixed"
+    textArea.style.left = "-999999px"
+    document.body.appendChild(textArea)
+    textArea.focus()
+    textArea.select()
+    
+    try {
+      document.execCommand('copy')
+      setToastMessage('Full list copied!')
+      setToastPosition(position)
+      setToastAlign('left')
+      setShowToast(true)
+    } catch (err) {
+      setToastMessage('Failed to copy list')
+      setToastPosition(position)
+      setToastAlign('left')
+      setShowToast(true)
+    }
+    
+    document.body.removeChild(textArea)
+  }, [])
+  
   const copyList = useCallback((position?: { x: number; y: number }): void => {
     if (productList.length === 0) {
       setToastMessage('No items in list to copy')
@@ -378,32 +403,7 @@ const PlecticAI: React.FC = () => {
       // Fallback for older browsers
       fallbackCopyTextToClipboard(listContent, position)
     }
-  }, [productList])
-  
-  const fallbackCopyTextToClipboard = useCallback((text: string, position?: { x: number; y: number }): void => {
-    const textArea = document.createElement("textarea")
-    textArea.value = text
-    textArea.style.position = "fixed"
-    textArea.style.left = "-999999px"
-    document.body.appendChild(textArea)
-    textArea.focus()
-    textArea.select()
-    
-    try {
-      document.execCommand('copy')
-      setToastMessage('Full list copied!')
-      setToastPosition(position)
-      setToastAlign('left')
-      setShowToast(true)
-    } catch (err) {
-      setToastMessage('Failed to copy list')
-      setToastPosition(position)
-      setToastAlign('left')
-      setShowToast(true)
-    }
-    
-    document.body.removeChild(textArea)
-  }, [])
+  }, [productList, fallbackCopyTextToClipboard])
   
   const clearList = useCallback((): void => {
     setProductList([])
@@ -711,7 +711,7 @@ const PlecticAI: React.FC = () => {
             
             return {
               partNumber: item.partNumber,
-              numberOfPorts: item.numberOfPorts || '',
+              numberOfPorts: typeof item.numberOfPorts === 'number' ? item.numberOfPorts : 0,
               brand: item.brand,
               compatibleJacks: item.compatibleJacks || '',
               description: item.description
@@ -865,7 +865,7 @@ const PlecticAI: React.FC = () => {
     } finally {
       setIsLoading(false)
     }
-  }, [input, isLoading, productList, debugMode])
+  }, [input, isLoading, productList, debugMode, applySmartFilter, messageFilters])
 
   const performSearch = useCallback((searchTerm: string): void => {
     setInput(searchTerm)

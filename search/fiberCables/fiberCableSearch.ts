@@ -230,8 +230,8 @@ export const searchFiberCables = async (
           const fiberTypes = item.fiber_types?.map((type: string) => type.toLowerCase()) || []
           const hasSpecificType = description.includes(specificTypeLower) || 
                                   description.includes(specificTypeUpper) ||
-                                  fiberTypes.some(type => type.includes(specificTypeLower)) ||
-                                  fiberTypes.some(type => type.includes(specificTypeUpper))
+                                  fiberTypes.some((type: string) => type.includes(specificTypeLower)) ||
+                                  fiberTypes.some((type: string) => type.includes(specificTypeUpper))
           if (!hasSpecificType) return false
         }
 
@@ -304,16 +304,16 @@ const formatCableResults = (data: any[], searchType: string): Product[] => {
     partNumber: item.part_number?.toString() || 'No Part Number',
     brand: item.brand?.trim() || 'Unknown Brand',
     description: item.short_description?.trim() || 'No description available',
-    price: parseFloat(item.unit_price) || (Math.random() * 5 + 2),
+    price: parseFloat(item.unit_price || '0') || (Math.random() * 5 + 2),
     stockLocal: item.stock_quantity || 0,
     stockDistribution: 1,
     leadTime: 'Ships Today',
     category: 'Fiber Optic Cable',
-    fiberType: extractFiberType(item.short_description) || item.fiber_type_standard || 'Fiber',
+    fiberType: extractFiberType(item.short_description) || item.fiber_type || 'Fiber',
     fiberCount: extractFiberCount(item.short_description) || item.fiber_count,
     jacketRating: item.jacket_rating || extractJacketRating(item.short_description),
-    productType: item.product_type || 'Fiber Optic Cable',
-    application: item.applications || extractApplication(item.short_description),
+    productType: 'Fiber Optic Cable',
+    application: extractApplication(item.short_description),
     searchRelevance: 1.00,
     tableName: 'fiber_cables',
     stockStatus: 'not_in_stock',

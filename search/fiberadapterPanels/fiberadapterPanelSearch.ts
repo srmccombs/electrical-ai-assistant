@@ -445,7 +445,7 @@ const formatPanelResults = (data: any[], searchType: string): Product[] => {
     category: 'Adapter Panel',
     // Enhanced attributes from your database
     connectorType: item.connector_type?.trim() || undefined,
-    fiberType: Array.isArray(item.fiber_types) ? item.fiber_types.join(', ') : item.fiber_types || undefined,
+    fiberType: item.fiber_category?.trim() || undefined,
     fiberCount: item.fiber_count || undefined,
     panelType: item.panel_type?.trim() || undefined,
     productLine: item.product_line?.trim() || undefined,

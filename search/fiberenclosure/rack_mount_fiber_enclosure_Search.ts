@@ -435,13 +435,13 @@ export const searchRackMountFiberEnclosures = async (
       console.log(`📊 Brand search result:`, {
         error: result.error,
         count: result.data?.length,
-        brands: result.data?.map((item: BaseProductRow) => item.brand).filter(Boolean).slice(0, 5)
+        brands: (result.data as unknown as BaseProductRow[])?.map((item: BaseProductRow) => item.brand).filter(Boolean).slice(0, 5)
       })
 
       if (!result.error && result.data && result.data.length > 0) {
         const endTime = performance.now()
         return {
-          products: formatEnclosureResults(result.data, 'brand_match'),
+          products: formatEnclosureResults(result.data as unknown as RackMountEnclosureRow[], 'brand_match'),
           searchStrategy: 'brand_match',
           totalFound: result.data.length,
           searchTime: Math.round(endTime - startTime)
@@ -701,7 +701,7 @@ const formatEnclosureResults = (data: any[], searchType: string): Product[] => {
       mountType: item.mount_type?.trim() || 'Rack Mount',
       rackUnits: item.rack_units || undefined,
       panelType: item.panel_type?.trim() || undefined,
-      panelCapacity: item.panel_capacity || undefined,
+      panelCapacity: item.accepts_number_of_connector_housing_panels || undefined,
       color: item.color?.trim() || undefined,
       material: item.material?.trim() || undefined,
       supportsSpliceTrays: item.supports_splice_trays || false,
@@ -801,18 +801,10 @@ const formatPanelResults = (data: any[], searchType: string): Product[] => {
     stockDistribution: 1,
     leadTime: 'Ships Today',
     category: 'Adapter Panel',
-    connectorType: item.connector_type?.trim() || undefined,
-    fiberType: item.fiber_category?.trim() || undefined,
-    fiberCount: item.fiber_count || undefined,
     panelType: item.panel_type?.trim() || undefined,
     productLine: item.product_line?.trim() || undefined,
-    adaptersPerPanel: item.number_of_adapter_per_panel || undefined,
-    adapterColor: item.adapter_color?.trim() || undefined,
-    terminationType: item.termination_type?.trim() || undefined,
     possibleEquivalent: item.possible_equivalent?.trim() || undefined,
-    compatibleEnclosures: item.compatible_enclosures?.trim() || undefined,
     commonTerms: item.common_terms?.trim() || undefined,
-    supportsAPC: item.supports_apc || false,
     searchRelevance: 1.0,
     tableName: 'adapter_panels',
     stockStatus: 'not_in_stock',

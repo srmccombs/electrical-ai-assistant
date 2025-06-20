@@ -27,7 +27,7 @@ export default function DatabaseOrganization() {
         .order('table_name', { ascending: true })
 
       if (error) throw error
-      setTables(data || [])
+      setTables((data as unknown as TableInfo[]) || [])
     } catch (error) {
       console.error('Error fetching table organization:', error)
     } finally {

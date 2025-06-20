@@ -1027,7 +1027,7 @@ const formatJackModuleResults = (data: any[], searchType: string): Product[] => 
 
     // CRITICAL: Use correct column names
     categoryRating: item.category_rating?.trim() || undefined,
-    productType: item.product_type?.trim() || 'Jack Module',
+    productType: 'Jack Module',
     productLine: item.product_line?.trim() || undefined,
     color: item.color?.trim() || undefined,  // Using 'color' column now
     jacketColor: item.color?.trim() || undefined, // Add jacketColor for UI consistency
@@ -1037,8 +1037,8 @@ const formatJackModuleResults = (data: any[], searchType: string): Product[] => 
     commonTerms: item.common_terms?.trim() || undefined,
     compatibleFaceplates: item.compatible_faceplates?.trim() || undefined,
     installationToolsRequired: item.installation_tools_required?.trim() || undefined,
-    possibleCross: item.possible_cross?.trim() || undefined,
-    goWithItems: item.go_with_items?.trim() || undefined,
+    possibleCross: undefined,
+    goWithItems: undefined,
     upcNumber: item.upc_number?.toString() || undefined,
 
     searchRelevance: 1.0,

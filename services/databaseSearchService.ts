@@ -2,7 +2,7 @@
 // This is the new, optimized search that leverages PostgreSQL full-text search
 
 import { supabase } from '@/lib/supabase'
-import type { Product, SearchResult } from '@/types'
+import type { Product, SearchResult, SmartFilters } from '@/types'
 
 interface DatabaseSearchOptions {
   searchTerm: string
@@ -28,7 +28,7 @@ export async function searchProductsDatabase(
 
   try {
     // Use the search function we created in the database
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .rpc('search_products_advanced', {
         p_search_term: searchTerm,
         p_table_name: tableNames?.[0] || null,
@@ -73,16 +73,11 @@ export async function searchProductsDatabase(
 
     return {
       products: filteredProducts,
-      searchTerm,
-      totalResults: filteredProducts.length,
       searchTime: Math.round(endTime - startTime),
-      filters: generateSmartFilters(filteredProducts),
-      aiAnalysis: null, // Can add AI analysis if needed
-      debugInfo: {
-        searchStrategy: 'database_fulltext',
-        tablesSearched: tableNames || ['all'],
-        totalMatches: data?.length || 0
-      }
+      searchType: 'database_fulltext',
+      totalFound: filteredProducts.length,
+      smartFilters: generateSmartFilters(filteredProducts) as unknown as SmartFilters,
+      aiAnalysis: undefined
     }
 
   } catch (error) {
@@ -91,12 +86,11 @@ export async function searchProductsDatabase(
     
     return {
       products: [],
-      searchTerm,
-      totalResults: 0,
       searchTime: Math.round(endTime - startTime),
-      filters: {},
-      aiAnalysis: null,
-      error: error instanceof Error ? error.message : 'Search failed'
+      searchType: 'database_fulltext',
+      totalFound: 0,
+      smartFilters: { brands: [] } as SmartFilters,
+      aiAnalysis: undefined
     }
   }
 }
@@ -109,7 +103,7 @@ export async function searchProductsFast(searchTerm: string): Promise<Product[]>
     .from('mv_product_search')
     .select('*')
     .textSearch('search_vector', searchTerm, {
-      type: 'plainto',
+      type: 'plain',
       config: 'english'
     })
     .limit(50)
@@ -137,7 +131,7 @@ export async function getSearchSuggestions(term: string): Promise<string[]> {
     return []
   }
 
-  return data?.map(s => s.suggested_term) || []
+  return (data as any[])?.map(s => s.suggested_term) || []
 }
 
 /**

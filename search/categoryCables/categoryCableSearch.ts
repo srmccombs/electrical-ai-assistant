@@ -209,7 +209,7 @@ const searchByProductLine = async (
   }
 
   const result = await query
-  const products = result.data ? formatCableResults(result.data, 'product_line_match') : []
+  const products = result.data ? formatCableResults(result.data as unknown as CategoryCableRow[], 'product_line_match') : []
 
   console.log(`📋 Product line search found: ${products.length} products`)
   return products
@@ -242,7 +242,7 @@ const searchByMultiCriteria = async (
       .limit(150)
 
     const result = await query
-    const products = result.data ? formatCableResults(result.data, 'jacket_search') : []
+    const products = result.data ? formatCableResults(result.data as unknown as CategoryCableRow[], 'jacket_search') : []
 
     console.log(`🧥 Jacket search found: ${products.length} products with jacket_code ${detectedJacketCode}`)
     return products
@@ -314,7 +314,7 @@ const searchByMultiCriteria = async (
   }
 
   const result = await query
-  const products = result.data ? formatCableResults(result.data, 'targeted_search') : []
+  const products = result.data ? formatCableResults(result.data as unknown as CategoryCableRow[], 'targeted_search') : []
 
   console.log(`🎯 Multi-criteria search found: ${products.length} products`)
   return products
@@ -383,7 +383,7 @@ const searchByFallback = async (
   const fallbackResult = await query
   console.log(`📊 Fallback search result: ${fallbackResult.data?.length || 0} products found`)
 
-  const products = fallbackResult.data ? formatCableResults(fallbackResult.data, 'fallback_search') : []
+  const products = fallbackResult.data ? formatCableResults(fallbackResult.data as unknown as CategoryCableRow[], 'fallback_search') : []
   return products
 }
 

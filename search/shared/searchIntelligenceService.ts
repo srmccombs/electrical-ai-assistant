@@ -52,7 +52,7 @@ export class SearchIntelligenceService {
     if (cached !== undefined) return cached
 
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .rpc('detect_jacket_type', { search_term: searchTerm })
 
       if (error) throw error
@@ -72,7 +72,7 @@ export class SearchIntelligenceService {
     if (cached !== undefined) return cached
 
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .rpc('detect_category_rating', { search_term: searchTerm })
 
       if (error) throw error
@@ -88,7 +88,7 @@ export class SearchIntelligenceService {
   // Apply business rules (redirects, conversions)
   async applyBusinessRules(searchTerm: string): Promise<BusinessRuleResult> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .rpc('apply_business_rules', { search_term: searchTerm })
 
       if (error) throw error
@@ -113,7 +113,7 @@ export class SearchIntelligenceService {
   // Validate search query
   async validateQuery(query: string): Promise<ValidationResult> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .rpc('validate_search_query', { query_text: query })
 
       if (error) throw error
@@ -136,7 +136,7 @@ export class SearchIntelligenceService {
     if (cached !== undefined) return cached
 
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .rpc('detect_brand', { search_term: searchTerm })
 
       if (error) throw error
@@ -156,7 +156,7 @@ export class SearchIntelligenceService {
     if (cached !== undefined) return cached
 
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .rpc('detect_color', { search_term: searchTerm })
 
       if (error) throw error
@@ -176,7 +176,7 @@ export class SearchIntelligenceService {
     if (cached !== undefined) return cached
 
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .rpc('detect_all_attributes', { search_term: searchTerm })
 
       if (error) throw error
@@ -199,7 +199,7 @@ export class SearchIntelligenceService {
     shielding?: string
   ): Promise<string[]> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .rpc('get_product_search_terms', {
           p_table_name: tableName,
           p_part_number: partNumber,
@@ -225,7 +225,7 @@ export class SearchIntelligenceService {
     productContext?: string
   ): Promise<{ value: number; unit: string } | null> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .rpc('convert_quantity', {
           quantity_value: quantity,
           unit_from: unitFrom,

@@ -3,7 +3,7 @@
 // Created: June 6, 2025
 
 import { supabase, type Database } from '@/lib/supabase'
-import type { BaseTableRow } from './types'
+import type { BaseProductRow } from './types'
 
 // ===================================================================
 // TYPE DEFINITIONS
@@ -28,7 +28,7 @@ export interface TableDiscoveryResult {
 }
 
 // Generic type for any table row with part_number
-export interface BaseTableRow {
+export interface BaseTableRowLocal {
   id: number
   part_number?: string
   is_active?: boolean
@@ -195,7 +195,7 @@ const getFallbackTableList = (): TableDiscoveryResult => {
 export const searchAllTablesForPartNumber = async (
   partNumbers: string[],
   limit: number = 50
-): Promise<BaseTableRow[]> => {
+): Promise<BaseProductRow[]> => {
   console.log('🔎 Searching all tables for part numbers:', partNumbers)
 
   // Get the current table list
@@ -247,7 +247,7 @@ export const searchAllTablesForPartNumber = async (
       }
 
       // Add table metadata to each result
-      return (data || []).map((item: BaseTableRow) => ({
+      return ((data as unknown as BaseProductRow[]) || []).map((item: BaseProductRow) => ({
         ...item,
         _tableName: table.name,
         _tablePrefix: table.prefix
@@ -277,7 +277,7 @@ export const searchKnownTable = async <T extends TableName>(
   tableName: T,
   partNumbers: string[],
   limit: number = 50
-): Promise<(Database['public']['Tables'][T]['Row'] & { _tableName: string; _tablePrefix: string })[]> => {
+): Promise<any[]> => {
   try {
     console.log(`🔍 Searching ${tableName} for part numbers:`, partNumbers)
 
@@ -310,7 +310,7 @@ export const searchKnownTable = async <T extends TableName>(
     }
 
     // Add metadata and return with full type safety
-    return (data || []).map((item: BaseTableRow) => ({
+    return ((data as unknown as BaseProductRow[]) || []).map((item: BaseProductRow) => ({
       ...item,
       _tableName: tableName,
       _tablePrefix: generateTablePrefix(tableName)

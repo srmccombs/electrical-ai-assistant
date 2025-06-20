@@ -4,6 +4,7 @@
 import { supabase } from '@/lib/supabase'
 import type { Product } from '@/types/product'
 import type { AISearchAnalysis } from '@/types/search'
+import type { CategoryCableRow } from '@/search/shared/types'
 
 export interface CategoryCableSearchOptions {
   searchTerm: string
@@ -47,8 +48,21 @@ export const searchCategoryCablesV2 = async (
       searchString = aiAnalysis.detectedSpecs.categoryRating
       console.log('🤖 Using AI-detected category rating:', searchString)
     } else {
-      // Clean up search term - remove "cable" if searching for category ratings
-      if (searchTerm.toLowerCase().includes('category') && searchTerm.toLowerCase().includes('cable')) {
+      // Extract category rating from search term manually
+      const categoryMatch = searchTerm.match(/\b(cat\s*5e?|cat\s*6a?|category\s*5e?|category\s*6a?)\b/i)
+      if (categoryMatch) {
+        // Normalize the category rating
+        let categoryRating = categoryMatch[0].replace(/\s+/g, ' ').toLowerCase()
+        if (categoryRating.includes('5e') || categoryRating === 'cat 5' || categoryRating === 'category 5') {
+          searchString = 'Category 5e'
+        } else if (categoryRating.includes('6a')) {
+          searchString = 'Category 6A'
+        } else if (categoryRating.includes('6')) {
+          searchString = 'Category 6'
+        }
+        console.log('📝 Extracted category rating:', searchString)
+      } else if (searchTerm.toLowerCase().includes('category') && searchTerm.toLowerCase().includes('cable')) {
+        // Clean up search term - remove "cable" if searching for category ratings
         searchString = searchTerm.replace(/\s*cable\s*$/i, '').trim()
         console.log('📝 Cleaned search term:', searchString)
       }
@@ -65,7 +79,7 @@ export const searchCategoryCablesV2 = async (
       throw error
     }
 
-    const products = data ? formatCableResults(data) : []
+    const products = data ? formatCableResults(data as unknown as CategoryCableRow[]) : []
     const endTime = performance.now()
 
     console.log(`✅ V2 Search Results:`)
@@ -116,7 +130,7 @@ const formatCableResults = (data: CategoryCableRow[]): Product[] => {
     jacketCode: item.jacket_code || undefined,
     color: item.jacket_color?.trim() || undefined,
     packagingType: item.packaging_type?.trim() || undefined,
-    shielding: item.shielding_type?.trim() || undefined,
+    shielding: item.Shielding_Type?.trim() || undefined,
     productLine: item.product_line?.trim() || undefined,
     pairCount: item.pair_count?.trim() || undefined,
     conductorAwg: item.conductor_awg || undefined,

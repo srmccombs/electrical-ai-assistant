@@ -13,6 +13,7 @@ import {
 // Import Product and AISearchAnalysis types
 import type { Product } from '@/types/product'
 import type { AISearchAnalysis } from '@/types/search'
+import type { ModularPlugRow } from '@/search/shared/types'
 
 // ===================================================================
 // TYPE DEFINITIONS - Modular Plug Specific
@@ -231,8 +232,8 @@ export async function searchModularPlugs(
   try {
     // Build search parameters
     const searchParams = {
-      categoryRating: detectCategoryRating(searchTerm) || aiAnalysis?.categoryRating,
-      shieldingType: detectShielding(searchTerm) || aiAnalysis?.shieldingType,
+      categoryRating: detectCategoryRating(searchTerm) || aiAnalysis?.detectedSpecs?.categoryRating,
+      shieldingType: detectShielding(searchTerm) || aiAnalysis?.detectedSpecs?.shielding,
       awgSize: detectAWGSize(searchTerm),
       packagingQty: detectPackagingQty(searchTerm),
       passThrough: detectPassThrough(searchTerm),
@@ -390,12 +391,12 @@ export async function searchModularPlugs(
       console.log(`   Total records in table: ${checkQuery.count || 0}`)
     }
 
-    const products = (data || []).map(item => ({
+    const products = ((data as unknown as ModularPlugRow[]) || []).map(item => ({
       // Core Product fields with proper mapping
-      id: item.id,
-      partNumber: item.part_number,
-      brand: item.brand,
-      description: item.short_description,
+      id: `plug-${item.id}`,
+      partNumber: item.part_number || 'No Part Number',
+      brand: item.brand || 'Unknown Brand',
+      description: item.short_description || 'No description available',
       price: parseFloat(item.unit_price || '') || Math.random() * 5 + 1, // Default price if not available
       stockLocal: item.stock_quantity || 0,
       stockDistribution: 1,
@@ -410,15 +411,16 @@ export async function searchModularPlugs(
       stockMessage: 'In Stock - Ships Today',
       
       // Modular plug specific fields
-      category: item.category || 'Modular Plug',
+      category: 'Modular Plug',
       categoryRating: item.category_rating,
-      shieldingType: item.shielding_type,
+      shielding: item.shielding_type,
       conductorAwg: item.conductor_awg,
       packagingQty: item.packaging_qty,
       productLine: item.product_line,
       
-      // Additional fields from the raw data
-      ...item
+      // Additional fields
+      commonTerms: item.common_terms,
+      possibleEquivalent: item.compatible_boots
     }))
 
     // Build search strategy description
@@ -461,7 +463,7 @@ export function generateModularPlugFilters(products: Product[]): any {
   // Category Rating filter
   const categories = new Set<string>()
   products.forEach(product => {
-    const categoryRating = product.category_rating
+    const categoryRating = product.categoryRating
     if (Array.isArray(categoryRating)) {
       categoryRating.forEach(cat => {
         if (cat) categories.add(cat)
@@ -475,8 +477,8 @@ export function generateModularPlugFilters(products: Product[]): any {
   // Shielding Type filter
   const shieldingTypes = new Set<string>()
   products.forEach(product => {
-    if (product.shielding_type) {
-      shieldingTypes.add(product.shielding_type)
+    if (product.shielding) {
+      shieldingTypes.add(product.shielding)
     }
   })
   if (shieldingTypes.size > 1) {
@@ -486,8 +488,8 @@ export function generateModularPlugFilters(products: Product[]): any {
   // AWG filter
   const awgSizes = new Set<string>()
   products.forEach(product => {
-    if (product.conductor_awg) {
-      awgSizes.add(product.conductor_awg.toString())
+    if (product.conductorAwg) {
+      awgSizes.add(product.conductorAwg.toString())
     }
   })
   if (awgSizes.size > 1) {
@@ -497,8 +499,8 @@ export function generateModularPlugFilters(products: Product[]): any {
   // Packaging Quantity filter
   const packagingQtys = new Set<number>()
   products.forEach(product => {
-    if (product.packaging_qty) {
-      packagingQtys.add(product.packaging_qty)
+    if ((product as any).packagingQty) {
+      packagingQtys.add((product as any).packagingQty)
     }
   })
   if (packagingQtys.size > 1) {
@@ -508,8 +510,8 @@ export function generateModularPlugFilters(products: Product[]): any {
   // Product Line filter
   const productLines = new Set<string>()
   products.forEach(product => {
-    if (product.product_line) {
-      productLines.add(product.product_line)
+    if (product.productLine) {
+      productLines.add(product.productLine)
     }
   })
   if (productLines.size > 1) {

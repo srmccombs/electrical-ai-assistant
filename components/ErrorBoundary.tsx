@@ -73,7 +73,7 @@ class ErrorBoundary extends Component<Props, State> {
             </h2>
 
             <p className="text-gray-600 text-center mb-6">
-              We encountered an unexpected error. Don't worry, your data is safe.
+              We encountered an unexpected error. Don&apos;t worry, your data is safe.
               You can try reloading the page to continue.
             </p>
 

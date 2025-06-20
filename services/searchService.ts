@@ -314,7 +314,7 @@ const searchByPartNumber = async (partNumbers: string[], quantity?: number): Pro
     logger.info(`Dynamic search found ${searchResults.length} raw results`, {}, LogCategory.DATABASE)
 
     // Convert to standard Product format
-    const products: Product[] = searchResults.map((item: DatabaseSearchResult) => {
+    const products: Product[] = (searchResults as DatabaseSearchResult[]).map((item: DatabaseSearchResult) => {
       // Determine category based on table name
       const category = determineCategoryFromTable(item._tableName)
 

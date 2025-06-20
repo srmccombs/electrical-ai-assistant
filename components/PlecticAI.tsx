@@ -170,7 +170,7 @@ const AISearchLoading: React.FC<AISearchLoadingProps> = ({ searchTerm }) => {
             <Brain className="w-8 h-8 text-white" />
           </div>
           <h2 className="text-xl font-bold text-gray-900">Plectic AI Working</h2>
-          <p className="text-sm text-gray-600 mt-1">Searching for: "{searchTerm}"</p>
+          <p className="text-sm text-gray-600 mt-1">Searching for: &quot;{searchTerm}&quot;</p>
         </div>
       </div>
     </div>
@@ -921,7 +921,7 @@ const PlecticAI: React.FC = () => {
 
           <div className="space-y-2">
             <div>
-              <span className="text-yellow-400">Query:</span> "{lastSearchDebug.query}"
+              <span className="text-yellow-400">Query:</span> &quot;{lastSearchDebug.query}&quot;
             </div>
 
             <div>
