@@ -139,7 +139,8 @@ export const searchFiberCables = async (
     if (detectedSpecificType) {
       const specificType = detectedSpecificType.toUpperCase()
       console.log(`🎯 SPECIFIC FIBER TYPE DETECTED: ${specificType}`)
-      query = query.or(`short_description.ilike.%${specificType}%,fiber_types::text.ilike.%${specificType}%`)
+      // Note: Cannot use ::text casting in PostgREST, search other fields instead
+      query = query.or(`short_description.ilike.%${specificType}%,common_terms.ilike.%${specificType}%,computed_search_terms.ilike.%${specificType}%`)
     } else if (detectedModeType) {
       // For multimode/single-mode, search broadly for fiber cables
       const cableConditions = cableTerms.map(term =>
