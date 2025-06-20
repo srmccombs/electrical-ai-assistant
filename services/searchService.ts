@@ -268,7 +268,18 @@ const getAIAnalysis = async (query: string, shoppingListContext?: SearchOptions[
     try {
       logger.debug('Getting FRESH AI analysis', { query: q, hasShoppingListContext: !!shoppingListContext }, LogCategory.AI)
 
-      const response = await fetch('/api/ai-search', {
+      // Skip AI calls during build/static generation
+      if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_VERCEL_URL) {
+        logger.warn('Skipping AI call during build', { query: q }, LogCategory.AI)
+        return null
+      }
+      
+      // In server-side code, we need to use absolute URLs
+      const baseUrl = process.env.NEXT_PUBLIC_VERCEL_URL 
+        ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+        : process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+      
+      const response = await fetch(`${baseUrl}/api/ai-search`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
