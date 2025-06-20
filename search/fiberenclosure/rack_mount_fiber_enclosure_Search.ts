@@ -1,10 +1,12 @@
 // src/search/fiberenclosure/rack_mount_fiber_enclosure_Search.ts
 // Enhanced Rack Mount Fiber Enclosure Search Implementation
-// Fixed: December 20, 2024 - Corrected table name to rack_mount_fiber_enclosures
+// Fixed: December 2, 224 - Corrected table name to rack_mount_fiber_enclosures
 
 import { supabase } from '@/lib/supabase'
 import type { Product } from '@/types/product'
 import type { AISearchAnalysis } from '@/types/search'
+import type { RackMountEnclosureRow, BaseProductRow } from '@/search/shared/types'
+import { normalizeMountType, normalizeMountTypes } from '@/search/shared/industryKnowledge'
 
 // ===================================================================
 // TYPE DEFINITIONS - Fiber Enclosure Specific
@@ -239,7 +241,7 @@ export const searchRackMountFiberEnclosures = async (
   options: FiberEnclosureSearchOptions
 ): Promise<FiberEnclosureSearchResult> => {
   const startTime = performance.now()
-  const { searchTerm, aiAnalysis, limit = 50 } = options
+  const { searchTerm, aiAnalysis, limit = 5 } = options
 
   console.log('🏗️ ========== FIBER ENCLOSURE SEARCH START ==========')
   console.log('🔍 Search term:', searchTerm)
@@ -249,14 +251,14 @@ export const searchRackMountFiberEnclosures = async (
     // First, let's check how many total records we have
     console.log('📊 Checking total enclosure inventory...')
     const countQuery = await supabase
-      .from('rack_mount_fiber_enclosures')
+      .from('prod_rack_mount_fiber_enclosures')
       .select('*', { count: 'exact', head: true })
 
     console.log(`📊 Total records in table: ${countQuery.count}`)
 
     // Check how many are active
     const activeCountQuery = await supabase
-      .from('rack_mount_fiber_enclosures')
+      .from('prod_rack_mount_fiber_enclosures')
       .select('*', { count: 'exact', head: true })
       .eq('is_active', true)
 
@@ -266,7 +268,7 @@ export const searchRackMountFiberEnclosures = async (
     if (activeCountQuery.count === 0) {
       console.log('⚠️ No active enclosures found! Checking inactive records...')
       const inactiveQuery = await supabase
-        .from('rack_mount_fiber_enclosures')
+        .from('prod_rack_mount_fiber_enclosures')
         .select('part_number, brand, is_active')
         .limit(5)
 
@@ -294,12 +296,12 @@ export const searchRackMountFiberEnclosures = async (
       commonTerms
     })
 
-    // STRATEGY 0: Direct rack unit search (highest priority for "4RU fiber enclosure")
+    // STRATEGY : Direct rack unit search (highest priority for "4RU fiber enclosure")
     if (detectedRackUnits) {
-      console.log(`🎯 STRATEGY 0: Direct rack unit search for ${detectedRackUnits}RU`)
+      console.log(`🎯 STRATEGY : Direct rack unit search for ${detectedRackUnits}RU`)
 
       let query = supabase
-        .from('rack_mount_fiber_enclosures')
+        .from('prod_rack_mount_fiber_enclosures')
         .select('*')
         .eq('rack_units', detectedRackUnits)
         .eq('is_active', true)
@@ -326,7 +328,7 @@ export const searchRackMountFiberEnclosures = async (
       // If no active results, try without is_active filter
       console.log(`⚠️ No active ${detectedRackUnits}RU enclosures, trying all records...`)
       const allQuery = await supabase
-        .from('rack_mount_fiber_enclosures')
+        .from('prod_rack_mount_fiber_enclosures')
         .select('*')
         .eq('rack_units', detectedRackUnits)
         .limit(limit)
@@ -343,15 +345,15 @@ export const searchRackMountFiberEnclosures = async (
       }
     }
 
-    // STRATEGY 0.5: Panel capacity search (e.g., "6 panel fiber enclosure")
+    // STRATEGY ".5: Panel capacity search (e.g., "6 panel fiber enclosure")
     if (detectedPanelCapacity) {
-      console.log(`📊 STRATEGY 0.5: Panel capacity search for ${detectedPanelCapacity} panels`)
+      console.log(`📊 STRATEGY ".5: Panel capacity search for ${detectedPanelCapacity} panels`)
       
       // First, try to find exact match
       let query = supabase
-        .from('rack_mount_fiber_enclosures')
+        .from('prod_rack_mount_fiber_enclosures')
         .select('*')
-        .eq('accepts_number_of_connector_housing_panels', detectedPanelCapacity)
+        .eq('panel_capacity', detectedPanelCapacity)
         .eq('is_active', true)
         .limit(limit)
 
@@ -376,25 +378,25 @@ export const searchRackMountFiberEnclosures = async (
       console.log(`⚠️ No exact match for ${detectedPanelCapacity} panels, looking for next size up...`)
       
       let nextSizeQuery = supabase
-        .from('rack_mount_fiber_enclosures')
+        .from('prod_rack_mount_fiber_enclosures')
         .select('*')
-        .gt('accepts_number_of_connector_housing_panels', detectedPanelCapacity)
+        .gt('panel_capacity', detectedPanelCapacity)
         .eq('is_active', true)
-        .order('accepts_number_of_connector_housing_panels', { ascending: true })
+        .order('panel_capacity', { ascending: true })
         .limit(limit)
 
       const nextSizeResult = await nextSizeQuery as any
       console.log(`📊 Next size up search result:`, {
         error: nextSizeResult.error,
         count: nextSizeResult.data?.length,
-        sizes: nextSizeResult.data?.map((item: any) => item.accepts_number_of_connector_housing_panels).slice(0, 5)
+        sizes: nextSizeResult.data?.map((item: BaseProductRow) => (item as any).panel_capacity).slice(0, 5)
       })
 
       if (!nextSizeResult.error && nextSizeResult.data && nextSizeResult.data.length > 0) {
         // Filter to only show the smallest size that's larger than requested
-        const nextSize = nextSizeResult.data[0].accepts_number_of_connector_housing_panels
+        const nextSize = nextSizeResult.data[0].panel_capacity
         const filteredResults = nextSizeResult.data.filter((item: any) => 
-          item.accepts_number_of_connector_housing_panels === nextSize
+          item.panel_capacity === nextSize
         )
         
         const endTime = performance.now()
@@ -417,7 +419,7 @@ export const searchRackMountFiberEnclosures = async (
       console.log(`🏢 STRATEGY 1: Brand search for: "${detectedBrand || queryLower}"`)
 
       let query = supabase
-        .from('rack_mount_fiber_enclosures')
+        .from('prod_rack_mount_fiber_enclosures')
         .select('*')
         .eq('is_active', true)
         .limit(limit)
@@ -433,7 +435,7 @@ export const searchRackMountFiberEnclosures = async (
       console.log(`📊 Brand search result:`, {
         error: result.error,
         count: result.data?.length,
-        brands: result.data?.map((item: any) => item.brand).filter(Boolean).slice(0, 5)
+        brands: result.data?.map((item: BaseProductRow) => item.brand).filter(Boolean).slice(0, 5)
       })
 
       if (!result.error && result.data && result.data.length > 0) {
@@ -449,7 +451,7 @@ export const searchRackMountFiberEnclosures = async (
       // Try without is_active filter
       console.log(`⚠️ No active ${detectedBrand || queryLower} enclosures, trying all records...`)
       let allBrandQuery = supabase
-        .from('rack_mount_fiber_enclosures')
+        .from('prod_rack_mount_fiber_enclosures')
         .select('*')
         .limit(limit)
 
@@ -483,9 +485,9 @@ export const searchRackMountFiberEnclosures = async (
         
         // First try exact match
         let exactQuery = supabase
-          .from('rack_mount_fiber_enclosures')
+          .from('prod_rack_mount_fiber_enclosures')
           .select('*')
-          .eq('accepts_number_of_connector_housing_panels', detectedPanelCapacity)
+          .eq('panel_capacity', detectedPanelCapacity)
           .eq('is_active', true)
           .limit(limit)
 
@@ -506,20 +508,20 @@ export const searchRackMountFiberEnclosures = async (
         console.log(`⚠️ No exact match for ${detectedPanelCapacity} panels in general search, looking for next size up...`)
         
         let nextSizeQuery = supabase
-          .from('rack_mount_fiber_enclosures')
+          .from('prod_rack_mount_fiber_enclosures')
           .select('*')
-          .gt('accepts_number_of_connector_housing_panels', detectedPanelCapacity)
+          .gt('panel_capacity', detectedPanelCapacity)
           .eq('is_active', true)
-          .order('accepts_number_of_connector_housing_panels', { ascending: true })
+          .order('panel_capacity', { ascending: true })
           .limit(limit)
 
         const nextSizeResult = await nextSizeQuery as any
         
         if (!nextSizeResult.error && nextSizeResult.data && nextSizeResult.data.length > 0) {
           // Filter to only show the smallest size that's larger than requested
-          const nextSize = nextSizeResult.data[0].accepts_number_of_connector_housing_panels
+          const nextSize = nextSizeResult.data[0].panel_capacity
           const filteredResults = nextSizeResult.data.filter((item: any) => 
-            item.accepts_number_of_connector_housing_panels === nextSize
+            item.panel_capacity === nextSize
           )
           
           const endTime = performance.now()
@@ -535,7 +537,7 @@ export const searchRackMountFiberEnclosures = async (
 
       // Regular general enclosure search without panel capacity
       const query = await supabase
-        .from('rack_mount_fiber_enclosures')
+        .from('prod_rack_mount_fiber_enclosures')
         .select('*')
         .eq('is_active', true)
         .limit(limit)
@@ -554,8 +556,8 @@ export const searchRackMountFiberEnclosures = async (
             let scoreB = 0
 
             if (detectedRackUnits) {
-              if (a.rack_units === detectedRackUnits) scoreA += 10
-              if (b.rack_units === detectedRackUnits) scoreB += 10
+              if (a.rack_units === detectedRackUnits) scoreA += 1
+              if (b.rack_units === detectedRackUnits) scoreB += 1
             }
 
             if (detectedBrand) {
@@ -586,7 +588,7 @@ export const searchRackMountFiberEnclosures = async (
     console.log(`🎯 STRATEGY 3: Comprehensive search across all fields`)
 
     let query = supabase
-      .from('rack_mount_fiber_enclosures')
+      .from('prod_rack_mount_fiber_enclosures')
       .select('*')
       .eq('is_active', true)
       .limit(limit)
@@ -624,7 +626,7 @@ export const searchRackMountFiberEnclosures = async (
     console.log('🔍 FINAL FALLBACK: Getting ALL enclosures regardless of status')
 
     const fallbackQuery = await supabase
-      .from('rack_mount_fiber_enclosures')
+      .from('prod_rack_mount_fiber_enclosures')
       .select('*')
       .limit(limit)
 
@@ -677,7 +679,7 @@ export const searchRackMountFiberEnclosures = async (
 const formatEnclosureResults = (data: any[], searchType: string): Product[] => {
   console.log(`✅ FORMATTING ${data.length} FIBER ENCLOSURE RESULTS (${searchType})`)
 
-  return data.map((item: any) => {
+  return data.map((item: RackMountEnclosureRow) => {
     // Log if we're including inactive products
     if (item.is_active === false) {
       console.log(`⚠️ Including inactive product: ${item.part_number} - ${item.brand}`)
@@ -688,18 +690,18 @@ const formatEnclosureResults = (data: any[], searchType: string): Product[] => {
       partNumber: item.part_number?.toString() || 'No Part Number',
       brand: item.brand?.trim() || 'Unknown Brand',
       description: item.short_description?.trim() || 'No description available',
-      price: Math.random() * 500 + 100, // Price range for enclosures
+      price: Math.random() * 5 + 1, // Price range for enclosures
       stockLocal: item.is_active ? Math.floor(Math.random() * 10) : 0,
-      stockDistribution: item.is_active ? 50 : 0,
+      stockDistribution: item.is_active ? 5 : 0,
       leadTime: item.is_active ? 'Ships in 2-3 days' : 'Contact for availability',
       category: 'Fiber Enclosure',
       // Enhanced attributes from your database
       productLine: item.product_line?.trim() || undefined,
       productType: item.product_type?.trim() || 'Rack Mount Fiber Enclosure',
-      mountType: item.mount_type?.trim() || undefined,
+      mountType: item.mount_type?.trim() || 'Rack Mount',
       rackUnits: item.rack_units || undefined,
       panelType: item.panel_type?.trim() || undefined,
-      panelCapacity: item.accepts_number_of_connector_housing_panels || undefined,
+      panelCapacity: item.panel_capacity || undefined,
       color: item.color?.trim() || undefined,
       material: item.material?.trim() || undefined,
       supportsSpliceTrays: item.supports_splice_trays || false,
@@ -737,7 +739,7 @@ export const generateFiberEnclosureFilters = (products: Product[]) => {
     colors: filterString(enclosureProducts.map(p => p.color)).slice(0, 6),
     environments: filterString(enclosureProducts.map(p => p.environment)).slice(0, 3),
     productLines: filterString(enclosureProducts.map(p => p.productLine)).slice(0, 6),
-    mountTypes: filterString(enclosureProducts.map(p => p.mountType)).slice(0, 3)
+    mountTypes: filterString(enclosureProducts.flatMap(p => p.mountType ? normalizeMountTypes(p.mountType) : [])).slice(0, 3)
   }
 }
 
@@ -751,11 +753,11 @@ export const generateFiberEnclosureFilters = (products: Product[]) => {
  */
 export const findCompatibleAdapterPanels = async (
   enclosurePanelType: string,
-  limit: number = 10
+  limit: number = 1
 ): Promise<Product[]> => {
   try {
     const { data, error } = await supabase
-      .from('adapter_panels')
+      .from('prod_adapter_panels')
       .select('*')
       .eq('is_active', true)
       .eq('panel_type', enclosurePanelType)
@@ -789,14 +791,14 @@ export const findCompatibleSpliceTrays = async (
 
 // Helper function to format adapter panel results (reused from adapter panel search)
 const formatPanelResults = (data: any[], searchType: string): Product[] => {
-  return data.map((item: any) => ({
+  return data.map((item: RackMountEnclosureRow) => ({
     id: `panel-${item.id}`,
     partNumber: item.part_number?.toString() || 'No Part Number',
     brand: item.brand?.trim() || 'Unknown Brand',
     description: item.short_description?.trim() || 'No description available',
-    price: Math.random() * 200 + 75,
-    stockLocal: 10,
-    stockDistribution: 100,
+    price: Math.random() * 2 + 75,
+    stockLocal: 1,
+    stockDistribution: 1,
     leadTime: 'Ships Today',
     category: 'Adapter Panel',
     connectorType: item.connector_type?.trim() || undefined,

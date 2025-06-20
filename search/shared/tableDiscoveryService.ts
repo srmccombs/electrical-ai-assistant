@@ -3,6 +3,7 @@
 // Created: June 6, 2025
 
 import { supabase, type Database } from '@/lib/supabase'
+import type { BaseTableRow } from './types'
 
 // ===================================================================
 // TYPE DEFINITIONS
@@ -27,9 +28,15 @@ export interface TableDiscoveryResult {
 }
 
 // Generic type for any table row with part_number
-interface BaseTableRow {
+export interface BaseTableRow {
+  id: number
   part_number?: string
   is_active?: boolean
+  brand?: string
+  short_description?: string
+  unit_price?: string
+  stock_quantity?: number
+  // Allow any other fields that might exist in the database
   [key: string]: any
 }
 
@@ -303,7 +310,7 @@ export const searchKnownTable = async <T extends TableName>(
     }
 
     // Add metadata and return with full type safety
-    return (data || []).map((item: any) => ({
+    return (data || []).map((item: BaseTableRow) => ({
       ...item,
       _tableName: tableName,
       _tablePrefix: generateTablePrefix(tableName)

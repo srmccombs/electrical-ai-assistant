@@ -1,17 +1,20 @@
 // src/search/fiberenclosure/wall_mount_fiber_enclosure_Search.ts
 // Wall Mount Fiber Enclosure Search Implementation
-// Created: June 6, 2025
+// Created: June 6, 225
 
 import { supabase } from '@/lib/supabase'
 import type { Product } from '@/types/product'
 import type { AISearchAnalysis } from '@/types/search'
+import type { WallMountEnclosureRow, BaseProductRow } from '@/search/shared/types'
 
 // Import shared detection functions from industryKnowledge
 import {
   detectBrand,
   detectColor,
   detectEnvironment,
-  detectPartNumbers
+  detectPartNumbers,
+  normalizeMountType,
+  normalizeMountTypes
 } from '@/search/shared/industryKnowledge'
 
 // ===================================================================
@@ -246,7 +249,7 @@ export const searchWallMountFiberEnclosures = async (
   options: WallMountFiberEnclosureSearchOptions
 ): Promise<WallMountFiberEnclosureSearchResult> => {
   const startTime = performance.now()
-  const { searchTerm, aiAnalysis, limit = 50 } = options
+  const { searchTerm, aiAnalysis, limit = 5 } = options
 
   console.log('🏠 ========== WALL MOUNT FIBER ENCLOSURE SEARCH START ==========')
   console.log('🔍 Search term:', searchTerm)
@@ -257,7 +260,7 @@ export const searchWallMountFiberEnclosures = async (
     console.log('📊 Checking wall mount table status...')
     
     const tableCheck = await supabase
-      .from('wall_mount_fiber_enclosures')
+      .from('prod_wall_mount_fiber_enclosures')
       .select('id', { count: 'exact' })
       .limit(1)
 
@@ -304,13 +307,13 @@ export const searchWallMountFiberEnclosures = async (
       isWallMountRequest
     })
 
-    // STRATEGY 0: Direct part number search
+    // STRATEGY : Direct part number search
     const { hasParts, partNumbers } = detectPartNumbers(searchTerm)
     if (hasParts && partNumbers.length > 0) {
-      console.log(`🎯 STRATEGY 0: Direct part number search for: ${partNumbers.join(', ')}`)
+      console.log(`🎯 STRATEGY : Direct part number search for: ${partNumbers.join(', ')}`)
 
       let query = supabase
-        .from('wall_mount_fiber_enclosures')
+        .from('prod_wall_mount_fiber_enclosures')
         .select('*')
         .limit(limit)
 
@@ -331,16 +334,16 @@ export const searchWallMountFiberEnclosures = async (
       }
     }
 
-    // STRATEGY 0.5: Panel capacity search (e.g., "6 panel fiber enclosure") - MOVED UP!
+    // STRATEGY ".5: Panel capacity search (e.g., "6 panel fiber enclosure") - MOVED UP!
     if (detectedPanelCapacity) {
-      console.log(`📊 STRATEGY 0.5: Panel capacity search for ${detectedPanelCapacity} panels`)
+      console.log(`📊 STRATEGY ".5: Panel capacity search for ${detectedPanelCapacity} panels`)
       
       // First, try to find exact match
       let query = supabase
-        .from('wall_mount_fiber_enclosures')
+        .from('prod_wall_mount_fiber_enclosures')
         .select('*')
-        .eq('accepts_number_of_connector_housing_panels', detectedPanelCapacity)
-        .not('accepts_number_of_connector_housing_panels', 'is', null)
+        .eq('panel_capacity', detectedPanelCapacity)
+        .not('panel_capacity', 'is', null)
         .limit(limit)
 
       const exactResult = await query
@@ -364,25 +367,25 @@ export const searchWallMountFiberEnclosures = async (
       console.log(`⚠️ No exact match for ${detectedPanelCapacity} panels, looking for next size up...`)
       
       let nextSizeQuery = supabase
-        .from('wall_mount_fiber_enclosures')
+        .from('prod_wall_mount_fiber_enclosures')
         .select('*')
-        .gt('accepts_number_of_connector_housing_panels', detectedPanelCapacity)
-        .not('accepts_number_of_connector_housing_panels', 'is', null)
-        .order('accepts_number_of_connector_housing_panels', { ascending: true })
+        .gt('panel_capacity', detectedPanelCapacity)
+        .not('panel_capacity', 'is', null)
+        .order('panel_capacity', { ascending: true })
         .limit(limit)
 
       const nextSizeResult = await nextSizeQuery as any
       console.log(`📊 Next size up search result:`, {
         error: nextSizeResult.error,
         count: nextSizeResult.data?.length,
-        sizes: nextSizeResult.data?.map((item: any) => item.accepts_number_of_connector_housing_panels).slice(0, 5)
+        sizes: nextSizeResult.data?.map((item: BaseProductRow) => (item as any).panel_capacity).slice(0, 5)
       })
 
       if (!nextSizeResult.error && nextSizeResult.data && nextSizeResult.data.length > 0) {
         // Filter to only show the smallest size that's larger than requested
-        const nextSize = nextSizeResult.data[0].accepts_number_of_connector_housing_panels
+        const nextSize = nextSizeResult.data[0].panel_capacity
         const filteredResults = nextSizeResult.data.filter((item: any) => 
-          item.accepts_number_of_connector_housing_panels === nextSize
+          item.panel_capacity === nextSize
         )
         
         const endTime = performance.now()
@@ -405,7 +408,7 @@ export const searchWallMountFiberEnclosures = async (
       console.log(`🏢 STRATEGY 1: Brand search for: "${detectedBrandValue || queryLower}"`)
 
       let query = supabase
-        .from('wall_mount_fiber_enclosures')
+        .from('prod_wall_mount_fiber_enclosures')
         .select('*')
         .limit(limit)
 
@@ -435,7 +438,7 @@ export const searchWallMountFiberEnclosures = async (
 
       // First, try using the search_vector if it exists
       const vectorQuery = supabase
-        .from('wall_mount_fiber_enclosures')
+        .from('prod_wall_mount_fiber_enclosures')
         .select('*')
         .textSearch('search_vector', searchTerm.trim(), {
           type: 'websearch',
@@ -462,7 +465,7 @@ export const searchWallMountFiberEnclosures = async (
       console.log(`🔍 STRATEGY 3: Common terms search`)
 
       let query = supabase
-        .from('wall_mount_fiber_enclosures')
+        .from('prod_wall_mount_fiber_enclosures')
         .select('*')
         .limit(limit)
 
@@ -488,8 +491,8 @@ export const searchWallMountFiberEnclosures = async (
             let scoreB = 0
 
             if (detectedPanelType) {
-              if (a.panel_type === detectedPanelType) scoreA += 10
-              if (b.panel_type === detectedPanelType) scoreB += 10
+              if (a.panel_type === detectedPanelType) scoreA += 1
+              if (b.panel_type === detectedPanelType) scoreB += 1
             }
 
             if (detectedFiberCapacity) {
@@ -520,13 +523,13 @@ export const searchWallMountFiberEnclosures = async (
     console.log(`🎯 STRATEGY 4: Comprehensive search across all fields`)
 
     let query = supabase
-      .from('wall_mount_fiber_enclosures')
+      .from('prod_wall_mount_fiber_enclosures')
       .select('*')
       .limit(limit)
 
     // First check if we have active products
     const activeCheck = await supabase
-      .from('wall_mount_fiber_enclosures')
+      .from('prod_wall_mount_fiber_enclosures')
       .select('*', { count: 'exact', head: true })
       .eq('is_active', true)
 
@@ -580,7 +583,7 @@ export const searchWallMountFiberEnclosures = async (
     console.log('🔍 FINAL STRATEGY: Getting ALL wall mount enclosures')
 
     const allQuery = await supabase
-      .from('wall_mount_fiber_enclosures')
+      .from('prod_wall_mount_fiber_enclosures')
       .select('*')
       .limit(limit)
 
@@ -632,7 +635,7 @@ export const searchWallMountFiberEnclosures = async (
 const formatWallMountResults = (data: any[], searchType: string): Product[] => {
   console.log(`✅ FORMATTING ${data.length} WALL MOUNT FIBER ENCLOSURE RESULTS (${searchType})`)
 
-  return data.map((item: any) => {
+  return data.map((item: WallMountEnclosureRow) => {
     // Check if is_active is boolean or string
     const isActive = item.is_active === true || item.is_active === 'true' || item.is_active === '1'
 
@@ -641,7 +644,7 @@ const formatWallMountResults = (data: any[], searchType: string): Product[] => {
       partNumber: item.part_number?.toString() || 'No Part Number',
       brand: item.brand?.trim() || 'Unknown Brand',
       description: item.short_description?.trim() || 'No description available',
-      price: Math.random() * 300 + 50, // Price range for wall mount enclosures
+      price: Math.random() * 3 + 5, // Price range for wall mount enclosures
       stockLocal: isActive ? Math.floor(Math.random() * 5) : 0,
       stockDistribution: isActive ? 25 : 0,
       leadTime: isActive ? 'Ships in 3-5 days' : 'Contact for availability',
@@ -651,7 +654,7 @@ const formatWallMountResults = (data: any[], searchType: string): Product[] => {
       productType: item.product_type?.trim() || 'Wall Mount Fiber Enclosure',
       mountType: item.mount_type?.trim() || 'Wall Mount',
       panelType: item.panel_type?.trim() || undefined,
-      panelCapacity: item.accepts_number_of_connector_housing_panels || undefined,
+      panelCapacity: item.panel_capacity || undefined,
       color: item.color?.trim() || undefined,
       material: item.material?.trim() || undefined,
       supportsSpliceTrays: item.supports_splice_trays === true || item.supports_splice_trays === 'true',
@@ -684,7 +687,7 @@ export const generateWallMountFiberEnclosureFilters = (products: Product[]) => {
   return {
     brands: filterString(products.map(p => p.brand)).slice(0, 8),
     panelTypes: filterString(wallMountProducts.map(p => p.panelType)).slice(0, 4),
-    mountTypes: filterString(wallMountProducts.map(p => p.mountType)).slice(0, 3),
+    mountTypes: filterString(wallMountProducts.flatMap(p => p.mountType ? normalizeMountTypes(p.mountType) : [])).slice(0, 3),
     colors: filterString(wallMountProducts.map(p => p.color)).slice(0, 6),
     environments: filterString(wallMountProducts.map(p => p.environment)).slice(0, 3),
     productLines: filterString(wallMountProducts.map(p => p.productLine)).slice(0, 6),

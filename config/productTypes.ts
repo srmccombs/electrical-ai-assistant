@@ -5,7 +5,7 @@
 export interface ProductTypeConfig {
   tableName: string
   displayName: string
-  searchModule: () => Promise<any>
+  searchModule: () => Promise<any> // Dynamic imports return module with various exports
   aiKeywords: string[]
   requiredColumns: string[]
   specialFields: {
@@ -21,7 +21,7 @@ export interface ProductTypeConfig {
 
 export const PRODUCT_TYPES: Record<string, ProductTypeConfig> = {
   category_cables: {
-    tableName: 'category_cables',
+    tableName: 'prod_category_cables',
     displayName: 'Category Cable',
     searchModule: () => import('@/search/categoryCables/categoryCableSearch'),
     aiKeywords: ['cable', 'cat5e', 'cat6', 'cat6a', 'ethernet', 'network', 'plenum', 'riser', 'cmr', 'cmp'],
@@ -62,7 +62,7 @@ export const PRODUCT_TYPES: Record<string, ProductTypeConfig> = {
   },
 
   fiber_connectors: {
-    tableName: 'fiber_connectors',
+    tableName: 'prod_fiber_connectors',
     displayName: 'Fiber Connector',
     searchModule: () => import('@/search/fiberConnectors/fiberConnectorSearch'),
     aiKeywords: ['connector', 'connectors', 'lc', 'sc', 'st', 'fc', 'mtp', 'mpo', 'fiber connector', 'fiber connectors', 'fiber end', 'fiber ends', 'fibre end', 'fibre ends'],
@@ -100,7 +100,7 @@ export const PRODUCT_TYPES: Record<string, ProductTypeConfig> = {
   },
 
   adapter_panels: {
-    tableName: 'adapter_panels',
+    tableName: 'prod_adapter_panels',
     displayName: 'Adapter Panel',
     searchModule: () => import('@/search/fiberadapterPanels/fiberadapterPanelSearch'),
     aiKeywords: ['panel', 'adapter panel', 'coupling', 'adapter', 'fiber panel'],
@@ -137,7 +137,7 @@ export const PRODUCT_TYPES: Record<string, ProductTypeConfig> = {
   },
 
   rack_mount_fiber_enclosures: {
-    tableName: 'rack_mount_fiber_enclosures',
+    tableName: 'prod_rack_mount_enclosures',
     displayName: 'Rack Mount Fiber Enclosure',
     searchModule: () => import('@/search/fiberenclosure/rack_mount_fiber_enclosure_Search'),
     aiKeywords: ['enclosure', 'housing', 'rack mount', 'cabinet', 'cch-', 'fap-', '4ru', '2ru', '1ru', 'fiber enclosure', 'rack'],
@@ -170,7 +170,7 @@ export const PRODUCT_TYPES: Record<string, ProductTypeConfig> = {
   },
 
   wall_mount_fiber_enclosures: {
-    tableName: 'wall_mount_fiber_enclosures',
+    tableName: 'prod_wall_mount_enclosures',
     displayName: 'Wall Mount Fiber Enclosure',
     searchModule: () => import('@/search/fiberenclosure/wall_mount_fiber_enclosure_Search'),
     aiKeywords: ['wall mount', 'wallmount', 'wall-mount', 'wall enclosure', 'surface mount'],
@@ -198,7 +198,7 @@ export const PRODUCT_TYPES: Record<string, ProductTypeConfig> = {
   },
 
   fiber_optic_cable: {
-    tableName: 'fiber_optic_cable',
+    tableName: 'prod_fiber_cables',
     displayName: 'Fiber Optic Cable',
     searchModule: () => import('@/search/fiberCables/fiberCableSearch'),
     aiKeywords: ['fiber', 'fibre', 'om1', 'om2', 'om3', 'om4', 'om5', 'os1', 'os2', 'singlemode', 'multimode', 'strand'],
@@ -227,12 +227,12 @@ export const PRODUCT_TYPES: Record<string, ProductTypeConfig> = {
   },
 
   jack_modules: {
-    tableName: 'jack_modules',
+    tableName: 'prod_jack_modules',
     displayName: 'Jack Module',
     searchModule: () => import('@/search/jackModules/jackModuleSearch'),
     aiKeywords: [
       'jack', 'jack module', 'keystone', 'keystone jack',
-      'rj45', 'rj45 jack', 'ethernet jack', 'network jack',
+      'rj45 jack', 'ethernet jack', 'network jack',
       'data jack', 'wiring jack', 'connector module',
       'cat6a jack', 'cat6 jack', 'cat5e jack',
       'utp jack', 'stp jack', 'shielded jack',
@@ -275,7 +275,7 @@ export const PRODUCT_TYPES: Record<string, ProductTypeConfig> = {
   },
 
   faceplates: {
-    tableName: 'faceplates',
+    tableName: 'prod_faceplates',
     displayName: 'Faceplate',
     searchModule: () => import('@/search/faceplates/faceplateSearch'),
     aiKeywords: [
@@ -312,7 +312,7 @@ export const PRODUCT_TYPES: Record<string, ProductTypeConfig> = {
   },
 
   surface_mount_box: {
-    tableName: 'surface_mount_box',
+    tableName: 'prod_surface_mount_boxes',
     displayName: 'Surface Mount Box',
     searchModule: () => import('@/search/surfaceMountBoxes/surfaceMountBoxSearch'),
     aiKeywords: [
@@ -348,6 +348,63 @@ export const PRODUCT_TYPES: Record<string, ProductTypeConfig> = {
       compatibleJacks: {
         dbColumn: 'compatible_jacks',
         filterLabel: 'Compatible Jacks'
+      }
+    }
+  },
+
+  modular_plugs: {
+    tableName: 'prod_modular_plugs',
+    displayName: 'Modular Plug',
+    searchModule: () => import('@/search/modularPlugs/modularPlugSearch'),
+    aiKeywords: [
+      'modular plug', 'modular plugs', 'rj45', 'rj-45', 'rj 45',
+      '8p8c', '8-p-8-c', '8p/8c', 'ethernet connector', 'network plug',
+      'ethernet plug', 'network connector', 'modular connector',
+      'crimp connector', 'terminator plug', 'plug connector',
+      'data connector', 'lan connector', 'crystal connector',
+      'termination plug', 'network termination', 'cable connector',
+      'patch connector', 'crimp', 'crimps', 'network crimp',
+      'cable crimp', 'crimp end', 'cable end', 'cable ends', 
+      'clear end', 'clear ends', 'network end',
+      'ethernet terminator', 'pass-through plug', 'pass through',
+      'ez-rj45', 'ez rj45', 'feed-through', 'feedthrough',
+      'cat5e plug', 'cat6 plug', 'cat6a plug', 'cat7 plug',
+      'shielded plug', 'unshielded plug', 'stp plug', 'utp plug',
+      'modular jack plug', 'patch plug', 'cable plug', 'data plug',
+      'lan plug', 'computer plug', 'internet plug', 'crystal head',
+      'end plug', 'wire plug', 'net plug', 'cable tip', 'data tip'
+    ],
+    requiredColumns: ['part_number', 'brand', 'short_description'],
+    tablePrefix: 'mp',
+    category: 'Modular Plug',
+    specialFields: {
+      categoryRating: {
+        dbColumn: 'category_rating',
+        filterLabel: 'Categories'
+      },
+      shielding: {
+        dbColumn: 'shielding_type',
+        filterLabel: 'Shielding'
+      },
+      conductorAwg: {
+        dbColumn: 'conductor_awg',
+        filterLabel: 'AWG Size'
+      },
+      packagingQty: {
+        dbColumn: 'packaging_qty',
+        filterLabel: 'Pack Size'
+      },
+      productLine: {
+        dbColumn: 'product_line',
+        filterLabel: 'Product Lines'
+      },
+      packagingType: {
+        dbColumn: 'packaging_type',
+        filterLabel: 'Packaging Type'
+      },
+      compatibleBoots: {
+        dbColumn: 'compatible_boots',
+        filterLabel: 'Compatible Boots'
       }
     }
   }

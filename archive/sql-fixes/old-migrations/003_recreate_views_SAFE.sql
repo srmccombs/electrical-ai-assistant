@@ -1,0 +1,83 @@
+-- STEP 3: Recreate Views (SAFE VERSION)
+-- This version checks if tables exist before creating views
+
+BEGIN;
+
+-- First, let's see what tables we actually have
+SELECT 'Checking available tables...' as status;
+SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE 'prod_%' ORDER BY tablename;
+
+-- Drop old views if they exist
+DROP VIEW IF EXISTS popular_searches CASCADE;
+DROP VIEW IF EXISTS search_analytics_summary CASCADE;
+DROP VIEW IF EXISTS product_search CASCADE;
+DROP VIEW IF EXISTS v_products_complete CASCADE;
+DROP VIEW IF EXISTS v_mayer_stock_summary CASCADE;
+DROP VIEW IF EXISTS products_without_cutsheets CASCADE;
+DROP VIEW IF EXISTS weekly_missing_cutsheets CASCADE;
+DROP VIEW IF EXISTS weekly_missing_cutsheets_with_url CASCADE;
+
+-- Create only the views for tables that definitely exist
+
+-- View 1: Popular searches (if search_analytics exists)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'search_analytics') THEN
+        CREATE OR REPLACE VIEW analytics_popular_searches AS
+        SELECT 
+            search_term,
+            COUNT(*) as search_count,
+            COUNT(DISTINCT session_id) as unique_sessions,
+            AVG(result_count) as avg_results,
+            MAX(searched_at) as last_searched
+        FROM search_analytics
+        WHERE searched_at > CURRENT_DATE - INTERVAL '30 days'
+        GROUP BY search_term
+        HAVING COUNT(*) > 5
+        ORDER BY search_count DESC
+        LIMIT 100;
+        RAISE NOTICE 'Created view: analytics_popular_searches';
+    END IF;
+END $$;
+
+-- View 2: Search summary (if search_analytics exists)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'search_analytics') THEN
+        CREATE OR REPLACE VIEW analytics_search_summary AS
+        SELECT 
+            DATE(searched_at) as search_date,
+            COUNT(*) as total_searches,
+            COUNT(DISTINCT session_id) as unique_sessions,
+            COUNT(CASE WHEN result_count = 0 THEN 1 END) as zero_result_searches,
+            AVG(search_time_ms) as avg_search_time_ms
+        FROM search_analytics
+        GROUP BY DATE(searched_at)
+        ORDER BY search_date DESC;
+        RAISE NOTICE 'Created view: analytics_search_summary';
+    END IF;
+END $$;
+
+-- View 3: Mayer stock summary (if ops_mayer_stock exists)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'ops_mayer_stock') THEN
+        CREATE OR REPLACE VIEW view_mayer_stock_summary AS
+        SELECT 
+            part_number,
+            SUM(quantity_available) as total_quantity,
+            COUNT(DISTINCT location) as location_count,
+            MAX(last_updated) as last_updated
+        FROM ops_mayer_stock
+        GROUP BY part_number;
+        RAISE NOTICE 'Created view: view_mayer_stock_summary';
+    END IF;
+END $$;
+
+-- Show what views were created
+SELECT 'Views created:' as status;
+SELECT viewname FROM pg_views WHERE schemaname = 'public' ORDER BY viewname;
+
+COMMIT;
+
+-- If something goes wrong, you can run: ROLLBACK;

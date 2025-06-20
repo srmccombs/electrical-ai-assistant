@@ -4,7 +4,7 @@
 // Search Limits
 export const SEARCH_LIMITS = {
   DEFAULT: 50,
-  PART_NUMBER: 200,
+  PART_NUMBER: 20,
   BRAND_SEARCH_PER_TABLE: 10,
   MAX_RESULTS: 500,
   CACHE_DURATION: 5 * 60 * 1000 // 5 minutes
@@ -23,7 +23,7 @@ export const ELECTRICAL_BRANDS = [
   'siecor'
 ] as const
 
-// Table Configuration
+// Table Configuration - UPDATED WITH NEW NAMES
 export const TABLE_CONFIG = {
   PREFIXES: {
     category_cables: 'cat',
@@ -33,13 +33,32 @@ export const TABLE_CONFIG = {
     products: 'prod'
   },
   NAMES: {
-    CATEGORY_CABLES: 'category_cables',
-    FIBER_CONNECTORS: 'fiber_connectors',
-    ADAPTER_PANELS: 'adapter_panels',
-    FIBER_ENCLOSURES: 'rack_mount_fiber_enclosures',
-    PRODUCTS: 'products'
+    CATEGORY_CABLES: 'prod_category_cables',
+    FIBER_CONNECTORS: 'prod_fiber_connectors',
+    ADAPTER_PANELS: 'prod_adapter_panels',
+    FIBER_ENCLOSURES: 'prod_rack_mount_enclosures',
+    FIBER_CABLES: 'prod_fiber_cables',
+    JACK_MODULES: 'prod_jack_modules',
+    FACEPLATES: 'prod_faceplates',
+    SURFACE_MOUNT_BOXES: 'prod_surface_mount_boxes',
+    MODULAR_PLUGS: 'prod_modular_plugs',
+    WALL_MOUNT_ENCLOSURES: 'prod_wall_mount_enclosures'
   }
 } as const
+
+// Product Tables Array
+export const PRODUCT_TABLES = [
+  'prod_category_cables',
+  'prod_fiber_connectors',
+  'prod_adapter_panels',
+  'prod_rack_mount_enclosures',
+  'prod_wall_mount_enclosures',
+  'prod_fiber_cables',
+  'prod_jack_modules',
+  'prod_faceplates',
+  'prod_surface_mount_boxes',
+  'prod_modular_plugs'
+] as const
 
 // API Configuration
 export const API_CONFIG = {
@@ -119,3 +138,4 @@ export type ElectricalBrand = typeof ELECTRICAL_BRANDS[number]
 export type TableName = keyof typeof TABLE_CONFIG.NAMES
 export type StockStatusType = keyof typeof STOCK_STATUS
 export type FiberType = keyof typeof FIBER_TYPE_MAPPING
+export type ProductTableName = typeof PRODUCT_TABLES[number]

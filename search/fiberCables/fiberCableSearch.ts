@@ -1,10 +1,11 @@
 // src/search/fiberCables/fiberCableSearch.ts
 // Fiber Cable Search Implementation - Fixed multimode/single-mode filtering
-// Date created: June 6, 2025
+// Date created: June 6, 225
 
 import { supabase } from '@/lib/supabase'
 import type { Product } from '@/types/product'
 import type { AISearchAnalysis } from '@/types/search'
+import type { FiberCableRow } from '@/search/shared/types'
 import { detectAndConvertPairToFiber } from '@/search/shared/searchUtils'
 
 // ===================================================================
@@ -40,10 +41,10 @@ export const searchFiberCables = async (
 
   try {
     let query = supabase
-      .from('fiber_optic_cable')
+      .from('prod_fiber_cables')
       .select('*')
       .eq('is_active', true)
-      .limit(50)
+      .limit(limit)
 
     // Cable-specific search terms
     const cableTerms = [
@@ -112,10 +113,10 @@ export const searchFiberCables = async (
       detectedModeType = 'singlemode'
       detectedSpecificType = 'os2'
       console.log('🎯 9/125 detected - OS2 single mode')
-    } else if (effectiveQueryLower.includes('50/125')) {
+    } else if (effectiveQueryLower.includes('5/125')) {
       detectedModeType = 'multimode'
       // Could be OM3 or OM4, let search be broader
-      console.log('🎯 50/125 detected - OM3/OM4 multimode')
+      console.log('🎯 5/125 detected - OM3/OM4 multimode')
     } else if (effectiveQueryLower.includes('62.5/125')) {
       detectedSpecificType = 'om1'
       detectedModeType = 'multimode'
@@ -138,7 +139,7 @@ export const searchFiberCables = async (
     if (detectedSpecificType) {
       const specificType = detectedSpecificType.toUpperCase()
       console.log(`🎯 SPECIFIC FIBER TYPE DETECTED: ${specificType}`)
-      query = query.or(`short_description.ilike.%${specificType}%,fiber_category.ilike.%${specificType}%`)
+      query = query.or(`short_description.ilike.%${specificType}%,fiber_types::text.ilike.%${specificType}%`)
     } else if (detectedModeType) {
       // For multimode/single-mode, search broadly for fiber cables
       const cableConditions = cableTerms.map(term =>
@@ -225,7 +226,12 @@ export const searchFiberCables = async (
         // Filter by specific fiber type if detected
         if (detectedSpecificType) {
           const specificTypeUpper = detectedSpecificType.toUpperCase()
-          const hasSpecificType = description.includes(detectedSpecificType) || description.includes(specificTypeUpper)
+          const specificTypeLower = detectedSpecificType.toLowerCase()
+          const fiberTypes = item.fiber_types?.map((type: string) => type.toLowerCase()) || []
+          const hasSpecificType = description.includes(specificTypeLower) || 
+                                  description.includes(specificTypeUpper) ||
+                                  fiberTypes.some(type => type.includes(specificTypeLower)) ||
+                                  fiberTypes.some(type => type.includes(specificTypeUpper))
           if (!hasSpecificType) return false
         }
 
@@ -293,14 +299,14 @@ export const searchFiberCables = async (
 const formatCableResults = (data: any[], searchType: string): Product[] => {
   console.log(`✅ FORMATTING ${data.length} FIBER CABLE RESULTS (${searchType})`)
 
-  return data.map((item: any) => ({
+  return data.map((item: FiberCableRow) => ({
     id: `fiber-${item.id}`,
     partNumber: item.part_number?.toString() || 'No Part Number',
     brand: item.brand?.trim() || 'Unknown Brand',
     description: item.short_description?.trim() || 'No description available',
-    price: parseFloat(item.unit_price) || (Math.random() * 500 + 200),
+    price: parseFloat(item.unit_price) || (Math.random() * 5 + 2),
     stockLocal: item.stock_quantity || 0,
-    stockDistribution: 100,
+    stockDistribution: 1,
     leadTime: 'Ships Today',
     category: 'Fiber Optic Cable',
     fiberType: extractFiberType(item.short_description) || item.fiber_type_standard || 'Fiber',
@@ -308,7 +314,7 @@ const formatCableResults = (data: any[], searchType: string): Product[] => {
     jacketRating: item.jacket_rating || extractJacketRating(item.short_description),
     productType: item.product_type || 'Fiber Optic Cable',
     application: item.applications || extractApplication(item.short_description),
-    searchRelevance: 1.0,
+    searchRelevance: 1.00,
     tableName: 'fiber_cables',
     stockStatus: 'not_in_stock',
     stockColor: 'red',

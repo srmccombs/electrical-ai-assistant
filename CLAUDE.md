@@ -2,11 +2,32 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 📅 IMPORTANT: Dating Guidelines for Claude
+
+When creating new files or documentation:
+1. **ALWAYS include the date in filenames** for plans and documentation:
+   - Format: `claudeplan[monthday].md` (e.g., `claudeplanjune19.md`)
+   - For SQL migrations: `XXX_description_YYYYMMDD.sql` if creating multiples per day
+   
+2. **ALWAYS add creation date** at the top of new documentation files:
+   - Format: `# Document Title - Month Day, Year`
+   - Example: `# Claude's Plan - June 19, 2025`
+
+3. **ALWAYS update status dates** in CLAUDE.md when making significant changes:
+   - Format: `### Current Status (Month Day, Year)`
+   
+4. **If unsure about the date**, ASK THE USER:
+   - "What is today's date so I can properly date this file?"
+   - Don't assume or guess dates
+
+5. **For code comments**, include date for significant changes:
+   - Format: `// Fixed table names - June 19, 2025`
+
 ## Project Overview
 
 This is an AI-powered electrical distribution assistant built with Next.js 14 and TypeScript. The application helps users search for electrical components (cables, fiber connectors, adapter panels, enclosures) using natural language queries powered by OpenAI GPT-4o-mini.
 
-### Current Status (June 16, 2025) - DECISION ENGINE DEPLOYED! 🎉
+### Current Status (June 19, 2025) - V2 SEARCH IMPLEMENTATION STARTED! 🚀
 - ✅ Core search functionality complete
 - ✅ AI integration with GPT-4o-mini
 - ✅ Shopping list management with compatibility filtering
@@ -34,6 +55,12 @@ This is an AI-powered electrical distribution assistant built with Next.js 14 an
 - ✅ **Copy List functionality with full product details (June 17, 2025)**
 - ✅ **Email List with brand included in format (June 17, 2025)**
 - ✅ **OS1/OS2 labeled as "Single-mode" in filters (June 17, 2025)**
+- ✅ **Database Standardization Complete (June 19, 2025)**
+- ✅ **All product tables have search columns and triggers (June 19, 2025)**
+- ✅ **Column names standardized across all tables (June 19, 2025)**
+- ✅ **V2 Search Implementation Started (June 19, 2025)**
+- ✅ **Category ratings standardized (154 Cat5e, 431 Cat6, 252 Cat6A)**
+- ✅ **NEXT_PUBLIC_USE_V2_SEARCH environment variable implemented**
 - 🚧 User authentication not implemented
 - 🚧 Quote generation not implemented
 
@@ -298,6 +325,99 @@ When working with TypeScript in this project:
 - Limited product database (goal: 5,000+ products)
 - Some fiber enclosures have NULL panel capacity values
 - Analytics tracking returns 406 errors (needs backend fix)
+
+## 🗄️ Database Structure (Updated June 20, 2025)
+
+### Standardized Table Names:
+- `prod_category_cables` - Ethernet cables
+- `prod_fiber_cables` - Fiber optic cables
+- `prod_fiber_connectors` - Fiber connectors
+- `prod_adapter_panels` - Fiber adapter panels
+- `prod_jack_modules` - RJ45 jacks
+- `prod_modular_plugs` - RJ45 plugs
+- `prod_faceplates` - Wall plates
+- `prod_surface_mount_boxes` - Surface mount boxes
+- `prod_wall_mount_fiber_enclosures` - Wall mount fiber enclosures
+- `prod_rack_mount_fiber_enclosures` - Rack mount fiber enclosures
+
+### Standardized Column Names:
+- `category_rating` - For Cat5e, Cat6, etc. (not cable_type)
+- `shielding_type` - All lowercase (was Shielding_Type)
+- `jacket_material` - Not jacket_rating
+- `jacket_color` - Not just color
+- `number_of_ports` - Not ports
+- `panel_capacity` - Was accepts_number_of_connector_housing_panels
+- `fiber_types` - Array type in all fiber tables
+
+### Search Infrastructure:
+- All tables have `computed_search_terms` and `search_vector`
+- Automatic triggers update search terms on changes
+- GIN indexes for full-text search performance
+
+## 🗄️ Archived Files (Updated June 20, 2025)
+Old SQL fixes and documentation have been moved to:
+- `/archive/sql-fixes/` - One-time SQL fix scripts (34 files)
+- `/archive/old-docs/` - Historical documentation (48 files) - Updated today!
+- `/archive/sql-fixes/old-migrations/` - Superseded migration files (25 files) - Updated today!
+
+## 🎯 CRITICAL: Making Search Work at Scale (1000+ users/day)
+
+### MANDATORY Table Requirements for Search Performance
+
+1. **EVERY table MUST have these columns EXACTLY**:
+   ```sql
+   part_number VARCHAR(255) NOT NULL UNIQUE
+   brand VARCHAR(100) NOT NULL
+   short_description TEXT NOT NULL
+   category VARCHAR(100) NOT NULL
+   is_active BOOLEAN DEFAULT true
+   common_terms TEXT -- CRITICAL: Populate with ALL search variations
+   ```
+
+2. **common_terms column is CRITICAL - MUST include**:
+   - Primary product name + ALL variations
+   - Common misspellings
+   - Industry slang/abbreviations
+   - Both singular AND plural forms
+   - Hyphenated AND non-hyphenated versions
+   - Brand-specific terminology
+   
+   Example: `"patch panel patch-panel patchpanel patch panels fiber panel lc panel panduit pan corning ccg"`
+
+3. **Brand names MUST be EXACT and CONSISTENT**:
+   - "PANDUIT" not "Panduit" or "panduit"
+   - NO trailing spaces (use TRIM())
+   - Use brand_normalized column for matching
+
+4. **Category values MUST be Title Case and Consistent**:
+   - "Patch Panel" not "patch_panel" or "PATCH PANEL"
+   - Same category name across related products
+
+5. **For compatibility features, use PostgreSQL arrays**:
+   - `compatible_jacks TEXT[]` format: '{"Keystone", "Mini-Com"}'
+   - This enables smart shopping list features
+
+### What Kills Search Performance
+
+1. **Missing or empty common_terms** - Users can't find products
+2. **Inconsistent brand names** - Filtering fails
+3. **NULL or empty category** - Products don't appear in filters
+4. **is_active = false or NULL** - Products invisible
+5. **Trailing spaces in ANY field** - Matching fails
+
+### Before Creating ANY New Table
+
+1. Use `PRODUCT_TABLE_TEMPLATE.sql` as your starting point
+2. ALWAYS populate common_terms with 10+ search variations
+3. ALWAYS trim and validate brand names
+4. ALWAYS set proper category value
+5. Test with these queries BEFORE going live:
+   ```sql
+   -- Must return 0 for all
+   SELECT COUNT(*) FROM [table] WHERE TRIM(brand) != brand;
+   SELECT COUNT(*) FROM [table] WHERE category IS NULL OR category = '';
+   SELECT COUNT(*) FROM [table] WHERE common_terms IS NULL OR common_terms = '';
+   ```
 
 ## Decision Engine Migration (IN PROGRESS)
 

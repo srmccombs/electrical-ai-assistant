@@ -129,7 +129,7 @@ describe('Decision Engine', () => {
       const decision = await engine.decide('smb faceplate')
       
       expect(decision.productType).toBe('SURFACE_MOUNT_BOX')
-      expect(decision.table).toBe('surface_mount_box')
+      expect(decision.table).toBe('prod_surface_mount_boxes')
     })
 
     test('Detects faceplates correctly', async () => {
@@ -293,7 +293,7 @@ describe('Decision Engine Integration', () => {
     for (const query of smbQueries) {
       const decision = await engine.decide(query)
       expect(decision.productType).toBe('SURFACE_MOUNT_BOX')
-      expect(decision.table).toBe('surface_mount_box')
+      expect(decision.table).toBe('prod_surface_mount_boxes')
     }
 
     // Test faceplate queries

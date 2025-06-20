@@ -1,10 +1,11 @@
 // src/search/fiberadapterPanels/fiberadapterPanelSearch.ts
 // Enhanced Fiber Adapter Panel Search Implementation
-// Date created: December 19, 2024
+// Date created: December 19, 224
 
 import { supabase } from '@/lib/supabase'
 import type { Product } from '@/types/product'
 import type { AISearchAnalysis } from '@/types/search'
+import type { AdapterPanelRow } from '@/search/shared/types'
 
 // ===================================================================
 // TYPE DEFINITIONS - Adapter Panel Specific
@@ -58,7 +59,7 @@ const detectFiberType = (searchTerm: string): string | undefined => {
   // OM3/OM4 synonyms
   if (term.includes('om3')) return 'OM3'
   if (term.includes('om4')) return 'OM4'
-  if (term.includes('50/125') || term.includes('50um')) return 'OM3_OR_OM4'
+  if (term.includes('5/125') || term.includes('5um')) return 'OM3_OR_OM4'
 
   // OM5
   if (term.includes('om5')) return 'OM5'
@@ -171,7 +172,7 @@ export const searchAdapterPanels = async (
   options: AdapterPanelSearchOptions
 ): Promise<AdapterPanelSearchResult> => {
   const startTime = performance.now()
-  const { searchTerm, aiAnalysis, limit = 50, shoppingListContext } = options
+  const { searchTerm, aiAnalysis, limit = 5, shoppingListContext } = options
 
   console.log('🏠 ENHANCED ADAPTER PANELS SEARCH')
   console.log('🔍 Original search term:', searchTerm)
@@ -191,7 +192,9 @@ export const searchAdapterPanels = async (
     }
 
     // Enhanced detection with all the knowledge you provided
-    const detectedFiberType = detectFiberType(searchTerm) || aiAnalysis?.detectedSpecs?.fiberType
+    // Skip fiber type detection for generic "adapter panel" searches
+    const isGenericAdapterPanelSearch = searchTerm.toLowerCase().match(/^(fiber\s+optic\s+)?adapter\s+panels?$/i)
+    const detectedFiberType = isGenericAdapterPanelSearch ? null : (detectFiberType(searchTerm) || aiAnalysis?.detectedSpecs?.fiberType)
     const detectedConnectorType = detectConnectorType(searchTerm) || aiAnalysis?.detectedSpecs?.connectorType
     const detectedFiberCount = detectFiberCount(searchTerm) || aiAnalysis?.detectedSpecs?.fiberCount
     const detectedColor = detectAdapterColor(searchTerm)
@@ -210,7 +213,7 @@ export const searchAdapterPanels = async (
     })
 
     let query = supabase
-      .from('adapter_panels')
+      .from('prod_adapter_panels')
       .select('*')
       .eq('is_active', true)
       .limit(limit)
@@ -240,39 +243,50 @@ export const searchAdapterPanels = async (
     }
 
     // 3. Fiber type search with all variations
+    // Note: fiber_types is an array column, so we can't use ilike on it
+    // Instead, we'll search in short_description and common_terms
     if (detectedFiberType) {
       switch (detectedFiberType) {
         case 'SINGLEMODE':
-          searchConditions.push(`fiber_category.ilike.%OS2%`)
-          searchConditions.push(`fiber_category.ilike.%OS1%`)
-          searchConditions.push(`fiber_category.ilike.%SM%`)
-          searchConditions.push(`fiber_category.ilike.%Single%`)
+          searchConditions.push(`short_description.ilike.%OS2%`)
+          searchConditions.push(`short_description.ilike.%OS1%`)
+          searchConditions.push(`short_description.ilike.%SM%`)
+          searchConditions.push(`short_description.ilike.%Single%`)
           searchConditions.push(`short_description.ilike.%singlemode%`)
           searchConditions.push(`short_description.ilike.%single-mode%`)
           searchConditions.push(`short_description.ilike.%9/125%`)
+          searchConditions.push(`common_terms.ilike.%singlemode%`)
+          searchConditions.push(`common_terms.ilike.%OS2%`)
+          searchConditions.push(`common_terms.ilike.%OS1%`)
           console.log(`🌈 Adding singlemode fiber filters`)
           break
         case 'OM1':
-          searchConditions.push(`fiber_category.ilike.%OM1%`)
+          searchConditions.push(`short_description.ilike.%OM1%`)
           searchConditions.push(`short_description.ilike.%62.5%`)
+          searchConditions.push(`common_terms.ilike.%OM1%`)
           console.log(`🌈 Adding OM1 fiber filters`)
           break
         case 'OM3':
-          searchConditions.push(`fiber_category.ilike.%OM3%`)
+          searchConditions.push(`short_description.ilike.%OM3%`)
+          searchConditions.push(`common_terms.ilike.%OM3%`)
           console.log(`🌈 Adding OM3 fiber filter`)
           break
         case 'OM4':
-          searchConditions.push(`fiber_category.ilike.%OM4%`)
+          searchConditions.push(`short_description.ilike.%OM4%`)
+          searchConditions.push(`common_terms.ilike.%OM4%`)
           console.log(`🌈 Adding OM4 fiber filter`)
           break
         case 'OM3_OR_OM4':
-          searchConditions.push(`fiber_category.ilike.%OM3%`)
-          searchConditions.push(`fiber_category.ilike.%OM4%`)
-          searchConditions.push(`short_description.ilike.%50/125%`)
+          searchConditions.push(`short_description.ilike.%OM3%`)
+          searchConditions.push(`short_description.ilike.%OM4%`)
+          searchConditions.push(`short_description.ilike.%5/125%`)
+          searchConditions.push(`common_terms.ilike.%OM3%`)
+          searchConditions.push(`common_terms.ilike.%OM4%`)
           console.log(`🌈 Adding OM3/OM4 fiber filters`)
           break
         default:
-          searchConditions.push(`fiber_category.ilike.%${detectedFiberType}%`)
+          searchConditions.push(`short_description.ilike.%${detectedFiberType}%`)
+          searchConditions.push(`common_terms.ilike.%${detectedFiberType}%`)
       }
     }
 
@@ -322,7 +336,7 @@ export const searchAdapterPanels = async (
     searchConditions.push(`short_description.ilike.%${searchTerm}%`)
     searchConditions.push(`common_terms.ilike.%${searchTerm}%`)
 
-    // 10. Add specific adapter panel keywords
+    // 1". Add specific adapter panel keywords
     const panelKeywords = ['adapter', 'panel', 'coupling', 'patch', 'fiber', 'enclosure', 'cassette']
     const hasKeywords = panelKeywords.some(kw => searchTerm.toLowerCase().includes(kw))
 
@@ -360,7 +374,9 @@ export const searchAdapterPanels = async (
       // Filter by specific attributes if detected
       if (detectedFiberType === 'SINGLEMODE') {
         processedResults = processedResults.filter((item: any) => {
-          const fiberCat = item.fiber_category?.toLowerCase() || ''
+          const fiberCat = Array.isArray(item.fiber_types) 
+            ? item.fiber_types.join(' ').toLowerCase() 
+            : (item.fiber_types?.toLowerCase() || '')
           const desc = item.short_description?.toLowerCase() || ''
           return fiberCat.includes('os') || fiberCat.includes('sm') ||
                  desc.includes('single') || desc.includes('9/125')
@@ -417,19 +433,19 @@ export const searchAdapterPanels = async (
 const formatPanelResults = (data: any[], searchType: string): Product[] => {
   console.log(`✅ FORMATTING ${data.length} ADAPTER PANEL RESULTS (${searchType})`)
 
-  return data.map((item: any) => ({
+  return data.map((item: AdapterPanelRow) => ({
     id: `panel-${item.id}`,
     partNumber: item.part_number?.toString() || 'No Part Number',
     brand: item.brand?.trim() || 'Unknown Brand',
     description: item.short_description?.trim() || 'No description available',
-    price: Math.random() * 200 + 75,
-    stockLocal: 10,
-    stockDistribution: 100,
+    price: Math.random() * 2 + 75,
+    stockLocal: 1,
+    stockDistribution: 1,
     leadTime: 'Ships Today',
     category: 'Adapter Panel',
     // Enhanced attributes from your database
     connectorType: item.connector_type?.trim() || undefined,
-    fiberType: item.fiber_category?.trim() || undefined,
+    fiberType: Array.isArray(item.fiber_types) ? item.fiber_types.join(', ') : item.fiber_types || undefined,
     fiberCount: item.fiber_count || undefined,
     panelType: item.panel_type?.trim() || undefined,
     productLine: item.product_line?.trim() || undefined,

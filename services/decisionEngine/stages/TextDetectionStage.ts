@@ -28,7 +28,7 @@ export class TextDetectionStage implements DecisionStage {
         /\bsurface\s+mount\b.*\bbox/i,
         /\bbiscuit\s+box/i
       ],
-      productType: 'SURFACE_MOUNT_BOX',
+      productType: 'surface_mount_box',
       confidence: 0.95,
       priority: 100
     },
@@ -41,7 +41,7 @@ export class TextDetectionStage implements DecisionStage {
         /\bwall\s+plate/i,
         /\bwall\s+mount\s+plate/i
       ],
-      productType: 'FACEPLATE',
+      productType: 'faceplates',
       confidence: 0.90,
       priority: 90
     },
@@ -55,7 +55,7 @@ export class TextDetectionStage implements DecisionStage {
         /\brj45\s+jack/i,
         /\bcat[56]a?\s+jack/i
       ],
-      productType: 'JACK_MODULE',
+      productType: 'jack_modules',
       confidence: 0.85,
       priority: 80
     },
@@ -70,7 +70,7 @@ export class TextDetectionStage implements DecisionStage {
         /\b\d+\s*ru\s+enclosure/i,
         /\b\d+\s*panel\s+enclosure/i
       ],
-      productType: 'ENCLOSURE',
+      productType: 'fiber_enclosures',
       confidence: 0.85,
       priority: 70
     },
@@ -83,9 +83,29 @@ export class TextDetectionStage implements DecisionStage {
         /\bcoupler\s+panel/i,
         /\bfiber\s+patch\s+panel/i
       ],
-      productType: 'ADAPTER_PANEL',
+      productType: 'adapter_panels',
       confidence: 0.85,
       priority: 65
+    },
+    
+    // Modular Plug - Higher priority than generic connectors
+    {
+      patterns: [
+        /\bmodular\s+plug/i,
+        /\brj45\b(?!\s+jack)/i,  // RJ45 NOT followed by 'jack'
+        /\brj-45\b(?!\s+jack)/i,
+        /\b8p8c\b/i,
+        /\bethernet\s+connector/i,
+        /\bnetwork\s+plug/i,
+        /\bcrimp\s+connector/i,
+        /\bterminator\s+plug/i,
+        /\bpass[- ]?through\s+plug/i,
+        /\bez[- ]?rj45/i,
+        /\bcrimps?\b/i
+      ],
+      productType: 'modular_plugs',
+      confidence: 0.85,
+      priority: 75
     },
     
     // Fiber Connector
@@ -96,7 +116,7 @@ export class TextDetectionStage implements DecisionStage {
         /\bfiber\s+term/i,
         /\b(om[1-4]|os[12])\s+connector/i
       ],
-      productType: 'FIBER_CONNECTOR',
+      productType: 'fiber_connectors',
       confidence: 0.85,
       priority: 60
     },
@@ -110,7 +130,7 @@ export class TextDetectionStage implements DecisionStage {
         /\b\d+\s*strand\s+fiber/i,
         /\b(single|multi)mode\s+fiber/i
       ],
-      productType: 'FIBER_CABLE',
+      productType: 'fiber_cables',
       confidence: 0.85,
       priority: 55
     },
@@ -124,7 +144,7 @@ export class TextDetectionStage implements DecisionStage {
         /\bnetwork\s+cable/i,
         /\bcat\s*[56]a?\b/i
       ],
-      productType: 'CATEGORY_CABLE',
+      productType: 'category_cables',
       confidence: 0.80,
       priority: 30
     }

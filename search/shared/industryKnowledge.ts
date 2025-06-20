@@ -89,6 +89,21 @@ export const COMPREHENSIVE_JACKET_TERMS = {
   ]
 }
 
+// Modular Plug terms
+export const MODULAR_PLUG_TERMS = {
+  primary: [
+    'modular plug', 'rj45', 'rj-45', 'rj 45', '8p8c',
+    'ethernet connector', 'network plug', 'ethernet plug',
+    'network connector', 'modular connector', 'crimp connector',
+    'terminator plug', 'data connector', 'lan connector'
+  ],
+  passThrough: [
+    'pass-through', 'pass through', 'passthrough', 'pass-thru',
+    'feed-through', 'feed through', 'feedthrough', 'ez-rj45',
+    'ez rj45', 'poe feed-through'
+  ]
+}
+
 // ===================================================================
 // ELECTRICAL INDUSTRY KNOWLEDGE
 // ===================================================================
@@ -691,6 +706,41 @@ export const detectPartNumbers = (searchTerm: string): DetectedParts => {
   }
 }
 
+// AWG Size detection for modular plugs
+export const detectAWGSize = (searchTerm: string): string | null => {
+  const awgPattern = /\b(23|24)\s*awg\b|\bawg\s*(23|24)\b|(?:^|\s)(23|24)awg\b/i
+  const match = searchTerm.match(awgPattern)
+  
+  if (match) {
+    return match[1] || match[2] || match[3]
+  }
+  
+  return null
+}
+
+// Packaging quantity detection
+export const detectPackagingQty = (searchTerm: string): number | null => {
+  const qtyPattern = /\b(\d+)\s*(?:pack|pc|pcs|piece|count|jar|box)\b|(?:pack|jar|box)\s*of\s*(\d+)\b/i
+  const match = searchTerm.match(qtyPattern)
+  
+  if (match) {
+    const qty = parseInt(match[1] || match[2])
+    // Common packaging quantities for modular plugs
+    if ([20, 50, 100, 500].includes(qty)) {
+      return qty
+    }
+  }
+  
+  return null
+}
+
+// Pass-through/Feed-through detection
+export const detectPassThrough = (searchTerm: string): boolean => {
+  const passThroughTerms = MODULAR_PLUG_TERMS.passThrough
+  const lowerTerm = searchTerm.toLowerCase()
+  return passThroughTerms.some(term => lowerTerm.includes(term))
+}
+
 // ===================================================================
 // BUSINESS RULES - YOUR EXPERTISE
 // ===================================================================
@@ -802,4 +852,89 @@ export const applyBusinessRules = (searchTerm: string): BusinessRuleResult => {
 // Normalize part number for searching (remove spaces, dashes, make lowercase)
 export const normalizePartNumber = (partNumber: string): string => {
   return partNumber.toLowerCase().replace(/[\s\-_]/g, '')
+}
+
+// NEW: Normalize mount type for consistent filtering
+// Returns an array of normalized mount types to handle products with multiple mount options
+export const normalizeMountTypes = (mountType: string | undefined): string[] => {
+  if (!mountType) return []
+  
+  // Clean up the mount type string first
+  let cleanMountType = mountType.trim()
+  
+  // Remove surrounding quotes if present
+  if (cleanMountType.startsWith('"') && cleanMountType.endsWith('"')) {
+    cleanMountType = cleanMountType.slice(1, -1).trim()
+  }
+  
+  // Handle compound mount types (e.g., "WALL-MOUNT,DIN-RAIL-MOUNTABLE")
+  const types = cleanMountType.split(',').map(t => normalizeSingleMountType(t.trim())).filter(Boolean)
+  
+  // Remove duplicates
+  return [...new Set(types)]
+}
+
+// For backward compatibility - returns first mount type or undefined
+export const normalizeMountType = (mountType: string | undefined): string | undefined => {
+  const types = normalizeMountTypes(mountType)
+  return types.length > 0 ? types[0] : undefined
+}
+
+// Helper function to normalize a single mount type
+const normalizeSingleMountType = (mountType: string): string => {
+  // Define mount type mappings
+  const mountTypeMappings: { [key: string]: string } = {
+    // Wall mount variations
+    'WALL-MOUNT': 'Wall Mount',
+    'WALL MOUNT': 'Wall Mount',
+    'Wall Mount': 'Wall Mount',
+    'wall mount': 'Wall Mount',
+    'Wall-Mount': 'Wall Mount',
+    'Wallmount': 'Wall Mount',
+    'WALLMOUNT': 'Wall Mount',
+    'wall-mount': 'Wall Mount',
+    'wallmount': 'Wall Mount',
+    
+    // Rack mount variations
+    'RACK-MOUNT': 'Rack Mount',
+    'RACK MOUNT': 'Rack Mount',
+    'Rack Mount': 'Rack Mount',
+    'rack mount': 'Rack Mount',
+    'Rack-Mount': 'Rack Mount',
+    'Rackmount': 'Rack Mount',
+    'RACKMOUNT': 'Rack Mount',
+    'rack-mount': 'Rack Mount',
+    'rackmount': 'Rack Mount',
+    
+    // DIN Rail variations
+    'DIN-Rail': 'DIN Rail',
+    'DIN Rail': 'DIN Rail',
+    'din-rail': 'DIN Rail',
+    'din rail': 'DIN Rail',
+    'DIN-RAIL': 'DIN Rail',
+    'DIN RAIL': 'DIN Rail',
+    'Din Rail': 'DIN Rail',
+    'Din-Rail': 'DIN Rail',
+    'DIN-RAIL-MOUNTABLE': 'DIN Rail',
+    'din-rail-mountable': 'DIN Rail',
+    'DIN Rail Mountable': 'DIN Rail',
+    'DIN-RAIL-MOUNTABLE ': 'DIN Rail',  // With trailing space
+    'din-rail-mountable ': 'DIN Rail',  // With trailing space
+    
+    // Surface mount variations
+    'SURFACE-MOUNT': 'Surface Mount',
+    'SURFACE MOUNT': 'Surface Mount',
+    'Surface Mount': 'Surface Mount',
+    'surface mount': 'Surface Mount',
+    'Surface-Mount': 'Surface Mount',
+    'Surfacemount': 'Surface Mount',
+    'SURFACEMOUNT': 'Surface Mount',
+    'surface-mount': 'Surface Mount',
+    'surfacemount': 'Surface Mount'
+  }
+  
+  // Return the normalized version or the original if not found
+  const normalized = mountTypeMappings[mountType] || mountType
+  
+  return normalized
 }

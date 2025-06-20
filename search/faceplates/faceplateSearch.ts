@@ -100,7 +100,7 @@ export async function searchFaceplates(
 
     // Build the query
     let query = supabase
-      .from('faceplates')
+      .from('prod_faceplates')
       .select('*')
       .eq('is_active', true)
       // Exclude surface mount boxes from faceplate searches
@@ -108,7 +108,7 @@ export async function searchFaceplates(
 
     // Part number search (highest priority)
     const cleanedTerm = searchTerm.trim().toUpperCase();
-    const isPartNumber = /^[A-Z0-9\-]{3,}$/.test(cleanedTerm);
+    const isPartNumber = /^[A-Z-9\-]{3,}$/.test(cleanedTerm);
     
     // Build search conditions array
     const searchConditions: string[] = [];
@@ -359,7 +359,7 @@ export async function searchFaceplates(
     });
 
     // Execute query
-    const { data, error } = await query.limit(100);
+    const { data, error } = await query.limit(limit);
 
     let faceplates: Faceplate[] = [];
     
@@ -372,7 +372,7 @@ export async function searchFaceplates(
         
         // Build a simpler query without text search
         let simpleQuery = supabase
-          .from('faceplates')
+          .from('prod_faceplates')
           .select('*')
           .eq('is_active', true)
           .not('product_type', 'ilike', '%Surface Mount Box%');
@@ -386,7 +386,7 @@ export async function searchFaceplates(
           simpleQuery = simpleQuery.ilike('color', `%${colorValue}%`);
         }
         
-        const simpleResult = await simpleQuery.limit(100);
+        const simpleResult = await simpleQuery.limit(limit);
         
         if (!simpleResult.error && simpleResult.data) {
           faceplates = simpleResult.data as unknown as Faceplate[];
@@ -497,7 +497,7 @@ export async function searchFaceplates(
       
       // Reset query
       query = supabase
-        .from('faceplates')
+        .from('prod_faceplates')
         .select('*')
         .eq('is_active', true);
       
@@ -530,7 +530,7 @@ export async function searchFaceplates(
         // No additional conditions needed
       }
       
-      const fallbackResult = await query.limit(100);
+      const fallbackResult = await query.limit(limit);
       if (!fallbackResult.error && fallbackResult.data) {
         faceplates = (fallbackResult.data as unknown as Faceplate[]) || [];
         
@@ -558,9 +558,9 @@ export async function searchFaceplates(
       partNumber: faceplate.part_number,
       brand: faceplate.brand,
       description: faceplate.short_description || '',
-      price: Math.random() * 25 + 5, // Random price between 5-30
-      stockLocal: Math.floor(Math.random() * 100),
-      stockDistribution: 500,
+      price: Math.random() * 25 + 5, // Random price between 5-3
+      stockLocal: Math.floor(Math.random() * 10),
+      stockDistribution: 5,
       leadTime: 'Ships Today',
       category: faceplate.product_type || 'Faceplate',
       // Additional properties
@@ -572,7 +572,7 @@ export async function searchFaceplates(
       type: faceplate.type || undefined,
       compatibleJacks: faceplate.compatible_jacks || undefined,
       // Search properties
-      searchRelevance: 1.0,
+      searchRelevance: 1.00,
       tableName: 'faceplates',
       stockStatus: 'in_stock' as const,
       stockColor: 'green' as const,

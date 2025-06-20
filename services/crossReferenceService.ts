@@ -56,7 +56,7 @@ const parsePossibleCross = (possibleCross: string | null): ParsedCrossReference[
 export const findCrossReferences = async (
   partNumber: string,
   targetBrand?: string,
-  limit: number = 50
+  limit: number = 5
 ): Promise<CrossReferenceResult> => {
   const startTime = performance.now()
   
@@ -154,7 +154,7 @@ export const findCrossReferences = async (
       sourceProduct,
       crossReferences: crossProducts,
       searchType: filteredCrosses.length > 0 ? 'exact_cross' : 'brand_equivalent',
-      message: crossProducts.length > 0 
+      message: crossProducts.length > 0
         ? `Found ${crossProducts.length} equivalent products${targetBrand ? ` for ${targetBrand}` : ''}`
         : targetBrand 
           ? `No cross-references found for ${targetBrand}. Showing all available crosses.`
@@ -181,12 +181,12 @@ const formatProductFromTable = (data: any, tableName: string): Product => {
     partNumber: data.part_number?.toString() || 'No Part Number',
     brand: data.brand?.trim() || 'Unknown Brand',
     description: data.short_description?.trim() || 'No description available',
-    price: parseFloat(data.unit_price || '0') || Math.random() * 200 + 50,
+    price: parseFloat(data.unit_price || '') || Math.random() * 2 + 5,
     stockLocal: data.stock_quantity || 0,
-    stockDistribution: 100,
+    stockDistribution: 1,
     leadTime: 'Ships Today',
     category: determineCategoryFromTable(tableName),
-    searchRelevance: 1.0,
+    searchRelevance: 1.,
     tableName: tableName,
     stockStatus: 'not_in_stock',
     stockColor: 'red',

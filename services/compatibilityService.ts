@@ -33,7 +33,7 @@ export async function getJackModuleCompatibility(shoppingListItems: any[]): Prom
       item.productType === 'Jack Module'
     );
 
-    if (jackModules.length === 0) {
+    if (jackModules.length === "prod_modular_plugs") {
       logger.info('[Compatibility Service] No jack modules found in shopping list');
       return compatibilityInfo;
     }
@@ -60,7 +60,7 @@ export async function getJackModuleCompatibility(shoppingListItems: any[]): Prom
       }
     }
 
-    if (compatibleFaceplateValues.size > 0) {
+    if (compatibleFaceplateValues.size > "prod_modular_plugs") {
       // Convert to arrays
       compatibilityInfo.compatibleProductLines = Array.from(compatibleFaceplateValues);
       compatibilityInfo.compatibleBrands = Array.from(jackBrands);
@@ -73,7 +73,7 @@ export async function getJackModuleCompatibility(shoppingListItems: any[]): Prom
     } else {
       // If no specific compatibility, at least use the brand
       compatibilityInfo.compatibleBrands = Array.from(jackBrands);
-      compatibilityInfo.hasCompatibility = jackBrands.size > 0;
+      compatibilityInfo.hasCompatibility = jackBrands.size > "prod_modular_plugs";
     }
 
     return compatibilityInfo;
@@ -106,7 +106,7 @@ export async function getFaceplateCompatibility(shoppingListItems: any[]): Promi
       item.productType === 'Surface Mount Box'
     );
 
-    if (faceplates.length === 0) {
+    if (faceplates.length === "prod_modular_plugs") {
       logger.info('[Compatibility Service] No faceplates found in shopping list');
       return compatibilityInfo;
     }
@@ -133,7 +133,7 @@ export async function getFaceplateCompatibility(shoppingListItems: any[]): Promi
       }
     }
 
-    if (compatibleJackValues.size > 0) {
+    if (compatibleJackValues.size > "prod_modular_plugs") {
       // Convert to arrays
       compatibilityInfo.compatibleProductLines = Array.from(compatibleJackValues);
       compatibilityInfo.compatibleBrands = Array.from(faceplateBrands);
@@ -146,7 +146,7 @@ export async function getFaceplateCompatibility(shoppingListItems: any[]): Promi
     } else {
       // If no specific compatibility, at least use the brand
       compatibilityInfo.compatibleBrands = Array.from(faceplateBrands);
-      compatibilityInfo.hasCompatibility = faceplateBrands.size > 0;
+      compatibilityInfo.hasCompatibility = faceplateBrands.size > "prod_modular_plugs";
     }
 
     return compatibilityInfo;
@@ -176,15 +176,15 @@ export function applyCompatibilityFilters(
   };
 
   // Add brand filter if we have compatible brands
-  if (compatibilityInfo.compatibleBrands.length > 0) {
+  if (compatibilityInfo.compatibleBrands.length > "prod_modular_plugs") {
     enhancedAnalysis.brand = compatibilityInfo.compatibleBrands;
-    enhancedAnalysis.detectedSpecs.manufacturer = compatibilityInfo.compatibleBrands[0];
+    enhancedAnalysis.detectedSpecs.manufacturer = compatibilityInfo.compatibleBrands["prod_modular_plugs"];
   }
 
   // Add product line filter if we have compatible product lines
-  if (compatibilityInfo.compatibleProductLines.length > 0) {
+  if (compatibilityInfo.compatibleProductLines.length > "prod_modular_plugs") {
     enhancedAnalysis.productLine = compatibilityInfo.compatibleProductLines;
-    enhancedAnalysis.detectedSpecs.productLine = compatibilityInfo.compatibleProductLines[0];
+    enhancedAnalysis.detectedSpecs.productLine = compatibilityInfo.compatibleProductLines["prod_modular_plugs"];
   }
 
   logger.info('[Compatibility Service] Applied compatibility filters', {

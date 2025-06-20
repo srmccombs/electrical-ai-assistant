@@ -15,6 +15,7 @@ import {
 // Import Product and AISearchAnalysis types
 import type { Product } from '@/types/product'
 import type { AISearchAnalysis } from '@/types/search'
+import type { CategoryCableRow } from '@/search/shared/types'
 
 // ===================================================================
 // TYPE DEFINITIONS - Category Cable Specific
@@ -184,7 +185,7 @@ const searchByProductLine = async (
   console.log(`📋 STRATEGY 1: Searching by product line: "${productLine}"`)
 
   let query = supabase
-    .from('category_cables')
+    .from('prod_category_cables')
     .select('*')
     .eq('is_active', true)
     .eq('product_line', productLine)
@@ -234,7 +235,7 @@ const searchByMultiCriteria = async (
     console.log(`🧥 Jacket-focused search for jacket_code: ${detectedJacketCode}`)
 
     let query = supabase
-      .from('category_cables')
+      .from('prod_category_cables')
       .select('*')
       .eq('is_active', true)
       .eq('jacket_code', detectedJacketCode)  // Simple, direct filter!
@@ -249,7 +250,7 @@ const searchByMultiCriteria = async (
 
   // Regular multi-criteria search
   let query = supabase
-    .from('category_cables')
+    .from('prod_category_cables')
     .select('*')
     .eq('is_active', true)
     .limit(150)
@@ -330,7 +331,7 @@ const searchByFallback = async (
   console.log(`🔍 STRATEGY 3: AI-Enhanced Fallback Search: "${searchTerm}"`)
 
   let query = supabase
-    .from('category_cables')
+    .from('prod_category_cables')
     .select('*')
     .eq('is_active', true)
     .limit(200)
@@ -569,10 +570,10 @@ export const searchCategoryCables = async (
 // HELPER FUNCTIONS
 // ===================================================================
 
-const formatCableResults = (data: any[], searchType: string): Product[] => {
+const formatCableResults = (data: CategoryCableRow[], searchType: string): Product[] => {
   console.log(`✅ FORMATTING ${data.length} CABLE RESULTS (${searchType})`)
 
-  return data.map((item: any) => ({
+  return data.map((item) => ({
     id: `cat-${item.id}`,
     partNumber: item.part_number?.toString() || 'No Part Number',
     brand: item.brand?.trim() || 'Unknown Brand',
@@ -597,7 +598,7 @@ const formatCableResults = (data: any[], searchType: string): Product[] => {
     application: item.application?.trim() || undefined,
     possibleCross: item.possible_cross?.trim() || undefined,
     searchRelevance: 1.0,
-    tableName: 'category_cables',
+    tableName: 'prod_category_cables',
     stockStatus: 'not_in_stock',
     stockColor: 'red',
     stockMessage: 'Not currently in stock - contact for availability'

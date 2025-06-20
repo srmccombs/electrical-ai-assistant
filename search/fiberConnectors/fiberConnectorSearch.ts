@@ -1,10 +1,11 @@
 // src/search/fiberConnectors/fiberConnectorSearch.ts
 // PROPERLY FIXED VERSION - Shows all connectors, uses table structure
-// Date created: December 19, 2024
+// Date created: December 19, 224
 
 import { supabase } from '@/lib/supabase'
 import type { Product } from '@/types/product'
 import type { AISearchAnalysis } from '@/types/search'
+import type { FiberConnectorRow } from '@/search/shared/types'
 
 // ===================================================================
 // TYPE DEFINITIONS - Fiber Connector Specific
@@ -68,7 +69,7 @@ export const searchFiberConnectors = async (
       'unicam', 'optitap', 'cleartrak', 'fibertight',
       'opticam', 'optisplice', 'opticore', 'pretium'
     ]
-    const connectorTypes = ['lc', 'sc', 'st', 'fc', 'mtp', 'mpo', 'e2000', 'mu']
+    const connectorTypes = ['lc', 'sc', 'st', 'fc', 'mtp', 'mpo', 'e2', 'mu']
     const fiberCategories = ['om1', 'om2', 'om3', 'om4', 'om5', 'os1', 'os2', 'singlemode', 'multimode']
     const polishTypes = ['apc', 'upc', 'pc', 'spc'] // Added polish types
 
@@ -158,7 +159,7 @@ export const searchFiberConnectors = async (
     // Start with ALL active fiber connectors, then filter based on what was detected
 
     let query = supabase
-      .from('fiber_connectors')
+      .from('prod_fiber_connectors')
       .select('*')
       .eq('is_active', true)
       .limit(limit)
@@ -306,10 +307,10 @@ export const searchFiberConnectors = async (
     console.log('🔍 FALLBACK: Trying broader search')
 
     const fallbackQuery = supabase
-      .from('fiber_connectors')
+      .from('prod_fiber_connectors')
       .select('*')
       .eq('is_active', true)
-      .limit(50)
+      .limit(5)
 
     const fallbackResult = await fallbackQuery
     console.log(`📊 Fallback search result: ${fallbackResult.data?.length || 0} products found`)
@@ -352,14 +353,14 @@ export const searchFiberConnectors = async (
 const formatConnectorResults = (data: any[], searchType: string, priorityFiberTypes?: string[]): Product[] => {
   console.log(`✅ FORMATTING ${data.length} CONNECTOR RESULTS (${searchType})`)
 
-  const products = data.map((item: any) => ({
+  const products = data.map((item: FiberConnectorRow) => ({
     id: `conn-${item.id}`,
     partNumber: item.part_number?.toString() || 'No Part Number',
     brand: item.brand?.trim() || 'Unknown Brand',
     description: item.short_description?.trim() || 'No description available',
-    price: Math.random() * 50 + 15,
+    price: Math.random() * 5 + 15,
     stockLocal: 15,
-    stockDistribution: 100,
+    stockDistribution: 1,
     leadTime: 'Ships Today',
     category: 'Fiber Connector',
     // Enhanced fields from fiber_connectors CSV

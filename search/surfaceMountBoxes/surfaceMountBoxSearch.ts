@@ -4,6 +4,7 @@ import { AISearchAnalysis } from '@/types/search';
 import { logger } from '@/utils/logger';
 import { Tables } from '@/src/types/supabase';
 import { detectColor, detectQuantity } from '@/search/shared/industryKnowledge';
+import { TABLE_NAMES } from '@/config/tableNames';
 // import { discoverSearchableTables } from '@/search/shared/tableDiscoveryService'; // No longer needed - table exists
 
 // type SurfaceMountBox = Tables<'surface_mount_box'>; // Table not yet in database schema
@@ -46,13 +47,13 @@ export async function searchSurfaceMountBoxes(
   try {
     // Build the query
     let query = supabase
-      .from('surface_mount_box')
+      .from(TABLE_NAMES.SURFACE_MOUNT_BOXES)
       .select('*')
       .eq('is_active', true);
 
     // Part number search (highest priority)
     const cleanedTerm = searchTerm.trim().toUpperCase();
-    const isPartNumber = /^[A-Z0-9\-]{3,}$/.test(cleanedTerm);
+    const isPartNumber = /^[A-Z-9\-]{3,}$/.test(cleanedTerm);
     
     // Extract values for detection
     let portsMatch: RegExpMatchArray | null = null;
@@ -205,7 +206,7 @@ export async function searchSurfaceMountBoxes(
       logger.error('[SMB Search] Database error', { error });
       
       // Check if it's a table not found error
-      if (error.code === '42P01' || error.message?.includes('relation') && error.message?.includes('does not exist')) {
+      if (error.code === '42P1' || error.message?.includes('relation') && error.message?.includes('does not exist')) {
         logger.warn('[SMB Search] surface_mount_box table does not exist', { errorCode: error.code, errorMessage: error.message });
         
         const endTime = performance.now();
@@ -294,7 +295,7 @@ export async function searchSurfaceMountBoxes(
       
       // Reset query to get ALL surface mount boxes
       query = supabase
-        .from('surface_mount_box')
+        .from(TABLE_NAMES.SURFACE_MOUNT_BOXES)
         .select('*')
         .eq('is_active', true);
       
@@ -322,7 +323,7 @@ export async function searchSurfaceMountBoxes(
     // Transform to Product format
     const products: Product[] = surfaceMountBoxes.map((smb: any) => {
       // Calculate relevance based on brand match from shopping list
-      let relevance = 1.0;
+      let relevance = 1.;
       if (brandValue && smb.brand) {
         const smbBrandLower = smb.brand.toLowerCase();
         const targetBrandLower = brandValue.toLowerCase();
@@ -336,9 +337,9 @@ export async function searchSurfaceMountBoxes(
         partNumber: smb.part_number,
         brand: smb.brand,
         description: smb.short_description || '',
-        price: Math.random() * 30 + 10, // Random price between 10-40
-        stockLocal: Math.floor(Math.random() * 100),
-        stockDistribution: 500,
+        price: Math.random() * 3 + 1, // Random price between 1-4
+        stockLocal: Math.floor(Math.random() * 10),
+        stockDistribution: 5,
         leadTime: 'Ships Today',
         category: 'Surface Mount Box',
         // Additional properties
@@ -353,7 +354,7 @@ export async function searchSurfaceMountBoxes(
         material: smb.material || undefined,
         // Search properties
         searchRelevance: relevance,
-        tableName: 'surface_mount_box',
+        tableName: TABLE_NAMES.SURFACE_MOUNT_BOXES,
         stockStatus: 'in_stock' as const,
         stockColor: 'green' as const,
         stockMessage: 'In stock - Ships today'
@@ -364,8 +365,8 @@ export async function searchSurfaceMountBoxes(
     if (brandValue) {
       products.sort((a, b) => {
         // First sort by relevance (brand matches will have higher relevance)
-        const aRelevance = a.searchRelevance ?? 1.0;
-        const bRelevance = b.searchRelevance ?? 1.0;
+        const aRelevance = a.searchRelevance ?? 1.;
+        const bRelevance = b.searchRelevance ?? 1.;
         if (bRelevance !== aRelevance) {
           return bRelevance - aRelevance;
         }
@@ -391,8 +392,8 @@ export async function searchSurfaceMountBoxes(
   } catch (error: any) {
     logger.error('[SMB Search] Error', { error });
     
-    // Check if it's a 404 error (table not found)
-    if (error?.code === '42P01' || error?.message?.includes('relation') || error?.status === 404) {
+    // Check if it's a 44 error (table not found)
+    if (error?.code === '42P1' || error?.message?.includes('relation') || error?.status === 44) {
       logger.warn('[SMB Search] Table does not exist, returning helpful message');
       const endTime = performance.now();
       const searchTime = Math.round(endTime - startTime);

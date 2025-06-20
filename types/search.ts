@@ -41,6 +41,13 @@ export interface SearchOptions {
       brand: string
       description: string
     }>
+    faceplates?: Array<{
+      partNumber: string
+      numberOfPorts: number
+      brand: string
+      compatibleJacks: string
+      description: string
+    }>
   }
 }
 
@@ -97,6 +104,9 @@ export interface DetectedSpecs {
   environment?: string
   fiberCount?: number
   panelType?: string
+  awgSize?: string
+  packagingQty?: number
+  passThrough?: boolean
 }
 
 // SmartFilters is now defined in filters.ts to avoid duplication
@@ -189,6 +199,16 @@ export interface JackModuleSearchResult {
   searchTime: number
 }
 
+// Modular Plugs - ADDED
+export interface ModularPlugSpecifications {
+  categoryRating?: string
+  shieldingType?: string
+  awgSize?: string
+  packagingQty?: number
+  passThrough?: boolean
+  productLine?: string
+}
+
 // ===================================================================
 // INDUSTRY KNOWLEDGE TYPES
 // ===================================================================
@@ -229,7 +249,8 @@ export type ProductTable =
   | 'wall_mount_fiber_enclosures'
   | 'jack_modules'  // ADDED
   | 'faceplates'    // ADDED
-  | 'surface_mount_box'  // ADDED
+  | 'prod_surface_mount_boxes'  // ADDED
+  | 'modular_plugs' // ADDED
   | 'multi_table'
 
 export interface TableInfo {

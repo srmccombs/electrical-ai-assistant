@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useMemo } from 'react'
 import { Filter } from 'lucide-react'
 import type { Product, SmartFilters, ActiveFilters } from '../../types'
+import { normalizeMountTypes } from '../../search/shared/industryKnowledge'
 
 interface FilterSectionProps {
   messageId: string
@@ -159,7 +160,15 @@ const getDynamicFilterOptions = (products: Product[], filterType: string): strin
     case 'adapterColor':
       return filterString(products.map(p => p.adapterColor))
     case 'mountType':
-      return filterString(products.map(p => p.mountType))
+      // Normalize mount types for proper display
+      const allMountTypes = new Set<string>()
+      products.forEach(product => {
+        if (product.mountType) {
+          const normalizedTypes = normalizeMountTypes(product.mountType)
+          normalizedTypes.forEach(type => allMountTypes.add(type))
+        }
+      })
+      return Array.from(allMountTypes).sort()
     case 'fiberCount':
       // Sort fiber counts numerically
       const counts = filterString(products.map(p => p.fiberCount?.toString()))
@@ -172,6 +181,16 @@ const getDynamicFilterOptions = (products: Product[], filterType: string): strin
       // Sort gang counts numerically
       const gangs = filterString(products.map(p => p.numberGang?.toString()))
       return gangs.sort((a, b) => parseInt(a) - parseInt(b))
+    case 'awgSizes':
+      // AWG sizes for modular plugs
+      const awgs = filterString(products.map(p => p.conductorAwg?.toString()))
+      return awgs.sort((a, b) => parseInt(a) - parseInt(b))
+    case 'packagingSizes':
+      // Pack sizes for modular plugs
+      const packSizes = filterString(products.map(p => p.packagingQty?.toString()))
+      return packSizes.sort((a, b) => parseInt(a) - parseInt(b))
+    case 'category':
+      return filterString(products.map(p => p.category))
     default:
       return []
   }
@@ -301,18 +320,8 @@ export const FilterSection = memo<FilterSectionProps>(({
         )
       })()}
 
-      {/* Product Line Filters - Show for jack modules, faceplates, and surface mount boxes */}
+      {/* Product Line Filters - Show for all products right after Brand */}
       {(() => {
-        const hasProductLinesProducts = products.some(p => 
-          p.tableName === 'jack_modules' || 
-          p.productType === 'Jack Module' ||
-          p.category === 'Jack Module' ||
-          p.tableName === 'faceplates' ||
-          p.tableName === 'surface_mount_box'
-        )
-        
-        if (!hasProductLinesProducts) return null
-        
         const currentProducts = filteredProducts
         const availableProductLines = getDynamicFilterOptions(currentProducts, 'productLine')
         const isActive = (line: string) => activeFilters.productLine === line
@@ -348,6 +357,7 @@ export const FilterSection = memo<FilterSectionProps>(({
           </div>
         )
       })()}
+
 
       {/* Dynamic Filter Sections */}
       <DynamicFilterSection
@@ -395,19 +405,110 @@ export const FilterSection = memo<FilterSectionProps>(({
         onClearFilter={onClearFilter}
       />
 
-      <DynamicFilterSection
-        messageId={messageId}
-        filterType="shielding"
-        label="Shielding Type"
-        activeColor="bg-purple-600 text-white"
-        inactiveColor="bg-white border border-purple-300 text-purple-700 hover:bg-purple-100"
-        icon="🛡️"
-        products={products}
-        filteredProducts={filteredProducts}
-        activeFilters={activeFilters}
-        onApplyFilter={onApplyFilter}
-        onClearFilter={onClearFilter}
-      />
+      {/* Combined row for Shielding Type, Wire Gauge, and Pair Count */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+        {/* Shielding Type */}
+        {(() => {
+          const availableShielding = getDynamicFilterOptions(filteredProducts, 'shielding')
+          if (availableShielding.length === 0) return null
+          return (
+            <div>
+              <span className="text-xs font-medium text-gray-600 block mb-1">🛡️ Shielding Type:</span>
+              <div className="flex flex-wrap gap-1">
+                {availableShielding.map(value => (
+                  <button
+                    key={value}
+                    onClick={() => onApplyFilter(messageId, 'shielding', value, products)}
+                    className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                      activeFilters.shielding === value
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-white border border-purple-300 text-purple-700 hover:bg-purple-100'
+                    }`}
+                  >
+                    {value}
+                  </button>
+                ))}
+                {activeFilters.shielding && (
+                  <button
+                    onClick={() => onClearFilter(messageId, 'shielding', products)}
+                    className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
+                  >
+                    All
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Wire Gauge */}
+        {(() => {
+          const availableGauges = getDynamicFilterOptions(filteredProducts, 'conductorGauge')
+          if (availableGauges.length === 0 || !smartFilters.conductorGauges) return null
+          return (
+            <div>
+              <span className="text-xs font-medium text-gray-600 block mb-1">Wire Gauge:</span>
+              <div className="flex flex-wrap gap-1">
+                {availableGauges.map(value => (
+                  <button
+                    key={value}
+                    onClick={() => onApplyFilter(messageId, 'conductorGauge', value, products)}
+                    className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                      activeFilters.conductorGauge === value
+                        ? 'bg-stone-600 text-white'
+                        : 'bg-white border border-stone-300 text-stone-700 hover:bg-stone-100'
+                    }`}
+                  >
+                    {value}
+                  </button>
+                ))}
+                {activeFilters.conductorGauge && (
+                  <button
+                    onClick={() => onClearFilter(messageId, 'conductorGauge', products)}
+                    className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
+                  >
+                    All
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Pair Count */}
+        {(() => {
+          const availablePairCounts = getDynamicFilterOptions(filteredProducts, 'pairCount')
+          if (availablePairCounts.length === 0 || !smartFilters.pairCounts) return null
+          return (
+            <div>
+              <span className="text-xs font-medium text-gray-600 block mb-1">Pair Counts:</span>
+              <div className="flex flex-wrap gap-1">
+                {availablePairCounts.map(value => (
+                  <button
+                    key={value}
+                    onClick={() => onApplyFilter(messageId, 'pairCount', value, products)}
+                    className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                      activeFilters.pairCount === value
+                        ? 'bg-rose-600 text-white'
+                        : 'bg-white border border-rose-300 text-rose-700 hover:bg-rose-100'
+                    }`}
+                  >
+                    {value}
+                  </button>
+                ))}
+                {activeFilters.pairCount && (
+                  <button
+                    onClick={() => onClearFilter(messageId, 'pairCount', products)}
+                    className="px-2 py-1 rounded text-xs font-medium bg-yellow-400 text-black hover:bg-yellow-500 transition-colors"
+                  >
+                    All
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })()}
+      </div>
 
       <DynamicFilterSection
         messageId={messageId}
@@ -584,35 +685,6 @@ export const FilterSection = memo<FilterSectionProps>(({
         />
       )}
 
-      {smartFilters.pairCounts && (
-        <DynamicFilterSection
-          messageId={messageId}
-          filterType="pairCount"
-          label="Pair Counts"
-          activeColor="bg-rose-600 text-white"
-          inactiveColor="bg-white border border-rose-300 text-rose-700 hover:bg-rose-100"
-          products={products}
-          filteredProducts={filteredProducts}
-          activeFilters={activeFilters}
-          onApplyFilter={onApplyFilter}
-          onClearFilter={onClearFilter}
-        />
-      )}
-
-      {smartFilters.conductorGauges && (
-        <DynamicFilterSection
-          messageId={messageId}
-          filterType="conductorGauge"
-          label="Wire Gauge"
-          activeColor="bg-stone-600 text-white"
-          inactiveColor="bg-white border border-stone-300 text-stone-700 hover:bg-stone-100"
-          products={products}
-          filteredProducts={filteredProducts}
-          activeFilters={activeFilters}
-          onApplyFilter={onApplyFilter}
-          onClearFilter={onClearFilter}
-        />
-      )}
 
       {/* Show applications for all products that have it */}
       {products.some(p => p.application) && (
@@ -714,6 +786,37 @@ export const FilterSection = memo<FilterSectionProps>(({
           label="Gang"
           activeColor="bg-amber-600 text-white"
           inactiveColor="bg-white border border-amber-300 text-amber-700 hover:bg-amber-100"
+          products={products}
+          filteredProducts={filteredProducts}
+          activeFilters={activeFilters}
+          onApplyFilter={onApplyFilter}
+          onClearFilter={onClearFilter}
+        />
+      )}
+
+      {/* Modular Plug Filters */}
+      {smartFilters.awgSizes && (
+        <DynamicFilterSection
+          messageId={messageId}
+          filterType="awgSizes"
+          label="AWG Size"
+          activeColor="bg-rose-600 text-white"
+          inactiveColor="bg-white border border-rose-300 text-rose-700 hover:bg-rose-100"
+          products={products}
+          filteredProducts={filteredProducts}
+          activeFilters={activeFilters}
+          onApplyFilter={onApplyFilter}
+          onClearFilter={onClearFilter}
+        />
+      )}
+
+      {smartFilters.packagingSizes && (
+        <DynamicFilterSection
+          messageId={messageId}
+          filterType="packagingSizes"
+          label="Pack Size"
+          activeColor="bg-lime-600 text-white"
+          inactiveColor="bg-white border border-lime-300 text-lime-700 hover:bg-lime-100"
           products={products}
           filteredProducts={filteredProducts}
           activeFilters={activeFilters}

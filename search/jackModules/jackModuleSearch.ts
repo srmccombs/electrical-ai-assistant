@@ -15,6 +15,7 @@ import {
 // Import Product and AISearchAnalysis types
 import type { Product } from '@/types/product'
 import type { AISearchAnalysis } from '@/types/search'
+import type { JackModuleRow } from '@/search/shared/types'
 
 // ===================================================================
 // TYPE DEFINITIONS - Jack Module Specific
@@ -24,6 +25,16 @@ export interface JackModuleSearchOptions {
   searchTerm: string
   aiAnalysis?: AISearchAnalysis | null
   limit?: number
+  shoppingListContext?: {
+    hasItems: boolean
+    faceplates?: Array<{
+      partNumber: string
+      numberOfPorts: number
+      brand: string
+      compatibleJacks: string
+      description: string
+    }>
+  }
 }
 
 export interface JackModuleSearchResult {
@@ -42,7 +53,7 @@ const CATEGORY_SEARCH_TERMS: Record<string, string[]> = {
   'Category 6A': [
     'Category 6A', 'Cat6A', 'Cat 6A', 'CAT6A', 'cat6a', 'Cat6a',
     'Category Six A', 'Category 6A Augmented', 'CATEGORY 6A',
-    '10 Gigabit', '10Gig', '10G', 'CJ688TGBU', 'CJ688TG-BU', 'CJ688'
+    '1 Gigabit', '1Gig', '1G', 'CJ688TGBU', 'CJ688TG-BU', 'CJ688'
   ],
   'Category 6': [
     'Category 6', 'Cat6', 'Cat 6', 'CAT6', 'cat6',
@@ -67,7 +78,7 @@ const SPECIAL_MODULE_TYPES: Record<string, string[]> = {
   ],
   'HDMI Coup': [
     'hdmi', 'hdmi coupler', 'hdmi coupling', 'hdmi connector',
-    'hdmi jack', 'hdmi module', 'hdmi 2.0', 'hdmi type a',
+    'hdmi jack', 'hdmi module', 'hdmi 2.', 'hdmi type a',
     'NKHDM'
   ]
 }
@@ -206,7 +217,7 @@ const searchByPartNumber = async (
   const normalized = normalizePartNumber(searchTerm)
 
   let query = supabase
-    .from('jack_modules')
+    .from('prod_jack_modules')
     .select('*')
     .eq('is_active', true)
     .limit(limit)
@@ -241,7 +252,9 @@ const searchByMultiCriteria = async (
   detectedShielding?: string | null,
   detectedColor?: string | null,
   detectedBrand?: string | null,
-  detectedProductLine?: string | null
+  detectedProductLine?: string | null,
+  compatibleBrands?: string[],
+  compatibleProductLines?: string[]
 ): Promise<Product[]> => {
   console.log(`🎯 STRATEGY 2: Multi-Criteria Search`)
   console.log({
@@ -249,14 +262,16 @@ const searchByMultiCriteria = async (
     shielding: detectedShielding,
     color: detectedColor,
     brand: detectedBrand,
-    productLine: detectedProductLine
+    productLine: detectedProductLine,
+    compatibleBrands,
+    compatibleProductLines
   })
 
   let query = supabase
-    .from('jack_modules')
+    .from('prod_jack_modules')
     .select('*')
     .eq('is_active', true)
-    .limit(1000) // Get more products for better variety
+    .limit(100) // Get more products for better variety
 
   // Apply exact match filters
   if (detectedBrand) {
@@ -265,6 +280,21 @@ const searchByMultiCriteria = async (
 
   if (detectedProductLine) {
     query = query.ilike('product_line', `%${detectedProductLine}%`)
+  }
+
+  // Apply compatibility filters from shopping list context
+  if (compatibleBrands && compatibleBrands.length > 0 && !detectedBrand) {
+    // If no brand was detected in search but we have compatible brands from faceplates
+    const brandConditions = compatibleBrands.map(brand => `brand.ilike.%${brand}%`).join(',')
+    query = query.or(brandConditions)
+    console.log('🛒 Applying brand compatibility filter from faceplates:', compatibleBrands)
+  }
+
+  if (compatibleProductLines && compatibleProductLines.length > 0 && !detectedProductLine) {
+    // If no product line was detected in search but we have compatible product lines from faceplates
+    const productLineConditions = compatibleProductLines.map(pl => `product_line.ilike.%${pl}%`).join(',')
+    query = query.or(productLineConditions)
+    console.log('🛒 Applying product line compatibility filter from faceplates:', compatibleProductLines)
   }
 
   // Only apply shielding filter if explicitly detected (only for ethernet modules)
@@ -285,10 +315,10 @@ const searchByMultiCriteria = async (
       if (detectedModuleType === 'Category 5e') {
         // Build a specific query for ONLY Category 5e products
         let cat5eQuery = supabase
-          .from('jack_modules')
+          .from('prod_jack_modules')
           .select('*')
           .eq('is_active', true)
-          .limit(1000)
+          .limit(100)
         
         // Apply brand filter if detected
         if (detectedBrand) {
@@ -330,10 +360,10 @@ const searchByMultiCriteria = async (
       } else if (detectedModuleType === 'Category 6') {
         // Build a specific query to exclude Cat6A products
         let cat6Query = supabase
-          .from('jack_modules')
+          .from('prod_jack_modules')
           .select('*')
           .eq('is_active', true)
-          .limit(1000)
+          .limit(100)
         
         // Apply brand filter if detected
         if (detectedBrand) {
@@ -391,10 +421,10 @@ const searchByMultiCriteria = async (
       } else if (detectedModuleType === 'Category 6A') {
         // Build a specific query for ONLY Category 6A products
         let cat6aQuery = supabase
-          .from('jack_modules')
+          .from('prod_jack_modules')
           .select('*')
           .eq('is_active', true)
-          .limit(1000)
+          .limit(100)
         
         // Apply brand filter if detected
         if (detectedBrand) {
@@ -504,13 +534,13 @@ const searchByMultiCriteria = async (
     
     // First pass: get at least one product from each unique combo
     for (const [combo, items] of grouped.entries()) {
-      if (diverseProducts.length < 200) {
+      if (diverseProducts.length < 2) {
         // Add products with different shielding types if available
         const utpItem = items.find(i => i.shielding_type === 'UTP')
         const stpItem = items.find(i => i.shielding_type === 'STP')
         
         if (utpItem) diverseProducts.push(utpItem)
-        if (stpItem && diverseProducts.length < 200) diverseProducts.push(stpItem)
+        if (stpItem && diverseProducts.length < 2) diverseProducts.push(stpItem)
         
         // If no UTP/STP found, just add the first item
         if (!utpItem && !stpItem && items.length > 0) {
@@ -552,7 +582,7 @@ const searchByCategoryRating = async (
   console.log(`📂 STRATEGY 3: Category Rating Search: "${categoryRating}"`)
 
   const query = supabase
-    .from('jack_modules')
+    .from('prod_jack_modules')
     .select('*')
     .eq('is_active', true)
     .ilike('category_rating', `%${categoryRating}%`)
@@ -578,13 +608,13 @@ const searchByFallback = async (
 
   // Start with base query
   let query = supabase
-    .from('jack_modules')
+    .from('prod_jack_modules')
     .select('*')
     .eq('is_active', true)
     .order('brand', { ascending: true })
     .order('product_line', { ascending: true })
     .order('category_rating', { ascending: true })
-    .limit(1000) // Get many products for initial filtering
+    .limit(limit) // Get many products for initial filtering
 
   // Apply AI detected filters if available
   if (aiAnalysis?.detectedSpecs) {
@@ -637,6 +667,12 @@ const searchByFallback = async (
   searchConditions.push(`common_terms.ilike.%jack%`)
   searchConditions.push(`category_rating.ilike.%jack%`)
   searchConditions.push(`possible_cross.ilike.%jack%`)
+  
+  // Also search for "jacks" (plural)
+  if (searchTerm.toLowerCase().includes('jacks')) {
+    searchConditions.push(`short_description.ilike.%jacks%`)
+    searchConditions.push(`common_terms.ilike.%jacks%`)
+  }
 
   // Also search for each meaningful word across ALL fields
   words.forEach(word => {
@@ -712,11 +748,15 @@ export const searchJackModules = async (
   options: JackModuleSearchOptions
 ): Promise<JackModuleSearchResult> => {
   const startTime = performance.now()
-  const { searchTerm, aiAnalysis, limit = 100 } = options
+  const { searchTerm, aiAnalysis, limit = 100, shoppingListContext } = options
 
   console.log('🔌 JACK MODULE SEARCH')
   console.log('🔍 Search term:', searchTerm)
   console.log('🤖 AI Analysis:', aiAnalysis?.detectedSpecs)
+  console.log('🛒 Shopping list context:', {
+    hasContext: !!shoppingListContext?.hasItems,
+    faceplatesCount: shoppingListContext?.faceplates?.length || 0
+  })
 
   try {
     // Use enhanced detection functions
@@ -742,15 +782,113 @@ export const searchJackModules = async (
       productLine: detectedProductLine
     })
 
+    // Extract compatibility info from shopping list context
+    let compatibleBrands: string[] = []
+    let compatibleProductLines: string[] = []
+    
+    if (shoppingListContext?.hasItems && shoppingListContext.faceplates && shoppingListContext.faceplates.length > 0) {
+      // Get unique brands from faceplates in cart
+      const brands = new Set<string>()
+      const productLines = new Set<string>()
+      
+      shoppingListContext.faceplates.forEach(faceplate => {
+        console.log('🛒 Processing faceplate:', {
+          partNumber: faceplate.partNumber,
+          brand: faceplate.brand,
+          compatibleJacks: faceplate.compatibleJacks,
+          compatibleJacksType: typeof faceplate.compatibleJacks
+        })
+        
+        if (faceplate.brand) {
+          brands.add(faceplate.brand)
+        }
+        
+        // Extract product lines from compatible jacks field
+        if (faceplate.compatibleJacks) {
+          // Handle PostgreSQL array format or string format
+          let compatibleValues: string[] = []
+          
+          if (Array.isArray(faceplate.compatibleJacks)) {
+            // Already an array
+            compatibleValues = faceplate.compatibleJacks
+          } else if (typeof faceplate.compatibleJacks === 'string') {
+            // Parse string representation
+            const jackValue = faceplate.compatibleJacks
+            
+            // Try to parse as JSON array
+            try {
+              if (jackValue.startsWith('[') && jackValue.endsWith(']')) {
+                compatibleValues = JSON.parse(jackValue)
+              }
+            } catch (e) {
+              // Not JSON, try other formats
+            }
+            
+            // Handle PostgreSQL array format {value1,value2}
+            if (compatibleValues.length === 0 && jackValue.startsWith('{') && jackValue.endsWith('}')) {
+              compatibleValues = jackValue.slice(1, -1).split(',').map(v => v.trim().replace(/['"]/g, ''))
+            }
+            
+            // Handle comma-separated values
+            if (compatibleValues.length === 0 && jackValue.includes(',')) {
+              compatibleValues = jackValue.split(',').map(v => v.trim())
+            }
+            
+            // Single value or pattern matching
+            if (compatibleValues.length === 0) {
+              // Check for common patterns
+              if (jackValue.toLowerCase().includes('mini-com')) {
+                productLines.add('Mini-Com')
+              }
+              if (jackValue.toLowerCase().includes('netkey')) {
+                productLines.add('NetKey')
+              }
+              if (jackValue.toLowerCase().includes('keystone')) {
+                productLines.add('Keystone')
+              }
+              if (jackValue.toLowerCase().includes('netselect')) {
+                productLines.add('netSelect')
+              }
+              if (jackValue.toLowerCase().includes('xcelerator')) {
+                productLines.add('XCELERATOR')
+              }
+              if (jackValue.toLowerCase().includes('istation')) {
+                productLines.add('ISTATION')
+              }
+              if (jackValue.toLowerCase().includes('nextspeed')) {
+                productLines.add('NEXTSPEED')
+              }
+            }
+          }
+          
+          // Add all compatible values to product lines
+          compatibleValues.forEach(value => {
+            if (value && value.trim()) {
+              productLines.add(value.trim())
+            }
+          })
+        }
+      })
+      
+      compatibleBrands = Array.from(brands)
+      compatibleProductLines = Array.from(productLines)
+      
+      console.log('🛒 Detected compatibility requirements from faceplates:', {
+        brands: compatibleBrands,
+        productLines: compatibleProductLines,
+        faceplatesInCart: shoppingListContext.faceplates.length
+      })
+    }
+
     let products: Product[] = []
     let searchStrategy = 'unknown'
 
     // Check if it looks like a part number search
-    const isPartNumber = /^[A-Z0-9]{3,}/.test(searchTerm.toUpperCase()) ||
-                        searchTerm.split(/[\s-]/).some(part => /^[A-Z0-9]{4,}$/.test(part))
+    const isPartNumber = /^[A-Z-9]{3,}/.test(searchTerm.toUpperCase()) ||
+                        searchTerm.split(/[\s-]/).some(part => /^[A-Z-9]{4,}$/.test(part))
 
     // STRATEGY 1: Part Number Search
-    if (isPartNumber || (!detectedModuleType && !detectedShielding && searchTerm.length < 20)) {
+    if (isPartNumber || (!detectedModuleType && !detectedShielding && searchTerm.length < 2)) {
       console.log(`🚀 STRATEGY 1: Part Number Search`)
       products = await searchByPartNumber(searchTerm, limit)
       searchStrategy = 'part_number_search'
@@ -767,7 +905,7 @@ export const searchJackModules = async (
     }
 
     // STRATEGY 2: Multi-Criteria Search - Always try this for module type searches
-    if (detectedModuleType || detectedBrand || detectedProductLine || detectedColor) {
+    if (detectedModuleType || detectedBrand || detectedProductLine || detectedColor || (compatibleBrands.length > 0 || compatibleProductLines.length > 0)) {
       console.log(`🚀 STRATEGY 2: Multi-Criteria Search`)
       products = await searchByMultiCriteria(
         searchTerm,
@@ -776,7 +914,9 @@ export const searchJackModules = async (
         detectedShielding,
         detectedColor,
         detectedBrand,
-        detectedProductLine
+        detectedProductLine,
+        compatibleBrands,
+        compatibleProductLines
       )
       searchStrategy = 'multi_criteria_search'
     }
@@ -791,7 +931,9 @@ export const searchJackModules = async (
         null,  // No specific shielding
         null,  // No specific color
         null,  // No specific brand
-        null   // No specific product line
+        null,  // No specific product line
+        compatibleBrands,  // Still pass compatibility filters
+        compatibleProductLines
       )
       searchStrategy = 'generic_jack_search'
     }
@@ -872,14 +1014,14 @@ const formatJackModuleResults = (data: any[], searchType: string): Product[] => 
     console.log(`  Unique shielding types: ${Array.from(uniqueShielding).join(', ')}`)
   }
 
-  return data.map((item: any) => ({
+  return data.map((item: JackModuleRow) => ({
     id: `jack-${item.id}`,
     partNumber: item.part_number?.toString() || 'No Part Number',
     brand: item.brand?.trim() || 'Unknown Brand',
     description: item.short_description?.trim() || 'No description available',
-    price: Math.random() * 30 + 10,
-    stockLocal: Math.floor(Math.random() * 50),
-    stockDistribution: 500,
+    price: Math.random() * 3 + 1,
+    stockLocal: Math.floor(Math.random() * 5),
+    stockDistribution: 5,
     leadTime: 'Ships Today',
     category: 'Jack Module',
 
@@ -928,8 +1070,8 @@ export const generateJackModuleFilters = (products: Product[]) => {
 
   return {
     brands: filterString(products.map(p => p.brand)).slice(0, 8),
-    productLines: uniqueProductLines.slice(0, 10), // Increased to 10 to match searchService
-    categoryRatings: sortedCategoryRatings.slice(0, 10), // Show more types now
+    productLines: uniqueProductLines.slice(0, 1), // Increased to 1 to match searchService
+    categoryRatings: sortedCategoryRatings.slice(0, 1), // Show more types now
     shieldingTypes: filterString(products.map(p => p.shielding)).slice(0, 2), // Usually just UTP/STP
     colors: filterString(products.map(p => p.color)).slice(0, 12), // Jack modules come in many colors
     productTypes: filterString(products.map(p => p.productType)).slice(0, 4)

@@ -10,9 +10,13 @@ import { Search, Plus, Minus, X, Send, Zap, Package, AlertCircle, CheckCircle, C
 import { trackResultClick } from '../services/analytics'
 import { searchProducts } from '../services/searchService'
 import { logger, LogCategory } from '../utils/logger'
+import { normalizeMountTypes } from '../search/shared/industryKnowledge'
 
 // Import extracted components
-import { FilterSection, ProductTable, SearchInput, ShoppingList } from './PlecticAI/index'
+import { FilterSection } from './PlecticAI/FilterSection'
+import { ProductTable } from './PlecticAI/ProductTable'
+import { SearchInput } from './PlecticAI/SearchInput'
+import { ShoppingList } from './PlecticAI/ShoppingList'
 import { SearchFeedbackButton } from './SearchFeedbackButton'
 import { Toast } from './Toast'
 
@@ -483,7 +487,10 @@ const PlecticAI: React.FC = () => {
             return desc.includes(filterValue.toLowerCase()) || jacketColor.toLowerCase().includes(filterValue.toLowerCase())
           case 'terminationType': return product.terminationType === filterValue
           case 'adapterColor': return product.adapterColor === filterValue
-          case 'mountType': return product.mountType === filterValue
+          case 'mountType': 
+            // Normalize the product's mount type and check if it includes the filter value
+            const normalizedTypes = normalizeMountTypes(product.mountType)
+            return normalizedTypes.includes(filterValue)
           case 'fiberCount': return product.fiberCount?.toString() === filterValue
           case 'ports': return product.numberOfPorts?.toString() === filterValue
           case 'gang': return product.numberGang?.toString() === filterValue
@@ -557,7 +564,10 @@ const PlecticAI: React.FC = () => {
             return desc.includes(filterValue.toLowerCase()) || jacketColor.toLowerCase().includes(filterValue.toLowerCase())
           case 'terminationType': return product.terminationType === filterValue
           case 'adapterColor': return product.adapterColor === filterValue
-          case 'mountType': return product.mountType === filterValue
+          case 'mountType': 
+            // Normalize the product's mount type and check if it includes the filter value
+            const normalizedTypes = normalizeMountTypes(product.mountType)
+            return normalizedTypes.includes(filterValue)
           case 'fiberCount': return product.fiberCount?.toString() === filterValue
           case 'ports': return product.numberOfPorts?.toString() === filterValue
           case 'gang': return product.numberGang?.toString() === filterValue
@@ -607,6 +617,7 @@ const PlecticAI: React.FC = () => {
         searchLower.includes('fiber panel') ||
         searchLower.includes('mounting box') ||
         searchLower.includes('jack') ||
+        searchLower.includes('jacks') ||
         searchLower.includes('keystone') ||
         searchLower.includes('mini-com') ||
         searchLower.includes('minicom') ||
@@ -620,6 +631,14 @@ const PlecticAI: React.FC = () => {
 
       // Prepare shopping list context
       let shoppingListContext = undefined
+      
+      logger.info('Shopping list context check', {
+        isSearchingForCompatibleProducts,
+        productListLength: productList.length,
+        searchQuery: searchLower,
+        willCreateContext: isSearchingForCompatibleProducts && productList.length > 0
+      }, LogCategory.SEARCH)
+      
       if (isSearchingForCompatibleProducts && productList.length > 0) {
         const categoryCables = productList
           .filter(item => item.category === 'Ethernet Cable' || item.tableName === 'category_cables')
@@ -671,13 +690,42 @@ const PlecticAI: React.FC = () => {
             description: item.description
           }))
 
-        if (categoryCables.length > 0 || jackModules.length > 0 || fiberEnclosures.length > 0 || fiberCables.length > 0) {
+        const faceplates = productList
+          .filter(item => 
+            item.tableName === 'faceplates' || 
+            item.category === 'Faceplate' ||
+            item.productType === 'Faceplate' ||
+            (item.description?.toLowerCase().includes('faceplate') || 
+             item.description?.toLowerCase().includes('face plate'))
+          )
+          .map(item => {
+            // Debug logging
+            logger.info('Faceplate in shopping list', {
+              partNumber: item.partNumber,
+              brand: item.brand,
+              compatibleJacks: item.compatibleJacks,
+              tableName: item.tableName,
+              productType: item.productType,
+              category: item.category
+            }, LogCategory.UI)
+            
+            return {
+              partNumber: item.partNumber,
+              numberOfPorts: item.numberOfPorts || '',
+              brand: item.brand,
+              compatibleJacks: item.compatibleJacks || '',
+              description: item.description
+            }
+          })
+
+        if (categoryCables.length > 0 || jackModules.length > 0 || fiberEnclosures.length > 0 || fiberCables.length > 0 || faceplates.length > 0) {
           shoppingListContext = {
             hasItems: true,
             categoryCables,
             jackModules,
             fiberEnclosures,
-            fiberCables
+            fiberCables,
+            faceplates
           }
           
           logger.info('Including shopping list context for compatibility', {
@@ -685,7 +733,8 @@ const PlecticAI: React.FC = () => {
             categoryCablesCount: categoryCables.length,
             jackModulesCount: jackModules.length,
             fiberEnclosuresCount: fiberEnclosures.length,
-            fiberCablesCount: fiberCables.length
+            fiberCablesCount: fiberCables.length,
+            faceplatesCount: faceplates.length
           }, LogCategory.SEARCH)
         }
       }

@@ -20,6 +20,7 @@ import { Search, Plus, Minus, X, Send, Zap, Package, AlertCircle, CheckCircle, C
 import { trackResultClick } from '../services/analytics'
 import { searchProducts } from '../services/searchService'
 import { logger, LogCategory } from '../utils/logger'
+import { normalizeMountTypes } from '../search/shared/industryKnowledge'
 
 // Import all types from the new types package
 import type {
@@ -450,7 +451,15 @@ const PlecticAI: React.FC = () => {
       case 'adapterColor':
         return filterString(products.map(p => p.adapterColor))
       case 'mountType':
-        return filterString(products.map(p => p.mountType))
+        // Normalize mount types for proper display
+        const allMountTypes = new Set<string>()
+        products.forEach(product => {
+          if (product.mountType) {
+            const normalizedTypes = normalizeMountTypes(product.mountType)
+            normalizedTypes.forEach(type => allMountTypes.add(type))
+          }
+        })
+        return Array.from(allMountTypes).sort()
       default:
         return []
     }
@@ -572,7 +581,10 @@ const PlecticAI: React.FC = () => {
             return desc.includes(filterValue.toLowerCase()) || jacketColor.toLowerCase().includes(filterValue.toLowerCase())
           case 'terminationType': return product.terminationType === filterValue
           case 'adapterColor': return product.adapterColor === filterValue
-          case 'mountType': return product.mountType === filterValue
+          case 'mountType': 
+            // Normalize the product's mount type and check if it includes the filter value
+            const normalizedTypes = normalizeMountTypes(product.mountType)
+            return normalizedTypes.includes(filterValue)
           default: return true
         }
       })
@@ -636,7 +648,10 @@ const PlecticAI: React.FC = () => {
             return desc.includes(filterValue.toLowerCase()) || jacketColor.toLowerCase().includes(filterValue.toLowerCase())
           case 'terminationType': return product.terminationType === filterValue
           case 'adapterColor': return product.adapterColor === filterValue
-          case 'mountType': return product.mountType === filterValue
+          case 'mountType': 
+            // Normalize the product's mount type and check if it includes the filter value
+            const normalizedTypes = normalizeMountTypes(product.mountType)
+            return normalizedTypes.includes(filterValue)
           default: return true
         }
       })
@@ -711,6 +726,17 @@ const PlecticAI: React.FC = () => {
             description: item.description
           }))
 
+        // Extract faceplates from shopping list
+        const faceplates = productList
+          .filter(item => item.category === 'Faceplate' || item.tableName === 'faceplates' || item.productType === 'Faceplate')
+          .map(item => ({
+            partNumber: item.partNumber,
+            numberOfPorts: item.numberOfPorts || 0,
+            brand: item.brand,
+            compatibleJacks: item.compatibleJacks || '',
+            description: item.description
+          }))
+
         // Extract fiber enclosures from shopping list
         const fiberEnclosures = productList
           .filter(item => 
@@ -727,19 +753,21 @@ const PlecticAI: React.FC = () => {
             tableName: item.tableName || ''
           }))
 
-        if (categoryCables.length > 0 || jackModules.length > 0 || fiberEnclosures.length > 0) {
+        if (categoryCables.length > 0 || jackModules.length > 0 || fiberEnclosures.length > 0 || faceplates.length > 0) {
           shoppingListContext = {
             hasItems: true,
             categoryCables,
             jackModules,
-            fiberEnclosures
+            fiberEnclosures,
+            faceplates
           }
           
           logger.info('Including shopping list context for compatibility', {
             searchType: isSearchingForCompatibleProducts ? 'compatible product' : 'standard',
             categoryCablesCount: categoryCables.length,
             jackModulesCount: jackModules.length,
-            fiberEnclosuresCount: fiberEnclosures.length
+            fiberEnclosuresCount: fiberEnclosures.length,
+            faceplatesCount: faceplates.length
           }, LogCategory.SEARCH)
         }
       }

@@ -13,6 +13,7 @@ import { searchAllTablesForPartNumber } from '@/search/shared/tableDiscoveryServ
 import { getCachedAIAnalysis } from '@/services/aiCache'
 import { trackSearch } from '@/services/analytics'
 import { logger, LogCategory } from '@/utils/logger'
+import { TABLE_NAMES } from '@/config/tableNames'
 
 // Import types from the new types package
 import type {
@@ -37,9 +38,10 @@ import type {
 import { PRODUCT_TYPES, getProductTypeByTable, getProductTypeByKeywords } from '@/config/productTypes'
 
 // Import the actual search implementations
+// Updated June 19, 2025 - Now uses router that checks V2 environment variable
 import {
   searchCategoryCables as searchCategoryCablesImpl,
-} from '@/search/categoryCables/categoryCableSearch'
+} from '@/search/categoryCables'  // Changed to use index.ts router
 
 import {
   searchFiberConnectors as searchFiberConnectorsImpl,
@@ -75,6 +77,70 @@ import {
   searchSurfaceMountBoxes as searchSurfaceMountBoxesImpl,
 } from '@/search/surfaceMountBoxes/surfaceMountBoxSearch'
 
+import {
+  searchModularPlugs as searchModularPlugsImpl,
+  generateModularPlugFilters,
+} from '@/search/modularPlugs/modularPlugSearch'
+
+// Database result type for search results from dynamic table discovery
+interface DatabaseSearchResult {
+  id: number
+  part_number?: string
+  brand?: string
+  short_description?: string
+  unit_price?: string
+  stock_quantity?: number
+  _tableName: string
+  _tablePrefix: string
+  // Category cable specific fields
+  category_rating?: string
+  jacket_material?: string
+  jacket_code?: string
+  jacket_color?: string
+  Shielding_Type?: string
+  product_line?: string
+  pair_count?: string
+  conductor_awg?: number
+  cable_diameter_in?: number
+  packaging_type?: string
+  application?: string
+  possible_cross?: string
+  // Fiber connector specific fields
+  connector_type?: string
+  fiber_category?: string
+  product_type?: string
+  technology?: string
+  polish?: string
+  housing_color?: string
+  boot_color?: string
+  // Adapter panel specific fields
+  fiber_count?: number
+  panel_type?: string
+  number_of_adapter_per_panel?: number
+  adapter_color?: string
+  termination_type?: string
+  possible_equivalent?: string
+  compatible_enclosures?: string
+  common_terms?: string
+  supports_apc?: boolean
+  // Rack mount enclosure specific fields
+  mount_type?: string
+  rack_units?: number
+  accepts_number_of_connector_housing_panels?: number
+  color?: string
+  material?: string
+  supports_splice_trays?: boolean
+  environment?: string
+  fiber_enclosure_splice_tray?: string
+  upc_number?: string
+  // Modular plug specific fields
+  shielding_type?: string
+  packaging_qty?: number
+  compatible_boots?: string
+  // Allow any other fields that might exist
+  [key: string]: any
+}
+
 // Import shared industry knowledge
 import {
   validateElectricalQuery,
@@ -83,6 +149,8 @@ import {
   normalizePartNumber,
   detectCrossReferenceRequest,
   detectQuantity,
+  normalizeMountType,
+  normalizeMountTypes,
 } from '@/search/shared/industryKnowledge'
 
 // Import cross-reference service
@@ -110,12 +178,31 @@ const enhanceAIAnalysis = (aiAnalysis: AISearchAnalysis | null, searchTerm: stri
   const term = searchTerm.toLowerCase()
   let wasEnhanced = false
   
+  // Check for modular plug terms that AI often misses - MUST BE FIRST
+  if ((term.includes('modular plug') || term.includes('modluar plug') || term.includes('modualr plug') ||
+       term.includes('cable ends') || term.includes('clear ends') || term.includes('cable end') ||
+       term.includes('crimp connector') || term.includes('terminator plug') || 
+       term.includes('ethernet connector') || term.includes('network plug') ||
+       (term.includes('plug') && (term.includes('rj45') || term.includes('rj-45'))) ||
+       (term.includes('crimp') && !term.includes('tool'))) &&
+      !term.includes('jack') && !term.includes('keystone') && !term.includes('module')) {
+    logger.info('Enhanced AI: Detected Modular Plug - overriding AI analysis', {
+      originalProductType: aiAnalysis.productType,
+      newProductType: 'MODULAR_PLUG'
+    }, LogCategory.AI)
+    aiAnalysis.productType = 'MODULAR_PLUG'
+    aiAnalysis.searchStrategy = 'modular_plugs'
+    aiAnalysis.confidence = 0.95
+    aiAnalysis.reasoning = 'Detected modular plug/RJ45 connector terminology'
+    wasEnhanced = true
+  }
+  
   // Check for SMB (Surface Mount Box) abbreviations that AI often misses
-  if ((term.includes('smb') || term.includes('s.m.b') || term.includes('sm box')) &&
+  else if ((term.includes('smb') || term.includes('s.m.b') || term.includes('sm box')) &&
       !term.includes('jack module') && !term.includes('keystone')) {
     logger.info('Enhanced AI: Detected SMB/Surface Mount Box - overriding AI analysis', {}, LogCategory.AI)
     aiAnalysis.productType = 'SURFACE_MOUNT_BOX'
-    aiAnalysis.searchStrategy = 'surface_mount_box'
+    aiAnalysis.searchStrategy = TABLE_NAMES.SURFACE_MOUNT_BOXES
     aiAnalysis.confidence = 0.95
     aiAnalysis.reasoning = 'Detected SMB (Surface Mount Box) abbreviation'
     wasEnhanced = true
@@ -227,7 +314,7 @@ const searchByPartNumber = async (partNumbers: string[], quantity?: number): Pro
     logger.info(`Dynamic search found ${searchResults.length} raw results`, {}, LogCategory.DATABASE)
 
     // Convert to standard Product format
-    const products: Product[] = searchResults.map((item: any) => {
+    const products: Product[] = searchResults.map((item: DatabaseSearchResult) => {
       // Determine category based on table name
       const category = determineCategoryFromTable(item._tableName)
 
@@ -289,7 +376,7 @@ const searchByPartNumber = async (partNumbers: string[], quantity?: number): Pro
 
         ...(item._tableName === 'rack_mount_fiber_enclosures' && {
           productType: item.product_type?.trim() || 'Rack Mount Fiber Enclosure',
-          mountType: item.mount_type?.trim() || undefined,
+          mountType: item.mount_type?.trim() || 'Rack Mount',
           rackUnits: item.rack_units || undefined,
           panelType: item.panel_type?.trim() || undefined,
           panelCapacity: item.accepts_number_of_connector_housing_panels || undefined,
@@ -302,6 +389,16 @@ const searchByPartNumber = async (partNumbers: string[], quantity?: number): Pro
           spliceTrayModel: item.fiber_enclosure_splice_tray?.trim() || undefined,
           productLine: item.product_line?.trim() || undefined,
           upcCode: item.upc_number?.toString() || undefined
+        }),
+
+        ...(item._tableName === 'modular_plugs' && {
+          categoryRating: item.category_rating || undefined,
+          shieldingType: item.shielding_type?.trim() || undefined,
+          conductorAwg: item.conductor_awg || undefined,
+          packagingQty: item.packaging_qty || undefined,
+          productLine: item.product_line?.trim() || undefined,
+          commonTerms: item.common_terms?.trim() || undefined,
+          compatibleBoots: item.compatible_boots || undefined
         })
       }
     })
@@ -456,7 +553,7 @@ const searchByPartNumberHardcoded = async (partNumbers: string[], quantity?: num
           }),
           ...(table.name === 'rack_mount_fiber_enclosures' && {
             productType: item.product_type?.trim() || 'Rack Mount Fiber Enclosure',
-            mountType: item.mount_type?.trim() || undefined,
+            mountType: item.mount_type?.trim() || 'Rack Mount',
             rackUnits: item.rack_units || undefined,
             panelType: item.panel_type?.trim() || undefined,
             panelCapacity: item.accepts_number_of_connector_housing_panels || undefined,
@@ -513,6 +610,10 @@ const determineCategoryFromTable = (tableName: string): string => {
   if (tableName.includes('connector')) return 'Connector'
   if (tableName.includes('panel')) return 'Panel'
   if (tableName.includes('enclosure')) return 'Enclosure'
+  if (tableName.includes('modular_plugs')) return 'Modular Plug'
+  if (tableName.includes('jack_modules')) return 'Jack Module'
+  if (tableName.includes('faceplates')) return 'Faceplate'
+  if (tableName.includes(TABLE_NAMES.SURFACE_MOUNT_BOXES)) return 'Surface Mount Box'
   if (tableName.includes('tool')) return 'Tool'
   if (tableName.includes('tester')) return 'Tester'
   if (tableName.includes('switch')) return 'Switch'
@@ -556,7 +657,26 @@ const generateSmartFilters = (products: Product[]): SmartFilters => {
   // Fiber enclosure specific filters
   const rackUnits = filterString(products.map(p => p.rackUnits?.toString()))
   const environments = filterString(products.map(p => p.environment))
-  const mountTypes = filterString(products.map(p => p.mountType))
+  
+  // Extract all mount types (handling products with multiple mount options)
+  const allMountTypes: string[] = []
+  const rawMountTypes: string[] = []
+  products.forEach(p => {
+    if (p.mountType) {
+      rawMountTypes.push(p.mountType)
+      const types = normalizeMountTypes(p.mountType)
+      allMountTypes.push(...types)
+    }
+  })
+  
+  // Debug logging
+  logger.info('Mount type extraction', {
+    uniqueRawMountTypes: [...new Set(rawMountTypes)],
+    uniqueNormalizedTypes: [...new Set(allMountTypes)],
+    filterResult: filterString(allMountTypes)
+  }, LogCategory.SEARCH)
+  
+  const mountTypes = filterString(allMountTypes)
   
   // Faceplate and SMB specific filters
   const numberOfPorts = filterString(products.map(p => p.numberOfPorts?.toString()))
@@ -567,7 +687,8 @@ const generateSmartFilters = (products: Product[]): SmartFilters => {
   const hasFiberEnclosures = products.some(p => p.tableName === 'rack_mount_fiber_enclosures')
   const hasJackModules = products.some(p => p.tableName === 'jack_modules')
   const hasFaceplates = products.some(p => p.tableName === 'faceplates')
-  const hasSurfaceMountBoxes = products.some(p => p.tableName === 'surface_mount_box')
+  const hasSurfaceMountBoxes = products.some(p => p.tableName === TABLE_NAMES.SURFACE_MOUNT_BOXES)
+  const hasModularPlugs = products.some(p => p.tableName === 'modular_plugs')
 
   return {
     brands: brands, // Show all brands
@@ -610,6 +731,12 @@ const generateSmartFilters = (products: Product[]): SmartFilters => {
     ...((hasFaceplates || hasSurfaceMountBoxes) && {
       ports: numberOfPorts,
       gang: numberGang
+    }),
+    // Add modular plug filters only if we have modular plugs
+    ...(hasModularPlugs && {
+      awgSizes: filterString(products.map(p => p.conductorAwg?.toString())),
+      packagingSizes: filterString(products.map(p => (p as any).packagingQty?.toString())),
+      packagingType: filterString(products.map(p => p.packagingType))
     })
 
   }
@@ -659,13 +786,32 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
   // PRIORITY 1.55: Check if AI says SURFACE_MOUNT_BOX
   if (aiAnalysis?.productType === 'SURFACE_MOUNT_BOX') {
     logger.info('AI productType is SURFACE_MOUNT_BOX - routing to surface_mount_box', {}, LogCategory.AI)
-    return 'surface_mount_box'
+    return TABLE_NAMES.SURFACE_MOUNT_BOXES
   }
 
   // PRIORITY 1.6: Check if AI says JACK_MODULE
   if (aiAnalysis?.productType === 'JACK_MODULE') {
     logger.info('AI productType is JACK_MODULE - routing to jack_modules', {}, LogCategory.AI)
     return 'jack_modules'
+  }
+
+  // PRIORITY 1.65: Check if AI says MODULAR_PLUG
+  if (aiAnalysis?.productType === 'MODULAR_PLUG') {
+    logger.info('AI productType is MODULAR_PLUG - routing to modular_plugs', {}, LogCategory.AI)
+    return 'modular_plugs'
+  }
+  
+  // PRIORITY 1.651: Double-check for modular plug in case enhancement failed
+  const lowerQuery = query.toLowerCase()
+  if ((lowerQuery.includes('modular plug') || lowerQuery.includes('modluar plug') || lowerQuery.includes('modualr plug') ||
+       lowerQuery.includes('cable ends') || lowerQuery.includes('clear ends') || lowerQuery.includes('cable end') ||
+       lowerQuery.includes('crimp connector') || lowerQuery.includes('terminator plug') || 
+       lowerQuery.includes('ethernet connector') || lowerQuery.includes('network plug') ||
+       (lowerQuery.includes('plug') && (lowerQuery.includes('rj45') || lowerQuery.includes('rj-45'))) ||
+       (lowerQuery.includes('crimp') && !lowerQuery.includes('tool'))) &&
+      !lowerQuery.includes('jack') && !lowerQuery.includes('keystone') && !lowerQuery.includes('module')) {
+    logger.info('FALLBACK: Modular plug detected via keyword check - routing to modular_plugs', {}, LogCategory.SEARCH)
+    return 'modular_plugs'
   }
 
   // PRIORITY 1.7: Check if AI says CONNECTOR
@@ -712,7 +858,33 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
     return 'fiber_cables'
   }
 
-// PRIORITY 3: Check for jack module keywords
+// PRIORITY 3: Check for modular plug keywords FIRST (before jack modules)
+  const modularPlugTerms = [
+    'modular plug', 'rj45', 'rj-45', 'rj 45', '8p8c',
+    'ethernet connector', 'network plug', 'ethernet plug',
+    'network connector', 'modular connector', 'crimp connector',
+    'terminator plug', 'data connector', 'lan connector',
+    'pass-through plug', 'ez-rj45', 'feed-through',
+    'crimp', 'crimps', 'network crimp', 'cable crimp',
+    'cable ends', 'clear ends', 'cable end', 'clear end'
+  ]
+  
+  const hasModularPlugTerms = modularPlugTerms.some(term => query.includes(term))
+  
+  // Check for modular plug before jack module
+  logger.info('Checking modular plug terms', { 
+    hasModularPlugTerms, 
+    hasJack: query.includes('jack'),
+    hasKeystone: query.includes('keystone'),
+    query 
+  }, LogCategory.SEARCH)
+  
+  if (hasModularPlugTerms && !query.includes('jack') && !query.includes('keystone')) {
+    logger.info('Modular Plug detected - routing to modular_plugs', {}, LogCategory.SEARCH)
+    return 'modular_plugs'
+  }
+
+  // PRIORITY 4: Check for jack module keywords
   const jackTerms = [
     'jack', 'jack module', 'keystone', 'keystone jack',
     'rj45 jack', 'ethernet jack', 'network jack', 'data jack',
@@ -737,7 +909,7 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
     }
   }
 
-  // PRIORITY 4: Check for surface mount box keywords FIRST
+  // PRIORITY 5: Check for surface mount box keywords
   const smbTerms = [
     'surface mount box', 'surface mount', 'surface box',
     'mounting box', 'box mount', 'smb', 's.m.b', 'sm box',
@@ -748,10 +920,10 @@ const determineTargetTable = (aiAnalysis: AISearchAnalysis | null, searchTerm: s
   
   if (hasSMBTerms) {
     logger.info('Surface Mount Box detected - routing to surface_mount_box', {}, LogCategory.SEARCH)
-    return 'surface_mount_box'
+    return TABLE_NAMES.SURFACE_MOUNT_BOXES
   }
   
-  // PRIORITY 5: Check for faceplate keywords
+  // PRIORITY 6: Check for faceplate keywords
   const faceplateTerms = [
     'faceplate', 'face plate', 'wall plate', 'wallplate',
     'gang plate', 'gang box', 'outlet frame', 'port plate'
@@ -982,6 +1154,38 @@ const searchAllTablesByBrand = async (brand: string, limit: number, shoppingList
     }
   } catch (error) {
     logger.error('Error searching fiber cables', error, LogCategory.SEARCH)
+  }
+
+  // Search modular plugs
+  try {
+    logger.debug(`Searching modular plugs for brand: ${brand}`, {}, LogCategory.SEARCH)
+    const modularPlugResult = await searchModularPlugsImpl({
+      searchTerm: brand,
+      aiAnalysis: {
+        searchStrategy: 'brand',
+        productType: 'MIXED',
+        confidence: 1.0,
+        detectedSpecs: { manufacturer: brand },
+        searchTerms: [brand],
+        reasoning: 'Brand search',
+        suggestedFilters: [],
+        alternativeQueries: [],
+        originalQuery: brand,
+        timestamp: new Date().toISOString(),
+        aiModel: 'enhanced'
+      },
+      limit: Math.floor(limit / 5)
+    })
+    // Filter to ensure only the requested brand
+    const brandProducts = modularPlugResult.products.filter(p =>
+      p.brand.toLowerCase().includes(brand.toLowerCase())
+    )
+    if (brandProducts.length > 0) {
+      logger.info(`Found ${brandProducts.length} ${brand} modular plugs`, {}, LogCategory.SEARCH)
+      allProducts = [...allProducts, ...brandProducts]
+    }
+  } catch (error) {
+    logger.error('Error searching modular plugs', error, LogCategory.SEARCH)
   }
 
   logger.info(`TOTAL BRAND SEARCH RESULTS: ${allProducts.length} products for ${brand}`, {}, LogCategory.SEARCH)
@@ -1252,11 +1456,29 @@ const performOriginalSearch = async (options: SearchOptions): Promise<SearchResu
         productType: aiAnalysis?.productType,
         rackUnits: aiAnalysis?.detectedSpecs?.rackUnits
       }, LogCategory.AI)
+      
+      // Add explicit logging for modular plug searches
+      if (processedQuery.processedTerm.toLowerCase().includes('modular plug')) {
+        logger.info('🔌 MODULAR PLUG DEBUG - After Enhancement', {
+          searchTerm: processedQuery.processedTerm,
+          enhancedProductType: aiAnalysis?.productType,
+          enhancedStrategy: aiAnalysis?.searchStrategy,
+          confidence: aiAnalysis?.confidence
+        }, LogCategory.SEARCH)
+      }
     }
 
     // Step 5: Determine Target Table
     const targetTable = determineTargetTable(aiAnalysis, processedQuery.processedTerm)
     logger.info(`Target table determined: ${targetTable}`, {}, LogCategory.SEARCH)
+    
+    // Add explicit logging for modular plug routing
+    if (processedQuery.processedTerm.toLowerCase().includes('modular plug')) {
+      logger.info('🔌 MODULAR PLUG DEBUG - Target Table', {
+        determinedTable: targetTable,
+        shouldBeModularPlugs: targetTable === 'modular_plugs' ? '✅ CORRECT' : '❌ WRONG'
+      }, LogCategory.SEARCH)
+    }
 
     // Check if it's a brand search
     const brandKeywords = ['corning', 'panduit', 'leviton', 'superior', 'essex', 'berktek', 'prysmian', 'dmsi', 'siecor']
@@ -1323,7 +1545,8 @@ const performOriginalSearch = async (options: SearchOptions): Promise<SearchResu
         const jackResult = await searchJackModulesImpl({
           searchTerm: processedQuery.processedTerm,
           aiAnalysis,
-          limit
+          limit,
+          shoppingListContext
         })
         products = jackResult.products
         searchStrategy = `jack_modules_${jackResult.searchStrategy}`
@@ -1341,7 +1564,7 @@ const performOriginalSearch = async (options: SearchOptions): Promise<SearchResu
         searchStrategy = `faceplates_${faceplateResult.searchStrategy}`
         break
 
-      case 'surface_mount_box':
+      case TABLE_NAMES.SURFACE_MOUNT_BOXES:
         logger.info('Executing surface mount box search', {}, LogCategory.SEARCH)
         const smbResult = await searchSurfaceMountBoxesImpl({
           searchTerm: processedQuery.processedTerm,
@@ -1358,6 +1581,17 @@ const performOriginalSearch = async (options: SearchOptions): Promise<SearchResu
           // Store the message to be returned
           processedQuery.redirectMessage = smbResult.message
         }
+        break
+
+      case 'modular_plugs':
+        logger.info('Executing modular plugs search', {}, LogCategory.SEARCH)
+        const modularPlugResult = await searchModularPlugsImpl({
+          searchTerm: processedQuery.processedTerm,
+          aiAnalysis,
+          limit
+        })
+        products = modularPlugResult.products
+        searchStrategy = `modular_plugs_${modularPlugResult.searchStrategy}`
         break
 
       case 'fiber_enclosures':
@@ -1522,7 +1756,7 @@ const performOriginalSearch = async (options: SearchOptions): Promise<SearchResu
     let autoApplyFilters: { [filterType: string]: string } | undefined
     
     // Check if we're searching for surface mount boxes and have jack modules in the shopping list
-    if (targetTable === 'surface_mount_box' && shoppingListContext?.jackModules && shoppingListContext.jackModules.length > 0) {
+    if (targetTable === TABLE_NAMES.SURFACE_MOUNT_BOXES && shoppingListContext?.jackModules && shoppingListContext.jackModules.length > 0) {
       // Extract unique brands from jack modules in shopping list
       const jackBrands = [...new Set(shoppingListContext.jackModules.map(jack => jack.brand).filter(Boolean))]
       
@@ -1618,6 +1852,212 @@ const performOriginalSearch = async (options: SearchOptions): Promise<SearchResu
             availableTypes: smartFilters.fiberTypes,
             note: 'Check if fiber types are stored differently (e.g., "Multimode, OM4" vs "OM4")'
           }, LogCategory.SEARCH)
+        }
+      }
+    }
+
+    // Auto-apply product line filter for faceplates based on jack modules in shopping list
+    if (targetTable === 'faceplates' && shoppingListContext?.jackModules && shoppingListContext.jackModules.length > 0) {
+      logger.info('Checking for auto-apply filters for faceplates based on jack modules', {
+        jackModuleCount: shoppingListContext.jackModules.length
+      }, LogCategory.SEARCH)
+
+      // Extract unique compatible faceplate values from all jack modules
+      const compatibleFaceplateTypes = new Set<string>()
+      
+      shoppingListContext.jackModules.forEach((jack) => {
+        if (jack.compatibleFaceplates) {
+          // Handle various formats: "Keystone", '["NetKey", "Keystone"]', ARRAY['NetKey', 'Keystone']
+          const faceplateValue: string = String(jack.compatibleFaceplates)
+          
+          // Handle PostgreSQL array format ["NetKey", "Keystone"] or ARRAY['NetKey', 'Keystone']
+          if (Array.isArray(jack.compatibleFaceplates)) {
+            jack.compatibleFaceplates.forEach((val: string) => {
+              if (val && val.trim()) {
+                compatibleFaceplateTypes.add(val.trim())
+              }
+            })
+          } else {
+            // Handle string representation
+            let cleanValue = faceplateValue
+            
+            // Remove ARRAY prefix if present
+            if (cleanValue.startsWith('ARRAY[')) {
+              cleanValue = cleanValue.substring(6, cleanValue.length - 1)
+            }
+            
+            // Parse JSON array if it's a string representation
+            try {
+              if (cleanValue.startsWith('[') && cleanValue.endsWith(']')) {
+                const parsed = JSON.parse(cleanValue) as unknown
+                if (Array.isArray(parsed)) {
+                  parsed.forEach((val: unknown) => {
+                    if (typeof val === 'string' && val.trim()) {
+                      compatibleFaceplateTypes.add(val.trim())
+                    }
+                  })
+                  return
+                }
+              }
+            } catch (e) {
+              // Not JSON, continue with string parsing
+            }
+            
+            // Handle PostgreSQL array format {value1,value2}
+            if (cleanValue.startsWith('{') && cleanValue.endsWith('}')) {
+              cleanValue = cleanValue.slice(1, -1)
+            }
+            
+            // Handle comma-separated values
+            if (cleanValue.includes(',')) {
+              cleanValue.split(',').forEach((val: string) => {
+                const trimmed = val.trim().replace(/['"]/g, '')
+                if (trimmed) {
+                  compatibleFaceplateTypes.add(trimmed)
+                }
+              })
+            } else {
+              // Single value
+              const trimmed = cleanValue.trim().replace(/['"]/g, '')
+              if (trimmed) {
+                compatibleFaceplateTypes.add(trimmed)
+              }
+            }
+          }
+        }
+      })
+
+      logger.info('Extracted compatible faceplate types from jack modules', {
+        compatibleTypes: Array.from(compatibleFaceplateTypes)
+      }, LogCategory.SEARCH)
+
+      // Don't auto-apply product line filters for faceplates
+      // When searching for faceplates with jack modules in cart, we want to show ALL compatible options
+      // Both Keystone and NetKey faceplates work with keystone-style jacks
+      // Users should see all options and can manually filter if needed
+      logger.info('Not auto-applying product line filter for faceplates - showing all compatible options', {
+        compatibleTypes: Array.from(compatibleFaceplateTypes),
+        availableProductLines: smartFilters?.productLines || []
+      }, LogCategory.SEARCH)
+    }
+
+    // Auto-apply product line filter for jack modules based on faceplates in shopping list
+    if (targetTable === 'jack_modules' && shoppingListContext?.faceplates && shoppingListContext.faceplates.length > 0) {
+      logger.info('Checking for auto-apply filters for jack modules based on faceplates', {
+        faceplateCount: shoppingListContext.faceplates.length
+      }, LogCategory.SEARCH)
+
+      // Extract unique compatible jack values from all faceplates
+      const compatibleJackTypes = new Set<string>()
+      
+      shoppingListContext.faceplates.forEach((faceplate) => {
+        if (faceplate.compatibleJacks) {
+          // Handle various formats similar to above
+          const jackValue: string = String(faceplate.compatibleJacks)
+          
+          // Handle PostgreSQL array format
+          if (Array.isArray(faceplate.compatibleJacks)) {
+            faceplate.compatibleJacks.forEach((val: string) => {
+              if (val && val.trim()) {
+                compatibleJackTypes.add(val.trim())
+              }
+            })
+          } else {
+            // Handle string representation
+            let cleanValue = jackValue
+            
+            // Remove ARRAY prefix if present
+            if (cleanValue.startsWith('ARRAY[')) {
+              cleanValue = cleanValue.substring(6, cleanValue.length - 1)
+            }
+            
+            // Parse JSON array if it's a string representation
+            try {
+              if (cleanValue.startsWith('[') && cleanValue.endsWith(']')) {
+                const parsed = JSON.parse(cleanValue) as unknown
+                if (Array.isArray(parsed)) {
+                  parsed.forEach((val: unknown) => {
+                    if (typeof val === 'string' && val.trim()) {
+                      compatibleJackTypes.add(val.trim())
+                    }
+                  })
+                  return
+                }
+              }
+            } catch (e) {
+              // Not JSON, continue with string parsing
+            }
+            
+            // Handle PostgreSQL array format {value1,value2}
+            if (cleanValue.startsWith('{') && cleanValue.endsWith('}')) {
+              cleanValue = cleanValue.slice(1, -1)
+            }
+            
+            // Handle comma-separated values
+            if (cleanValue.includes(',')) {
+              cleanValue.split(',').forEach((val: string) => {
+                const trimmed = val.trim().replace(/['"]/g, '')
+                if (trimmed) {
+                  compatibleJackTypes.add(trimmed)
+                }
+              })
+            } else {
+              // Single value
+              const trimmed = cleanValue.trim().replace(/['"]/g, '')
+              if (trimmed) {
+                compatibleJackTypes.add(trimmed)
+              }
+            }
+          }
+        }
+      })
+
+      logger.info('Extracted compatible jack types from faceplates', {
+        compatibleTypes: Array.from(compatibleJackTypes)
+      }, LogCategory.SEARCH)
+
+      // Try to find a matching product line in the available filters
+      if (compatibleJackTypes.size > 0 && smartFilters?.productLines && smartFilters.productLines.length > 0) {
+        // Use same priority order
+        const priorityOrder: string[] = ['Mini-Com', 'NetKey', 'Keystone', 'XCELERATOR', 'netSelect']
+        
+        for (const priority of priorityOrder) {
+          if (compatibleJackTypes.has(priority)) {
+            const matchingProductLine = smartFilters.productLines.find((line: string) => 
+              line.toLowerCase() === priority.toLowerCase()
+            )
+            
+            if (matchingProductLine) {
+              autoApplyFilters = {
+                productLine: matchingProductLine
+              }
+              logger.info('Auto-applying product line filter for jack modules based on priority', { 
+                jackType: priority,
+                appliedProductLine: matchingProductLine
+              }, LogCategory.SEARCH)
+              break
+            }
+          }
+        }
+        
+        // If no priority match, try any match
+        if (autoApplyFilters && !autoApplyFilters.productLine) {
+          for (const jackType of compatibleJackTypes) {
+            const matchingProductLine = smartFilters.productLines.find((line: string) => 
+              line.toLowerCase() === jackType.toLowerCase()
+            )
+            
+            if (matchingProductLine) {
+              autoApplyFilters = {
+                productLine: matchingProductLine
+              }
+              logger.info('Auto-applying product line filter for jack modules', { 
+                jackType: jackType,
+                appliedProductLine: matchingProductLine
+              }, LogCategory.SEARCH)
+              break
+            }
+          }
         }
       }
     }

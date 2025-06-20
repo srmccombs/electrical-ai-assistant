@@ -1,0 +1,71 @@
+
+> electrical-ai-assistant@0.1.2 dev
+> next dev
+
+   ▲ Next.js 14.0.0
+   - Local:        http://localhost:3000
+   - Environments: .env.local
+
+ ✓ Ready in 1333ms
+ ✓ Compiled /middleware in 71ms (56 modules)
+ ○ Compiling /page ...
+ ✓ Compiled /page in 1116ms (953 modules)
+[2025-06-19T18:35:47.914Z] 🎨 [INFO] Decision Engine initialized with stages: {
+  '0': 'BusinessRuleStage',
+  '1': 'PartNumberStage',
+  '2': 'ContextualStage',
+  '3': 'AIAnalysisStage',
+  '4': 'TextDetectionStage',
+  '5': 'KnowledgeStage',
+  '6': 'FallbackStage'
+}
+[2025-06-19T18:35:47.917Z] 🎨 [INFO] DecisionEngineAdapter initialized in PRODUCTION mode {}
+ ✓ Compiled in 157ms (472 modules)
+ ✓ Compiled in 249ms (472 modules)
+ ✓ Compiled in 200ms (472 modules)
+ ✓ Compiled in 125ms (472 modules)
+ ✓ Compiled in 173ms (472 modules)
+ ✓ Compiled in 133ms (458 modules)
+ ✓ Compiled in 122ms (458 modules)
+ ✓ Compiled in 130ms (458 modules)
+ ✓ Compiled in 48ms (458 modules)
+ ✓ Compiled in 101ms (458 modules)
+ ✓ Compiled in 121ms (458 modules)
+ ✓ Compiled in 175ms (458 modules)
+ ✓ Compiled in 95ms (458 modules)
+ ✓ Compiled in 81ms (458 modules)
+ ✓ Compiled in 151ms (458 modules)
+ ✓ Compiled in 62ms (458 modules)
+ ✓ Compiled in 53ms (458 modules)
+ ✓ Compiled in 72ms (458 modules)
+ ✓ Compiled in 218ms (458 modules)
+ ✓ Compiled in 162ms (458 modules)
+ ✓ Compiled in 341ms (458 modules)
+ ✓ Compiled in 59ms (458 modules)
+ ✓ Compiled in 193ms (458 modules)
+ ✓ Compiled in 64ms (458 modules)
+ ✓ Compiled in 311ms (458 modules)
+ ✓ Compiled in 170ms (458 modules)
+ ✓ Compiled in 78ms (458 modules)
+ ✓ Compiled in 76ms (458 modules)
+ ✓ Compiled in 125ms (458 modules)
+ ✓ Compiled in 166ms (458 modules)
+ ✓ Compiled in 56ms (458 modules)
+ ✓ Compiled in 100ms (458 modules)
+ ✓ Compiled in 207ms (458 modules)
+ ✓ Compiled in 191ms (472 modules)
+ ✓ Compiled in 95ms (514 modules)
+   Reload env: .env.local
+ ✓ Compiled in 1228ms (537 modules)
+ ✓ Compiled in 327ms (460 modules)
+ ✓ Compiled in 154ms (460 modules)
+ ✓ Compiled in 131ms (460 modules)
+ ○ Compiling /test-search-performance/page ...
+ ✓ Compiled /test-search-performance/page in 644ms (767 modules)
+ ✓ Compiled in 316ms (767 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename '/Users/stacymccombs/electrical-ai-assistant-fresh/.next/cache/webpack/client-development/7.pack.gz_' -> '/Users/stacymccombs/electrical-ai-assistant-fresh/.next/cache/webpack/client-development/7.pack.gz'
+ ✓ Compiled in 206ms (767 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename '/Users/stacymccombs/electrical-ai-assistant-fresh/.next/cache/webpack/client-development/0.pack.gz_' -> '/Users/stacymccombs/electrical-ai-assistant-fresh/.next/cache/webpack/client-development/0.pack.gz'
+ ✓ Compiled in 234ms (767 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename '/Users/stacymccombs/electrical-ai-assistant-fresh/.next/cache/webpack/client-development/0.pack.gz_' -> '/Users/stacymccombs/electrical-ai-assistant-fresh/.next/cache/webpack/client-development/0.pack.gz'
+[?25h
