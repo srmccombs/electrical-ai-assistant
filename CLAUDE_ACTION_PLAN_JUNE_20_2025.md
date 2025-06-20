@@ -11,34 +11,27 @@
 
 ### 🔴 HIGH PRIORITY ISSUES
 
-#### 0. SECURITY UPDATE NEEDED (NEW - June 20)
-**Critical Next.js vulnerabilities found**:
-```bash
-# Current: Next.js 14.0.0 has CRITICAL vulnerabilities
-# Need to update to: Next.js 14.2.30
-# 
-# IMPORTANT: Create backup branch first!
-git checkout -b security-updates
-npm install next@14.2.30
-npm run build  # Test if everything still works
-npm audit fix  # Then fix remaining issues
-```
-**Vulnerabilities include**: SSRF, Cache Poisoning, Auth bypass
+#### ✅ 0. SECURITY UPDATE COMPLETED (June 20)
+**Next.js upgraded from 14.0.0 to 14.2.30**:
+- Fixed CVE-2024-47831 (SSRF vulnerability)
+- Fixed CVE-2024-46989 (Cache poisoning)
+- Fixed CVE-2024-51479 (Authentication bypass)
+- Fixed CVE-2024-56337 (SSRF vulnerability)
+- Only 1 moderate vulnerability remains (PostCSS)
 
-#### 1. Fix AI Service Endpoint (CRITICAL)
-**Problem**: `/api/ai-search` returning 500 error with HTML instead of JSON
-**Impact**: Falls back to manual extraction, but AI features are broken
-**Test**: Search for "I need 4 boxes of Category 5e" and check console
-**Fix Location**: `/app/api/ai-search/route.js`
+#### ✅ 1. AI Service Endpoint FIXED (June 20)
+**Solution**: Updated to use absolute URLs for server-side calls
+**Result**: AI search working perfectly - "4 boxes of Category 6" returns 500 products
+**Detected**: 4 boxes = 4000 feet conversion working
 
-#### 2. Add Vercel Environment Variables
-**Required**:
-```
-OPENAI_API_KEY=your_key_here
-NEXT_PUBLIC_SUPABASE_URL=your_url_here
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_key_here
-```
-**Without these**: Production deployment will fail
+#### ✅ 2. Vercel Environment Variables DOCUMENTED
+**See**: `VERCEL_DEPLOYMENT_GUIDE.md` for complete setup
+**Key Variables**:
+- OPENAI_API_KEY (from .env.local)
+- NEXT_PUBLIC_SUPABASE_URL (from .env.local)
+- NEXT_PUBLIC_SUPABASE_ANON_KEY (from .env.local)
+- NEXT_PUBLIC_USE_V2_SEARCH=true
+- USE_DECISION_ENGINE=shadow (optional)
 
 #### 3. Fix prod_surface_mount_boxes Table
 **CRITICAL ISSUE**: No ID column or primary key!
